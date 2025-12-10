@@ -7,3 +7,6 @@
 [submodule "simulation/multirobot_simulator/dep/opencv_contrib"]
 	path = simulation/multirobot_simulator/dep/opencv_contrib
 	url = git@github.com:opencv/opencv_contrib.git
+[submodule "simulation/multirobot_simulator/dep/flann"]
+	path = simulation/multirobot_simulator/dep/flann
+	url = git@github.com:flann-lib/flann.git
