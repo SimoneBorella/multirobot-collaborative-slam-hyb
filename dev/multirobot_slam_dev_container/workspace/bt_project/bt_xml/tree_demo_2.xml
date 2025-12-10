@@ -1,0 +1,41 @@
+<!-- Sequence tick from running child -->
+
+<!-- <root main_tree_to_execute = "MainTree" >
+    <BehaviorTree ID="MainTree">
+        <Sequence name="root">
+            <CheckBattery name="CheckBattery"/>
+            <Move name="Move1" goal="1;2;3"/>
+            <Move name="Move2" goal="4;5;6"/>
+        </Sequence>
+    </BehaviorTree>
+</root> -->
+
+
+
+
+<!-- ReactiveSequence tick all children every time -->
+
+<!-- <root main_tree_to_execute = "MainTree" >
+    <BehaviorTree ID="MainTree">
+        <ReactiveSequence name="root">
+            <CheckBattery name="CheckBattery"/>
+            <Move name="Move1" goal="1;2;3"/>
+            <Move name="Move2" goal="4;5;6"/>
+        </ReactiveSequence>
+    </BehaviorTree>
+</root> -->
+
+<root main_tree_to_execute = "MainTree" >
+    <BehaviorTree ID="MainTree">
+        <Sequence name="root">
+            <ReactiveSequence name="rseq1">
+                <CheckBattery name="CheckBattery"/>
+                <Move name="Move1" goal="1;2;3"/>
+            </ReactiveSequence>
+            <ReactiveSequence name="rseq2">
+                <CheckBattery/>
+                <Move name="Move2" goal="4;5;6"/>
+            </ReactiveSequence>
+        </Sequence>
+    </BehaviorTree>
+</root>

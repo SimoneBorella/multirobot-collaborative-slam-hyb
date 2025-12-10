@@ -1,0 +1,5 @@
+/workspace/orbslam3_project/build/CMakeFiles/mono_euroc.dir
+/workspace/orbslam3_project/build/CMakeFiles/camera_capture.dir
+/workspace/orbslam3_project/build/CMakeFiles/mono_camera.dir
+/workspace/orbslam3_project/build/CMakeFiles/edit_cache.dir
+/workspace/orbslam3_project/build/CMakeFiles/rebuild_cache.dir

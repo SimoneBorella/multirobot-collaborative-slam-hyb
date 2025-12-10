@@ -1,0 +1,5 @@
+/workspace/bt_project/build/CMakeFiles/bt_demo_0.dir
+/workspace/bt_project/build/CMakeFiles/bt_demo_1.dir
+/workspace/bt_project/build/CMakeFiles/bt_demo_2.dir
+/workspace/bt_project/build/CMakeFiles/edit_cache.dir
+/workspace/bt_project/build/CMakeFiles/rebuild_cache.dir

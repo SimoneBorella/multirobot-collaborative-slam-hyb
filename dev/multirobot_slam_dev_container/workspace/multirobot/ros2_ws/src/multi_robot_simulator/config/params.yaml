@@ -1,0 +1,27 @@
+multi_robot_simulator:
+  ros__parameters:
+    rate: 100.0
+    # map: "map_2025_08_14_09_09_42"
+    # map: "map_2025_08_28_17_13_33"
+    # map: "map_2025_08_29_17_02_27"
+    
+    map: "indoor_map_8"
+    # map: "vineyard_map_0"
+    # map: "openstreetmap_map_2"
+
+    # robots: ["robot_0"]
+    # robots: ["robot_0", "robot_1"]
+    # robots: ["robot_0", "robot_1", "robot_2"]
+    # robots: ["robot_0", "robot_1", "robot_2", "robot_3"]
+    # robots: ["robot_0", "robot_1", "robot_2", "robot_3", "robot_4"]
+    # robots: ["robot_0", "robot_1", "robot_2", "robot_3", "robot_4", "robot_5"]
+    robots: ["robot_0", "robot_1", "robot_2", "robot_3"]
+
+    landmarks_density: 0.8
+    use_sim_time: false
+
+
+clock_publisher:
+  ros__parameters:
+    clock_speed_multiplier: 0.1
+    update_period: 0.001

@@ -1,0 +1,7 @@
+image: openstreetmap_map_1.pgm
+mode: trinary
+resolution: 0.05
+origin: [-50.0, -50.0]
+occupied_thresh: 0.65
+free_thresh: 0.25
+negate: 0

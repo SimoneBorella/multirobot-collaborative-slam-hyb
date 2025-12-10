@@ -1,0 +1,20 @@
+rgbd_feature_extraction:
+  ros__parameters:
+    camera_frame: "oak"
+    fx: 1029.1
+    fy: 1028.7
+    cx: 623.7
+    cy: 359.8
+    max_keypoints: 500
+    max_landmarks: 100
+    median_filter_depth: False
+    min_range: 1.0
+    max_range: 5.0
+    border_filter: 50
+
+
+camera_calibration:
+  ros__parameters:
+    board_size: [7, 5]
+    square_size: 0.035
+    required_frames: 20

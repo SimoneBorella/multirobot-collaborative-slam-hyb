@@ -1,0 +1,21 @@
+multi_robot_simulator:
+  ros__parameters:
+    rate: 200.0
+    map: "indoor_map_0"
+    # map: "vineyard_map_0"
+
+    # robots: ["robot_0"]
+    robots: ["robot_0", "robot_1"]
+    # robots: ["robot_0", "robot_1", "robot_2"]
+    # robots: ["robot_0", "robot_1", "robot_2", "robot_3"]
+    # robots: ["robot_0", "robot_1", "robot_2", "robot_3", "robot_4", "robot_5"]
+    # robots: ["robot_0", "robot_1", "robot_2", "robot_3", "robot_4", "robot_5", "robot_6", "robot_7"]
+
+    landmarks_density: 0.6
+    use_sim_time: false
+
+
+clock_publisher:
+  ros__parameters:
+    clock_speed_multiplier: 0.1
+    update_period: 0.001

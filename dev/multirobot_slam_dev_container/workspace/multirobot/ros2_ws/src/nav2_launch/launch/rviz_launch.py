@@ -1,0 +1,86 @@
+import os
+
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, EmitEvent, RegisterEventHandler
+from launch.event_handlers import OnProcessExit
+from launch.events import Shutdown
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+
+
+def generate_launch_description():
+    # Get the launch directory
+    nav2_launch_dir = get_package_share_directory('nav2_launch')
+
+    # Create the launch configuration variables
+    namespace = LaunchConfiguration('namespace')
+    rviz_config_file = LaunchConfiguration('rviz_config')
+    use_sim_time = LaunchConfiguration('use_sim_time')
+    log_level = LaunchConfiguration('log_level')
+
+    # Declare the launch arguments
+    declare_namespace_cmd = DeclareLaunchArgument(
+        'namespace',
+        default_value='navigation',
+        description=(
+            'Top-level namespace. The value will be used to replace the '
+            '<robot_namespace> keyword on the rviz config file.'
+        ),
+    )
+
+    declare_rviz_config_file_cmd = DeclareLaunchArgument(
+        'rviz_config',
+        default_value=os.path.join(nav2_launch_dir, 'rviz', 'nav2_default_view.rviz'),
+        description='Full path to the RVIZ config file to use',
+    )
+
+    declare_use_sim_time_cmd = DeclareLaunchArgument(
+        'use_sim_time',
+        default_value='false',
+        description='Use simulation (Gazebo) clock if true')
+
+    declare_log_level_cmd = DeclareLaunchArgument(
+        'log_level', default_value='info', description='log level'
+    )
+
+    # Launch rviz
+    start_rviz_cmd = Node(
+        package='rviz2',
+        executable='rviz2',
+        namespace=namespace,
+        arguments=[
+            '-d', rviz_config_file,
+            '--ros-args', '--log-level', log_level
+        ],
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}],
+        remappings=[
+            ('/tf', 'tf'),
+            ('/tf_static', 'tf_static'),
+        ],
+    )
+
+    exit_event_handler = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=start_rviz_cmd,
+            on_exit=EmitEvent(event=Shutdown(reason='rviz exited')),
+        ),
+    )
+
+    # Create the launch description and populate
+    ld = LaunchDescription()
+
+    # Declare the launch options
+    ld.add_action(declare_namespace_cmd)
+    ld.add_action(declare_rviz_config_file_cmd)
+    ld.add_action(declare_use_sim_time_cmd)
+    ld.add_action(declare_log_level_cmd)
+
+    # Add any conditioned actions
+    ld.add_action(start_rviz_cmd)
+
+    # Add other nodes and processes we need
+    ld.add_action(exit_event_handler)
+
+    return ld

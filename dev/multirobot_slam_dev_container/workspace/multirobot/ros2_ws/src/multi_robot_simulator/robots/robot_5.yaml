@@ -1,0 +1,40 @@
+name: robot_5
+random_spawn: False
+position:
+  x: 0.0
+  y: -1.0
+  theta: 270
+shape:
+  type: circle
+  diameter: 0.20
+sensors:
+  - type: imu
+    name: imu
+    linear_bias_std_dev: 0.0001    # Standard deviation of linear noise
+    angular_bias_std_dev: 0.00001   # Standard deviation of angular noise
+    alpha: 0.995                # Correlation factor (Gauss-Markov)
+    linear_scale_error: 0.01    # Scale error for linear velocity
+    angular_scale_error: -0.005    # Scale error for angular velocity
+
+  - type: lidar
+    name: lidar
+    position: # Position relative to the robot frame
+      x: 0.0
+      y: 0.0
+      theta: 0
+    min_range: 0.15  # Min range of the lidar (m)
+    max_range: 10.0  # Max range of the lidar (m)
+    resolution: 1.0  # Angle resolution (degrees)
+    points: 360  # Number of lidar points per scan
+    frequency: 10.0  # Update frequency (Hz)
+
+  - type: camera
+    name: camera
+    position: # Position relative to the robot frame
+      x: 0.0
+      y: 0.0
+      theta: 0
+    max_range: 10 # Max range of the lidar (m)
+    field_of_view: 90 # Field of view (degrees)
+    frequency: 30  # Frames per second
+    noise_std_dev: 0.01 # Standard deviation of the noise

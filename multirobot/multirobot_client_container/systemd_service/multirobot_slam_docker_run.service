@@ -1,0 +1,14 @@
+[Unit]
+Description=Run multirobot SLAM client docker container
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart=/home/students/SimoneBorella/multirobot/multirobot_client_container/docker_scripts/docker_run.bash
+Restart=always
+User=root
+Group=docker
+
+[Install]
+WantedBy=multi-user.target

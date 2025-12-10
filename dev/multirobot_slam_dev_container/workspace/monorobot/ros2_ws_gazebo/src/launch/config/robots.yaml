@@ -1,0 +1,18 @@
+robots:
+  - name: turtlebot3_waffle_0
+    type: turtlebot3_waffle
+    x_init: -2.0
+    y_init: 0.5
+    z_init: 0.0
+    R_init: 0.0
+    P_init: 0.0
+    Y_init: 0.0
+
+  # - name: turtlebot3_waffle_1
+  #   type: turtlebot3_waffle
+  #   x_init: -2.0
+  #   y_init: -0.5
+  #   z_init: 0.0
+  #   R_init: 0.0
+  #   P_init: 0.0
+  #   Y_init: 0.0
