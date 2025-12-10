@@ -1,9 +1,6 @@
 [submodule "simulation/multirobot_simulator/dep/gtsam"]
 	path = simulation/multirobot_simulator/dep/gtsam
 	url = git@github.com:borglab/gtsam.git
-[submodule "simulation/multirobot_simulator/simulation/multirobot_simulator/dep/flann"]
-	path = simulation/multirobot_simulator/simulation/multirobot_simulator/dep/flann
-	url = git@github.com:flann-lib/flann.git
 [submodule "simulation/multirobot_simulator/dep/opencv"]
 	path = simulation/multirobot_simulator/dep/opencv
 	url = git@github.com:opencv/opencv.git

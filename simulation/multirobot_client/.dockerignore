@@ -1,4 +1,0 @@
-docker_run.bash
-docker_exec.bash
-docker_build.bash
-.gitignore

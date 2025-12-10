@@ -32,24 +32,7 @@ RUN mkdir build \
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-    
-
-
-
-
-# OpenCV3
+# OpenCV
 RUN apt -y update \
     && apt install -y libgtk2.0-dev \
     && apt install -y pkg-config \
@@ -68,14 +51,14 @@ WORKDIR /dep/opencv
 RUN mkdir build \
     && cd build \
     && cmake -D CMAKE_BUILD_TYPE=RELEASE \
-      -D CMAKE_INSTALL_PREFIX=/usr/local/opencv3 \
-      -D INSTALL_C_EXAMPLES=OFF \
-      -D INSTALL_PYTHON_EXAMPLES=OFF \
-      -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules \
-      -D BUILD_EXAMPLES=OFF .. \
+    -D CMAKE_INSTALL_PREFIX=/usr/local/opencv3 \
+    -D INSTALL_C_EXAMPLES=OFF \
+    -D INSTALL_PYTHON_EXAMPLES=OFF \
+    -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules \
+    -D BUILD_EXAMPLES=OFF .. \
     && make install -j$(nproc) \
     && ldconfig
-    
+
 
 
 # FLANN library
@@ -91,38 +74,6 @@ RUN mkdir build \
 # RUN apt -y update \
 #     && apt install -y libunwind-dev \
 #     && apt install -y libgoogle-glog-dev
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -158,5 +109,5 @@ RUN echo "# Source ROS2 Jazzy environment" >> /root/.bashrc \
 
 RUN echo "# Change dir to ros2_ws when container is started" >> /root/.bashrc \
     && echo "cd /ros2_ws/" >> /root/.bashrc
-    
+
 WORKDIR /ros2_ws
