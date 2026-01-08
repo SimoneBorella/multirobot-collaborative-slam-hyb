@@ -1,0 +1,8 @@
+multirobot_client:
+  ros__parameters:
+    world_frame: world
+    map_frame: map
+    odom_frame: odom
+    base_frame: base_link
+
+    use_sim_time: False

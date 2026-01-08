@@ -58,11 +58,11 @@ def generate_launch_description():
     ]
 
 
-    with open(os.path.join(get_package_share_directory('slam'), 'config', 'params.yaml'), "r") as file:
+    with open(os.path.join(get_package_share_directory('multirobot_server'), 'config', 'params.yaml'), "r") as file:
         mrs_config = yaml.safe_load(file)
 
 
-    for robot_name in mrs_config["slam"]["ros__parameters"]["robots"]:
+    for robot_name in mrs_config["multirobot_server"]["ros__parameters"]["robots"]:
         topics_to_record += [
             f'/{robot_name}/cmd_vel',
             f'/{robot_name}/footprint',
@@ -74,26 +74,6 @@ def generate_launch_description():
             f'/{robot_name}/landmarks_marker',
             f'/{robot_name}/landmarks_plot',
             f'/{robot_name}/landmarks_plot_array',
-            # f'/{robot_name}/oak/imu/data',
-            # f'/{robot_name}/oak/nn/spatial_detections',
-            # f'/{robot_name}/oak/rgb/camera_info',
-            # f'/{robot_name}/oak/rgb/image_raw',
-            # f'/{robot_name}/oak/rgb/image_raw/compressed',
-            # f'/{robot_name}/oak/rgb/image_raw/compressedDepth',
-            # f'/{robot_name}/oak/rgb/image_raw/theora',
-            # f'/{robot_name}/oak/rgb/image_rect',
-            # f'/{robot_name}/oak/rgb/image_rect/compressed',
-            # f'/{robot_name}/oak/rgb/image_rect/compressedDepth',
-            # f'/{robot_name}/oak/rgb/image_rect/theora',
-            # f'/{robot_name}/oak/rgb_landmarks/image_raw',
-            # f'/{robot_name}/oak/rgb_landmarks/image_raw/compressed',
-            # f'/{robot_name}/oak/rgb_landmarks/image_raw/compressedDepth',
-            # f'/{robot_name}/oak/rgb_landmarks/image_raw/theora',
-            # f'/{robot_name}/oak/stereo/camera_info',
-            # f'/{robot_name}/oak/stereo/image_raw',
-            # f'/{robot_name}/oak/stereo/image_raw/compressed',
-            # f'/{robot_name}/oak/stereo/image_raw/compressedDepth',
-            # f'/{robot_name}/oak/stereo/image_raw/theora',
             f'/{robot_name}/odom',
             f'/{robot_name}/robot_description',
             f'/{robot_name}/scan',
@@ -119,9 +99,10 @@ def generate_launch_description():
 
     # Launch descriptions
 
-    multi_robot_simulator_launch_description = IncludeLaunchDescription(
+    # Launch simulator
+    multirobot_simulator_launch_description = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
-            os.path.join(get_package_share_directory('multi_robot_simulator'), 'launch','launch.py')
+            os.path.join(get_package_share_directory('multirobot_simulator'), 'launch','launch.py')
         ]),
         launch_arguments={
             'rviz': LaunchConfiguration('rviz'),
@@ -129,19 +110,32 @@ def generate_launch_description():
         }.items()
     )
 
-    ld.add_action(multi_robot_simulator_launch_description)
+    ld.add_action(multirobot_simulator_launch_description)
 
-
-    slam_launch_description = IncludeLaunchDescription(
+    # Launch multirobot server
+    multirobot_server_launch_description = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
-            os.path.join(get_package_share_directory('slam'), 'launch', 'launch.py')
+            os.path.join(get_package_share_directory('multirobot_server'), 'launch', 'launch.py')
         ]),
         launch_arguments={
             'log_level': LaunchConfiguration('log_level'),
         }.items(),
     )    
 
-    ld.add_action(slam_launch_description)
+    ld.add_action(multirobot_server_launch_description)
+
+    # Launch multirobot client for each robot
+    for robot_name in mrs_config["multirobot_server"]["ros__parameters"]["robots"]:
+        multirobot_client_launch_description = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource([
+                os.path.join(get_package_share_directory('multirobot_client'), 'launch', 'launch.py')
+            ]),
+            launch_arguments={
+                'namespace': robot_name,
+                'log_level': LaunchConfiguration('log_level'),
+            }.items(),
+        )
+        ld.add_action(multirobot_client_launch_description)
         
     return ld
 

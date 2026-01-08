@@ -1,0 +1,15 @@
+mapping_rate: 1.0
+
+map_resolution: 0.05 
+map_width: 40.0
+map_height: 40.0
+
+free_belief: 0.38
+occupied_belief: 0.80
+distance_belief_factor: 0.03
+
+occupied_threshold: 0.70
+free_threshold: 0.30
+
+noise_model_radius: 0.07
+noise_model_std_dev: 0.02

@@ -18,7 +18,10 @@ RUN apt -y update \
 
 
 # Cyclone DDS
-RUN apt install -y ros-humble-rmw-cyclonedds-cpp
+RUN apt install -y ros-jazzy-rmw-cyclonedds-cpp
+
+RUN apt install -y ros-jazzy-nav2-bringup \
+    && apt install -y ros-jazzy-navigation2
 
 # Gtsam
 COPY dep/gtsam /dep/gtsam
@@ -33,31 +36,31 @@ RUN mkdir build \
 
 
 # OpenCV
-RUN apt -y update \
-    && apt install -y libgtk2.0-dev \
-    && apt install -y pkg-config \
-    && apt install -y libavcodec-dev \
-    && apt install -y libavformat-dev \
-    && apt install -y libswscale-dev \
-    && apt install -y libtbb2 libtbb-dev \
-    && apt install -y libjpeg-dev \
-    && apt install -y libpng-dev \
-    && apt install -y libtiff-dev
+# RUN apt -y update \
+#     && apt install -y libgtk2.0-dev \
+#     && apt install -y pkg-config \
+#     && apt install -y libavcodec-dev \
+#     && apt install -y libavformat-dev \
+#     && apt install -y libswscale-dev \
+#     && apt install -y libtbb2 libtbb-dev \
+#     && apt install -y libjpeg-dev \
+#     && apt install -y libpng-dev \
+#     && apt install -y libtiff-dev
 
-COPY dep/opencv /dep/opencv
-COPY dep/opencv_contrib /dep/opencv_contrib
+# COPY dep/opencv /dep/opencv
+# COPY dep/opencv_contrib /dep/opencv_contrib
 
-WORKDIR /dep/opencv
-RUN mkdir build \
-    && cd build \
-    && cmake -D CMAKE_BUILD_TYPE=RELEASE \
-    -D CMAKE_INSTALL_PREFIX=/usr/local/opencv3 \
-    -D INSTALL_C_EXAMPLES=OFF \
-    -D INSTALL_PYTHON_EXAMPLES=OFF \
-    -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules \
-    -D BUILD_EXAMPLES=OFF .. \
-    && make install -j$(nproc) \
-    && ldconfig
+# WORKDIR /dep/opencv
+# RUN mkdir build \
+#     && cd build \
+#     && cmake -D CMAKE_BUILD_TYPE=RELEASE \
+#     -D CMAKE_INSTALL_PREFIX=/usr/local/opencv3 \
+#     -D INSTALL_C_EXAMPLES=OFF \
+#     -D INSTALL_PYTHON_EXAMPLES=OFF \
+#     -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules \
+#     -D BUILD_EXAMPLES=OFF .. \
+#     && make install -j$(nproc) \
+#     && ldconfig
 
 
 
@@ -79,8 +82,7 @@ RUN mkdir build \
 
 # Python
 RUN apt -y update \
-    && apt install -y python3-pip \
-    && pip install --no-cache-dir --upgrade pip
+    && apt install -y python3-pip
 
 # Python packages
 # RUN pip install <package> --break-system-packages

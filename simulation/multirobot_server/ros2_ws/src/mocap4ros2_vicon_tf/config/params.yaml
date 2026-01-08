@@ -1,3 +1,0 @@
-tf_publisher:
-  ros__parameters:
-    all_frame: all

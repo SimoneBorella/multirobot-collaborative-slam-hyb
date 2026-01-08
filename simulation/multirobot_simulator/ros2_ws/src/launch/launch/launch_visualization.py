@@ -15,7 +15,7 @@ def generate_launch_description():
 
     ld = LaunchDescription()
 
-    rviz_path = os.path.join(get_package_share_directory('multi_robot_simulator'), 'rviz', 'multi_robot_simulator_view.rviz')
+    rviz_path = os.path.join(get_package_share_directory('multirobot_simulator'), 'rviz', 'multirobot_simulator_view.rviz')
 
     rviz_node = Node(
         package='rviz2',
