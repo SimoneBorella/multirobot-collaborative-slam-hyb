@@ -21,7 +21,7 @@ Robot::Robot(rclcpp::Node::SharedPtr node, std::shared_ptr<Environment> environm
     cmd_vel_nav_subscription = node->create_subscription<geometry_msgs::msg::Twist>(
         name + "/cmd_vel_nav", 10, std::bind(&Robot::cmdVelCallback, this, std::placeholders::_1));
 
-    publishWorldToMapTransform();
+    // publishWorldToMapTransform();
     // publishMapToOdomTransform();
     publishBaseLinkToBaseFootprintTransform();
     

@@ -10,8 +10,8 @@ find_package(ament_cmake REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(interfaces REQUIRED)
-# find_package(nav_msgs REQUIRED)
-# find_package(std_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
@@ -19,12 +19,13 @@ find_package(yaml-cpp REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(GTSAM REQUIRED)
 
 set(DEPENDENCIES
     ament_index_cpp
     rclcpp
     interfaces
-    # nav_msgs
+    nav_msgs
     std_msgs
     sensor_msgs
     geometry_msgs
@@ -38,6 +39,8 @@ set(DEPENDENCIES
 
 set(SRC_FILES
   src/multirobot_server.cpp
+  src/mapping_merge.cpp
+  src/task_planning.cpp
 )
 
 
@@ -48,12 +51,14 @@ ament_target_dependencies(${PROJECT_NAME} ${DEPENDENCIES})
 target_include_directories(${PROJECT_NAME}
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/mapping>
     $<INSTALL_INTERFACE:include>
     ${rclcpp_INCLUDE_DIRS}
 )
 target_link_libraries(
   ${PROJECT_NAME}
   yaml-cpp
+  gtsam
 )
 
 
@@ -65,7 +70,7 @@ install(TARGETS
 install(DIRECTORY
   launch
   config
-  rviz
+  params
   DESTINATION share/${PROJECT_NAME})
 
 ament_package()

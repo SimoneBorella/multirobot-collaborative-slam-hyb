@@ -7,6 +7,16 @@
 
 namespace mapping
 {
+    struct Pose
+    {
+        Eigen::Vector3d position;
+        Eigen::Quaterniond orientation;
+
+        Pose()
+            : position(),
+              orientation() {}
+    };
+
     struct Map
     {
         float resolution;

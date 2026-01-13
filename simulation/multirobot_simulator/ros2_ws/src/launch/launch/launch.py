@@ -15,6 +15,9 @@ def generate_launch_description():
 
     ld = LaunchDescription()
 
+    launch_dir = get_package_share_directory('launch')
+
+
     # Launch arguments
 
     bag_record_launch_arg = DeclareLaunchArgument(
@@ -105,7 +108,6 @@ def generate_launch_description():
             os.path.join(get_package_share_directory('multirobot_simulator'), 'launch','launch.py')
         ]),
         launch_arguments={
-            'rviz': LaunchConfiguration('rviz'),
             'log_level': LaunchConfiguration('log_level'),
         }.items()
     )
@@ -136,6 +138,25 @@ def generate_launch_description():
             }.items(),
         )
         ld.add_action(multirobot_client_launch_description)
-        
+
+
+    rviz_path = os.path.join(launch_dir, 'rviz', 'view.rviz')
+
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        arguments=[
+            '-d', rviz_path,
+            '--ros-args', '--log-level', LaunchConfiguration('log_level')
+        ],
+        condition=IfCondition(
+            PythonExpression([
+                "'", LaunchConfiguration('rviz'), "' == 'True'"
+            ])
+        )
+    )
+
+    ld.add_action(rviz_node)
+
     return ld
 

@@ -1,0 +1,16 @@
+mapping_rate: 1.0
+
+map_resolution: 0.05 
+map_width: 40.0
+map_height: 40.0
+
+log_odds_min: -10.0
+log_odds_max: 10.0
+
+obstacle_threshold: 0.70
+free_threshold: 0.30
+
+costmap_kernel_distance: 0.2
+costmap_decay_rate: 4.0
+
+epsilon: 1.5

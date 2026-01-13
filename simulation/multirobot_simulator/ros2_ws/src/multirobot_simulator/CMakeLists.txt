@@ -86,7 +86,6 @@ install(DIRECTORY
   config
   maps
   robots
-  rviz
   DESTINATION share/${PROJECT_NAME})
 
 ament_package()

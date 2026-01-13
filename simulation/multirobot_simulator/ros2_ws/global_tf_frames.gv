@@ -1,18 +1,20 @@
 digraph G {
-"robot_1/odom" -> "robot_1/base_link"[label=" Broadcaster: default_authority\nAverage rate: 100.45\nBuffer length: 2.22\nMost recent transform: 1767634237.888482\nOldest transform: 1767634235.668473\n"];
-"robot_1/map" -> "robot_1/base_link_imu"[label=" Broadcaster: default_authority\nAverage rate: 100.45\nBuffer length: 2.22\nMost recent transform: 1767634237.888507\nOldest transform: 1767634235.668495\n"];
+"robot_1/odom" -> "robot_1/base_link"[label=" Broadcaster: default_authority\nAverage rate: 97.205\nBuffer length: 4.65\nMost recent transform: 1768212139.130385\nOldest transform: 1768212134.480443\n"];
+"robot_1/map" -> "robot_1/odom"[label=" Broadcaster: default_authority\nAverage rate: 26.442\nBuffer length: 4.16\nMost recent transform: 1768212138.953314\nOldest transform: 1768212134.793298\n"];
+"robot_1/map" -> "robot_1/base_link_imu"[label=" Broadcaster: default_authority\nAverage rate: 98.066\nBuffer length: 4.65\nMost recent transform: 1768212139.130409\nOldest transform: 1768212134.480478\n"];
 "world" -> "robot_1/map"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
 "robot_0/base_link" -> "robot_0/lidar_link"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
-"robot_0/odom" -> "robot_0/base_link"[label=" Broadcaster: default_authority\nAverage rate: 100.447\nBuffer length: 2.23\nMost recent transform: 1767634237.897671\nOldest transform: 1767634235.667629\n"];
+"robot_0/odom" -> "robot_0/base_link"[label=" Broadcaster: default_authority\nAverage rate: 97.816\nBuffer length: 4.652\nMost recent transform: 1768212139.130257\nOldest transform: 1768212134.478682\n"];
+"robot_0/map" -> "robot_0/odom"[label=" Broadcaster: default_authority\nAverage rate: 23.726\nBuffer length: 4.299\nMost recent transform: 1768212138.966628\nOldest transform: 1768212134.667585\n"];
 "robot_0/base_link" -> "robot_0/camera_link"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"robot_0/map" -> "robot_0/base_link_imu"[label=" Broadcaster: default_authority\nAverage rate: 98.031\nBuffer length: 4.652\nMost recent transform: 1768212139.130288\nOldest transform: 1768212134.478715\n"];
 "world" -> "robot_0/map"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
 "robot_0/base_link" -> "robot_0/base_footprint"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
-"robot_0/map" -> "robot_0/base_link_imu"[label=" Broadcaster: default_authority\nAverage rate: 100.446\nBuffer length: 2.23\nMost recent transform: 1767634237.897717\nOldest transform: 1767634235.667657\n"];
 "robot_1/base_link" -> "robot_1/lidar_link"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
 "robot_1/base_link" -> "robot_1/camera_link"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
 "robot_1/base_link" -> "robot_1/base_footprint"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
 edge [style=invis];
  subgraph cluster_legend { style=bold; color=black; label ="view_frames Result";
-"Recorded at time: 1767634237.9051692"[ shape=plaintext ] ;
+"Recorded at time: 1768212139.2740142"[ shape=plaintext ] ;
 }->"world";
 }
