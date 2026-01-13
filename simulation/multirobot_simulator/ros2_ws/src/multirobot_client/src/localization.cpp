@@ -1,6 +1,6 @@
 #include "localization.h"
 
-namespace localization
+namespace multirobot_slam
 {
     Localization::Localization()
         : t(0), imu_timestamp_prev(0.0), odom_first_(true), gnss_first_(true), landmark_id(0), localization_thread_running(false)

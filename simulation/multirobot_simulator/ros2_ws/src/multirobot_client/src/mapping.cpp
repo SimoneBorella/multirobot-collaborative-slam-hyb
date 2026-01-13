@@ -1,7 +1,7 @@
 #include "mapping.h"
 
 
-namespace mapping
+namespace multirobot_slam
 {
     Mapping::Mapping()
         : map_updated_(true), ewfd_first_(true), frontier_map_updated_(true), frontiers_updated_(true), mapping_thread_running(false)

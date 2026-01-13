@@ -13,9 +13,9 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
-#include "mapping_data_types.h"
+#include "data_types.h"
 
-namespace mapping
+namespace multirobot_slam
 {
     struct MappingMergeParams
     {

@@ -22,13 +22,13 @@
 #include <gtsam/slam/BetweenFactor.h>
 #include <gtsam/base/numericalDerivative.h>
 
-#include "localization_data_types.h"
+#include "data_types.h"
 #include "wgs84.h"
 #include "factors.h"
 
 using namespace gtsam;
 
-namespace localization
+namespace multirobot_slam
 {
     struct LocalizationParams
     {

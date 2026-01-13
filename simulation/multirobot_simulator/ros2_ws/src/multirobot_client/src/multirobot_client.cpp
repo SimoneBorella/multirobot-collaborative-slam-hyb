@@ -29,8 +29,7 @@
 #include "mapping.h"
 
 
-using namespace localization;
-using namespace mapping;
+using namespace multirobot_slam;
 
 using namespace std::chrono_literals;
 

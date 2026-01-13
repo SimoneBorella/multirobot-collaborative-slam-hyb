@@ -25,9 +25,9 @@
 
 #include "mapping_merge.h"
 #include "task_planning.h"
+#include "global_planning.h"
 
-using namespace mapping;
-using namespace task_planning;
+using namespace multirobot_slam;
 
 using namespace std::chrono_literals;
 
@@ -230,12 +230,18 @@ public:
         std::string task_planning_params_path = package_dir + "/params/task_planning_params.yaml";
         TaskPlanningParams task_planning_params = TaskPlanning::params_from_yaml(task_planning_params_path);
 
+        std::string global_planning_params_path = package_dir + "/params/global_planning_params.yaml";
+        GlobalPlanningParams global_planning_params = GlobalPlanning::params_from_yaml(global_planning_params_path);
+
         mapping_merge_.init(mapping_merge_params);
         mapping_merge_.set_initial_poses(initial_poses);
         std::cout << "[Server]: " << "Mapping merge initialized." << std::endl;
 
         task_planning_.init(task_planning_params);
         std::cout << "[Server]: " << "Task planning initialized." << std::endl;
+
+        global_planning_.init(global_planning_params);
+        std::cout << "[Server]: " << "Global planning initialized." << std::endl;
 
         mapping_merge_.start();
         std::cout << "[Server]: " << "Mapping merge started." << std::endl;
@@ -363,6 +369,8 @@ public:
         if (costmap.has_value())
         {
             publish_costmap(costmap.value());
+
+            global_planning_.update_costmap(costmap.value());
         }
 
         const std::optional<std::vector<Frontier>> &frontiers = mapping_merge_.get_frontiers_if_updated();
@@ -382,17 +390,9 @@ public:
                 }
             }
 
-            std::map<std::string, Frontier> tasks = task_planning_.task_planning(robot_poses, frontiers.value());
+            std::map<std::string, Frontier> tasks = task_planning_.plan_tasks(robot_poses, frontiers.value());
 
-            for (const auto& [robot, frontier] : tasks)
-            {
-                std::cout << "  Robot: " << robot
-                        << " -> Frontier centroid: ("
-                        << frontier.centroid.x() << ", "
-                        << frontier.centroid.y() << ")"
-                        << ", size: " << frontier.size
-                        << std::endl;
-            }
+            std::map<std::string, Path> global_paths = global_planning_.plan_global_path(robot_poses, tasks);
         }
 
 
@@ -408,6 +408,7 @@ public:
 
     MappingMerge mapping_merge_;
     TaskPlanning task_planning_;
+    GlobalPlanning global_planning_;
 
     rclcpp::TimerBase::SharedPtr timer_;
 

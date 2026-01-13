@@ -19,13 +19,11 @@
 #include <gtsam/discrete/DiscreteValues.h>
 #include <gtsam/inference/Symbol.h>
 
-#include "mapping_data_types.h"
-
-using namespace mapping;
+#include "data_types.h"
 
 using namespace gtsam;
 
-namespace task_planning
+namespace multirobot_slam
 {
     struct TaskPlanningParams
     {
@@ -52,7 +50,7 @@ namespace task_planning
         static TaskPlanningParams params_from_yaml(std::string &params_path);
         void init(TaskPlanningParams &params);
 
-        std::map<std::string, Frontier> task_planning(std::map<std::string, Pose> robot_poses, std::vector<Frontier> frontiers);
+        std::map<std::string, Frontier> plan_tasks(std::map<std::string, Pose> robot_poses, std::vector<Frontier> frontiers);
     private:
 
         TaskPlanningParams params_;

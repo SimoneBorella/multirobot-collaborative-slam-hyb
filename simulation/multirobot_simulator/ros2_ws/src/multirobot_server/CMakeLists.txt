@@ -41,6 +41,7 @@ set(SRC_FILES
   src/multirobot_server.cpp
   src/mapping_merge.cpp
   src/task_planning.cpp
+  src/global_planning.cpp
 )
 
 
@@ -52,6 +53,8 @@ target_include_directories(${PROJECT_NAME}
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/mapping>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/task_planning>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/global_planning>
     $<INSTALL_INTERFACE:include>
     ${rclcpp_INCLUDE_DIRS}
 )

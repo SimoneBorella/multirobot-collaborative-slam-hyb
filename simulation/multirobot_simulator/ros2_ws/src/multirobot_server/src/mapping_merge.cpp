@@ -1,7 +1,7 @@
 #include "mapping_merge.h"
 
 
-namespace mapping
+namespace multirobot_slam
 {
     MappingMerge::MappingMerge()
         : map_updated_(true), costmap_updated_(true), frontiers_updated_(true), mapping_merge_thread_running(false)

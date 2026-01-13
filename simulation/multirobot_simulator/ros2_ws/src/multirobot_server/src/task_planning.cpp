@@ -1,6 +1,6 @@
 #include "task_planning.h"
 
-namespace task_planning
+namespace multirobot_slam
 {
     TaskPlanning::TaskPlanning()
     {
@@ -40,7 +40,7 @@ namespace task_planning
         params_ = params;
     }
 
-    std::map<std::string, Frontier> TaskPlanning::task_planning(std::map<std::string, Pose> robot_poses, std::vector<Frontier> frontiers)
+    std::map<std::string, Frontier> TaskPlanning::plan_tasks(std::map<std::string, Pose> robot_poses, std::vector<Frontier> frontiers)
     {
         std::map<std::string, Frontier> tasks;
 
