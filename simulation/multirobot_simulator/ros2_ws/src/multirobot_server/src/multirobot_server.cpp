@@ -28,6 +28,7 @@
 #include "mapping_merge.h"
 #include "task_planning.h"
 #include "global_planning.h"
+#include "local_planning.h"
 
 using namespace multirobot_slam;
 
@@ -94,8 +95,8 @@ public:
             std::string robot_global_path_topic = "/" + robot + "/global_path";
             robot_global_path_publishers_[robot] = this->create_publisher<nav_msgs::msg::Path>(robot_global_path_topic, 10);
             
-            std::string robot_cmd_topic = "/" + robot + "/cmd_vel";
-            robot_cmd_publishers_[robot] = this->create_publisher<geometry_msgs::msg::Twist>(robot_cmd_topic, 10);
+            std::string robot_cmd_vel_topic = "/" + robot + "/cmd_vel";
+            robot_cmd_vel_publishers_[robot] = this->create_publisher<geometry_msgs::msg::Twist>(robot_cmd_vel_topic, 10);
         }
 
         std::string map_topic = "/map";
@@ -147,7 +148,7 @@ public:
 
         for(int i=0; i<10; i++)
         {
-            for (auto &[robot, cmd_publisher] : robot_cmd_publishers_)
+            for (auto &[robot, cmd_publisher] : robot_cmd_vel_publishers_)
             {
                 cmd_publisher->publish(stop_msg);
             }
@@ -239,6 +240,9 @@ public:
         std::string global_planning_params_path = package_dir + "/params/global_planning_params.yaml";
         GlobalPlanningParams global_planning_params = GlobalPlanning::params_from_yaml(global_planning_params_path);
 
+        std::string local_planning_params_path = package_dir + "/params/local_planning_params.yaml";
+        LocalPlanningParams local_planning_params = LocalPlanning::params_from_yaml(local_planning_params_path);
+
         mapping_merge_.init(mapping_merge_params);
         mapping_merge_.set_initial_poses(initial_poses);
         std::cout << "[Server]: " << "Mapping merge initialized." << std::endl;
@@ -249,8 +253,15 @@ public:
         global_planning_.init(global_planning_params);
         std::cout << "[Server]: " << "Global planning initialized." << std::endl;
 
+        local_planning_.init(local_planning_params);
+        std::cout << "[Server]: " << "Local planning initialized." << std::endl;
+
+
         mapping_merge_.start();
         std::cout << "[Server]: " << "Mapping merge started." << std::endl;
+
+        local_planning_.start();
+        std::cout << "[Server]: " << "Local planning started." << std::endl;
     }
 
 
@@ -391,9 +402,40 @@ public:
     }
 
 
+    void publish_vel_cmds(std::map<std::string, VelCmd> vel_cmds)
+    {
+        for (const auto& [robot, vel_cmd] : vel_cmds)
+        {
+            geometry_msgs::msg::Twist msg;
+            msg.linear.x = vel_cmd.linear.x();
+            msg.linear.y = vel_cmd.linear.y();
+            msg.linear.z = vel_cmd.linear.z();
+
+            msg.angular.x = vel_cmd.angular.x();
+            msg.angular.y = vel_cmd.angular.y();
+            msg.angular.z = vel_cmd.angular.z();
+
+            robot_cmd_vel_publishers_[robot]->publish(msg);
+        }
+    }
+
+
 
     void timer_callback()
     {
+        std::map<std::string, Pose> robot_poses;
+
+        for (const auto& robot : robots_)
+        {
+            Pose pose;
+            if (get_robot_pose(robot, pose))
+            {
+                robot_poses[robot] = pose;
+            }
+        }
+
+        local_planning_.update_robot_poses(robot_poses);
+
         const std::optional<Map> &map = mapping_merge_.get_map_if_updated();
 
         if (map.has_value())
@@ -408,6 +450,7 @@ public:
             publish_costmap(costmap.value());
 
             global_planning_.update_costmap(costmap.value());
+            local_planning_.update_costmap(costmap.value());
         }
 
         const std::optional<std::vector<Frontier>> &frontiers = mapping_merge_.get_frontiers_if_updated();
@@ -416,29 +459,21 @@ public:
         {
             publish_frontiers_marker(frontiers.value());
 
-            std::map<std::string, Pose> robot_poses;
-
-            for (const auto& robot : robots_)
-            {
-                Pose pose;
-                if (get_robot_pose(robot, pose))
-                {
-                    robot_poses[robot] = pose;
-                }
-            }
-
             std::map<std::string, Frontier> tasks = task_planning_.plan_tasks(robot_poses, frontiers.value());
 
             std::map<std::string, Path> global_paths = global_planning_.plan_global_path(robot_poses, tasks);
 
             publish_global_paths(global_paths);
 
-            // Update global path to local planning
+            local_planning_.update_global_paths(global_paths);
         }
 
-        // Get and publish veocity commands for each robot
-        
+
+        std::map<std::string, VelCmd> vel_cmds = local_planning_.get_vel_cmds();
+
+        publish_vel_cmds(vel_cmds);
     }
+
 
     std::string world_frame_;
     std::string map_frame_;
@@ -451,6 +486,7 @@ public:
     MappingMerge mapping_merge_;
     TaskPlanning task_planning_;
     GlobalPlanning global_planning_;
+    LocalPlanning local_planning_;
 
     rclcpp::TimerBase::SharedPtr timer_;
 
@@ -466,7 +502,7 @@ public:
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr costmap_publisher_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr frontiers_marker_publisher_;
     std::map<std::string, rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr> robot_global_path_publishers_;
-    std::map<std::string, rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr> robot_cmd_publishers_;
+    std::map<std::string, rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr> robot_cmd_vel_publishers_;
 };
 
 int main(int argc, char *argv[])

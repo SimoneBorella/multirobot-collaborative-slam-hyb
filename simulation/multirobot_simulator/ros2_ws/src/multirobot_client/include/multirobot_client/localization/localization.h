@@ -96,20 +96,20 @@ namespace multirobot_slam
         std::array<double, 2> wgs84_reference_;
         double altitude_reference_;
 
-        int landmark_id;
-        std::vector<Symbol> landmark_symbols;
+        int landmark_id_;
+        std::vector<Symbol> landmark_symbols_;
 
-        ISAM2 isam;
+        ISAM2 isam_;
 
-        PreintegratedImuMeasurements imu_preintegrated;
+        PreintegratedImuMeasurements imu_preintegrated_;
 
         State state_;
-        Pose3 pose_estimate;
-        Vector3 velocity_estimate;
-        imuBias::ConstantBias bias_estimate;
+        Pose3 pose_estimate_;
+        Vector3 velocity_estimate_;
+        imuBias::ConstantBias bias_estimate_;
 
-        std::atomic<bool> localization_thread_running;
-        std::thread localization_thread;
+        std::atomic<bool> localization_thread_running_;
+        std::thread localization_thread_;
     };
 }
 

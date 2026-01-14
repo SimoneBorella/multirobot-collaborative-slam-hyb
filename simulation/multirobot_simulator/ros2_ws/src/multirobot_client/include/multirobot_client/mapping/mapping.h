@@ -120,8 +120,8 @@ namespace multirobot_slam
         std::deque<PosedScan> posed_scan_buffer_;
         std::mutex buffer_mutex_;
 
-        double free_belief_log_odds;
-        double occupied_belief_log_odds;
+        double free_belief_log_odds_;
+        double occupied_belief_log_odds_;
 
         std::unordered_map<int, float> local_log_odds_delta_;
 
@@ -138,13 +138,13 @@ namespace multirobot_slam
         std::vector<Frontier> frontiers_;
 
         bool ewfd_first_;
-        std::vector<bool> ewfd_visited;
+        std::vector<bool> ewfd_visited_;
 
         bool frontier_map_updated_;
         bool frontiers_updated_;
 
-        std::atomic<bool> mapping_thread_running;
-        std::thread mapping_thread;
+        std::atomic<bool> mapping_thread_running_;
+        std::thread mapping_thread_;
     };
 
 

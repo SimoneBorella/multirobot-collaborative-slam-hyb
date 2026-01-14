@@ -4,21 +4,21 @@
 namespace multirobot_slam
 {
     MappingMerge::MappingMerge()
-        : map_updated_(true), costmap_updated_(true), frontiers_updated_(true), mapping_merge_thread_running(false)
+        : map_updated_(true), costmap_updated_(true), frontiers_updated_(true), mapping_merge_thread_running_(false)
     {
     }
 
     MappingMerge::MappingMerge(MappingMergeParams &params)
-        : params_(params), map_updated_(true), costmap_updated_(true), frontiers_updated_(true), mapping_merge_thread_running(false)
+        : params_(params), map_updated_(true), costmap_updated_(true), frontiers_updated_(true), mapping_merge_thread_running_(false)
     {
     }
 
     MappingMerge::~MappingMerge()
     {
-        mapping_merge_thread_running.store(false);
-        if (mapping_merge_thread.joinable())
+        mapping_merge_thread_running_.store(false);
+        if (mapping_merge_thread_.joinable())
         {
-            mapping_merge_thread.join();
+            mapping_merge_thread_.join();
         }
     }
 
@@ -107,19 +107,19 @@ namespace multirobot_slam
 
     void MappingMerge::start()
     {
-        if (mapping_merge_thread_running)
+        if (mapping_merge_thread_running_)
             return;
 
-        mapping_merge_thread_running.store(true);
+        mapping_merge_thread_running_.store(true);
 
-        mapping_merge_thread = std::thread([this]()
+        mapping_merge_thread_ = std::thread([this]()
                                      {
                 auto period = std::chrono::milliseconds(
                     static_cast<int>(1000.0 / params_.mapping_rate));
 
                 auto next_time = std::chrono::steady_clock::now() + period;
 
-                while (mapping_merge_thread_running.load())
+                while (mapping_merge_thread_running_.load())
                 {
                     mapping_merge();
 

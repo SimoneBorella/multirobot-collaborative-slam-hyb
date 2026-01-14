@@ -4,21 +4,21 @@
 namespace multirobot_slam
 {
     Mapping::Mapping()
-        : map_updated_(true), ewfd_first_(true), frontier_map_updated_(true), frontiers_updated_(true), mapping_thread_running(false)
+        : map_updated_(true), ewfd_first_(true), frontier_map_updated_(true), frontiers_updated_(true), mapping_thread_running_(false)
     {
     }
 
     Mapping::Mapping(MappingParams &params)
-        : params_(params), map_updated_(true), ewfd_first_(true), frontier_map_updated_(true), frontiers_updated_(true), mapping_thread_running(false)
+        : params_(params), map_updated_(true), ewfd_first_(true), frontier_map_updated_(true), frontiers_updated_(true), mapping_thread_running_(false)
     {
     }
 
     Mapping::~Mapping()
     {
-        mapping_thread_running.store(false);
-        if (mapping_thread.joinable())
+        mapping_thread_running_.store(false);
+        if (mapping_thread_.joinable())
         {
-            mapping_thread.join();
+            mapping_thread_.join();
         }
     }
 
@@ -87,8 +87,8 @@ namespace multirobot_slam
     {
         params_ = params;
 
-        free_belief_log_odds = std::log(params_.free_belief / (1.0 - params_.free_belief));
-        occupied_belief_log_odds = std::log(params_.occupied_belief / (1.0 - params_.occupied_belief));
+        free_belief_log_odds_ = std::log(params_.free_belief / (1.0 - params_.free_belief));
+        occupied_belief_log_odds_ = std::log(params_.occupied_belief / (1.0 - params_.occupied_belief));
 
         // Initialize maps
         map_.resolution = static_cast<float>(params_.map_resolution);
@@ -120,25 +120,25 @@ namespace multirobot_slam
         frontier_map_.origin_orientation = map_.origin_orientation;
         frontier_map_.data.resize(map_.width * map_.height, -1);
 
-        ewfd_visited.assign(map_.width * map_.height, false);
+        ewfd_visited_.assign(map_.width * map_.height, false);
 
     }
 
     void Mapping::start()
     {
-        if (mapping_thread_running)
+        if (mapping_thread_running_)
             return;
 
-        mapping_thread_running.store(true);
+        mapping_thread_running_.store(true);
 
-        mapping_thread = std::thread([this]()
+        mapping_thread_ = std::thread([this]()
                                      {
                 auto period = std::chrono::milliseconds(
                     static_cast<int>(1000.0 / params_.mapping_rate));
 
                 auto next_time = std::chrono::steady_clock::now() + period;
 
-                while (mapping_thread_running.load())
+                while (mapping_thread_running_.load())
                 {
                     mapping();
 
@@ -270,7 +270,7 @@ namespace multirobot_slam
 
                 double cell_distance = std::hypot(x0 - robot_x, y0 - robot_y) * map_.resolution;
 
-                double delta_log_odds = free_belief_log_odds * (1.0 - params_.distance_belief_factor * cell_distance);
+                double delta_log_odds = free_belief_log_odds_ * (1.0 - params_.distance_belief_factor * cell_distance);
                 local_log_odds_delta_[idx] += delta_log_odds;
                 // map_log_odds_data_[idx] += delta_log_odds;
                 
@@ -315,7 +315,7 @@ namespace multirobot_slam
 
                     double cell_distance = std::hypot(nx - robot_x, ny - robot_y) * map_.resolution;
 
-                    double delta_log_odds = (occupied_belief_log_odds * weight) * (1.0 - params_.distance_belief_factor * cell_distance);
+                    double delta_log_odds = (occupied_belief_log_odds_ * weight) * (1.0 - params_.distance_belief_factor * cell_distance);
                     local_log_odds_delta_[idx] += delta_log_odds;
                     // map_log_odds_data_[idx] += delta_log_odds;
 
@@ -391,7 +391,7 @@ namespace multirobot_slam
                 if (nx < 0 || nx >= frontier_map_.width || ny < 0 || ny >= frontier_map_.height)
                     continue;
                     
-                if (ewfd_visited[nidx])
+                if (ewfd_visited_[nidx])
                     continue;
 
                 double nx_dist = (nx - rx) * frontier_map_.resolution;
@@ -408,7 +408,7 @@ namespace multirobot_slam
                 if (filtered_map_.data[nidx] == 0)
                 {
                     queue.push(nidx);
-                    ewfd_visited[nidx] = true;
+                    ewfd_visited_[nidx] = true;
                 }
             }
 

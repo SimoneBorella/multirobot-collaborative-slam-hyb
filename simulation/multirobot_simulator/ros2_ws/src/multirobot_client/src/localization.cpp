@@ -3,21 +3,21 @@
 namespace multirobot_slam
 {
     Localization::Localization()
-        : t(0), imu_timestamp_prev(0.0), odom_first_(true), gnss_first_(true), landmark_id(0), localization_thread_running(false)
+        : t(0), imu_timestamp_prev(0.0), odom_first_(true), gnss_first_(true), landmark_id_(0), localization_thread_running_(false)
     {
     }
 
     Localization::Localization(LocalizationParams &params)
-        : params_(params), t(0), imu_timestamp_prev(0.0), odom_first_(true), gnss_first_(true), landmark_id(0), localization_thread_running(false)
+        : params_(params), t(0), imu_timestamp_prev(0.0), odom_first_(true), gnss_first_(true), landmark_id_(0), localization_thread_running_(false)
     {
     }
 
     Localization::~Localization()
     {
-        localization_thread_running.store(false);
-        if (localization_thread.joinable())
+        localization_thread_running_.store(false);
+        if (localization_thread_.joinable())
         {
-            localization_thread.join();
+            localization_thread_.join();
         }
     }
 
@@ -100,7 +100,7 @@ namespace multirobot_slam
         parameters.cacheLinearizedFactors = false;
         parameters.enablePartialRelinearizationCheck = true;
 
-        isam = ISAM2(parameters);
+        isam_ = ISAM2(parameters);
 
         NonlinearFactorGraph new_factors;
         Values new_init_estimates;
@@ -130,7 +130,7 @@ namespace multirobot_slam
         new_init_estimates.insert(b0, init_bias);
 
         // Update new factors
-        isam.update(new_factors, new_init_estimates);
+        isam_.update(new_factors, new_init_estimates);
 
         // Imu preintegration
         auto imu_params = PreintegratedImuMeasurements::Params::MakeSharedU(9.81);
@@ -145,30 +145,30 @@ namespace multirobot_slam
         imu_params->gyroscopeCovariance = I_3x3 * var_gyr;     // 0.01  rad/s² noise²
         imu_params->integrationCovariance = I_3x3 * 1e-6;      // integration uncertainty
 
-        imu_preintegrated = PreintegratedImuMeasurements(imu_params, init_bias);
+        imu_preintegrated_ = PreintegratedImuMeasurements(imu_params, init_bias);
 
-        pose_estimate = init_pose;
-        velocity_estimate = init_velocity;
-        bias_estimate = init_bias;
+        pose_estimate_ = init_pose;
+        velocity_estimate_ = init_velocity;
+        bias_estimate_ = init_bias;
 
         t = 1;
     }
 
     void Localization::start()
     {
-        if (localization_thread_running)
+        if (localization_thread_running_)
             return;
 
-        localization_thread_running.store(true);
+        localization_thread_running_.store(true);
 
-        localization_thread = std::thread([this]()
+        localization_thread_ = std::thread([this]()
                                           {
                 auto period = std::chrono::milliseconds(
                     static_cast<int>(1000.0 / params_.localization_rate));
 
                 auto next_time = std::chrono::steady_clock::now() + period;
 
-                while (localization_thread_running.load())
+                while (localization_thread_running_.load())
                 {
                     localization();
 
@@ -225,13 +225,13 @@ namespace multirobot_slam
     {
         std::vector<std::pair<Symbol, double>> results;
 
-        if (landmark_symbols.empty())
+        if (landmark_symbols_.empty())
             return results;
 
         double total_likelihood = 0.0;
         std::vector<std::tuple<Symbol, double, double>> temp_results;
 
-        for (const Symbol& l : landmark_symbols)
+        for (const Symbol& l : landmark_symbols_)
         {
             if (!estimates.exists(l))
                 continue;
@@ -350,11 +350,11 @@ namespace multirobot_slam
 
             total_dt += dt;
 
-            imu_preintegrated.integrateMeasurement(imu_data.linear_acceleration, imu_data.angular_velocity, dt);
+            imu_preintegrated_.integrateMeasurement(imu_data.linear_acceleration, imu_data.angular_velocity, dt);
         }
 
         // Imu factor
-        new_factors.add(ImuFactor(x_prev, v_prev, x_curr, v_curr, b_prev, imu_preintegrated));
+        new_factors.add(ImuFactor(x_prev, v_prev, x_curr, v_curr, b_prev, imu_preintegrated_));
 
         // Odom factor
         if (!odom_buffer.empty())
@@ -390,8 +390,8 @@ namespace multirobot_slam
         {
             LandmarksData landmarks_data = landmarks_buffer.back();
         
-            Values estimates = isam.calculateEstimate();
-            // Marginals marginals = Marginals(isam.getFactorsUnsafe(), estimates);
+            Values estimates = isam_.calculateEstimate();
+            // Marginals marginals = Marginals(isam_.getFactorsUnsafe(), estimates);
             Marginals marginals;
 
             Pose3 current_pose = estimates.at<Pose3>(x_prev);
@@ -428,9 +428,9 @@ namespace multirobot_slam
                 }
                 else
                 {
-                    Symbol l('l', landmark_id++);
+                    Symbol l('l', landmark_id_++);
                     new_estimates.insert(l, landmark_observation);
-                    landmark_symbols.push_back(l);
+                    landmark_symbols_.push_back(l);
     
                     auto huber_noise = noiseModel::Robust::Create(
                         noiseModel::mEstimator::Huber::Create(1.345),
@@ -444,9 +444,9 @@ namespace multirobot_slam
 
         size_t landmarks_max_size = 150;
 
-        if (landmark_symbols.size() > landmarks_max_size)
+        if (landmark_symbols_.size() > landmarks_max_size)
         {
-            landmark_symbols.erase(landmark_symbols.begin(), landmark_symbols.begin() + (landmark_symbols.size() - landmarks_max_size));
+            landmark_symbols_.erase(landmark_symbols_.begin(), landmark_symbols_.begin() + (landmark_symbols_.size() - landmarks_max_size));
         }
 
 
@@ -461,11 +461,11 @@ namespace multirobot_slam
         new_factors.add(BetweenFactor<imuBias::ConstantBias>(b_prev, b_curr, imuBias::ConstantBias(), bias_noise));
 
         // Predict current state as initial estimate
-        NavState predicted_state = imu_preintegrated.predict(NavState(pose_estimate, velocity_estimate), bias_estimate);
+        NavState predicted_state = imu_preintegrated_.predict(NavState(pose_estimate_, velocity_estimate_), bias_estimate_);
 
         new_estimates.insert(x_curr, predicted_state.pose());
         new_estimates.insert(v_curr, predicted_state.v());
-        new_estimates.insert(b_curr, bias_estimate);
+        new_estimates.insert(b_curr, bias_estimate_);
 
 
 
@@ -488,21 +488,21 @@ namespace multirobot_slam
         }
 
         // Update ISAM2
-        isam.update(new_factors, new_estimates);
+        isam_.update(new_factors, new_estimates);
 
         // Compute current estimate
-        pose_estimate = isam.calculateEstimate<Pose3>(x_curr);
-        velocity_estimate = isam.calculateEstimate<Vector3>(v_curr);
-        bias_estimate = isam.calculateEstimate<imuBias::ConstantBias>(b_curr);
+        pose_estimate_ = isam_.calculateEstimate<Pose3>(x_curr);
+        velocity_estimate_ = isam_.calculateEstimate<Vector3>(v_curr);
+        bias_estimate_ = isam_.calculateEstimate<imuBias::ConstantBias>(b_curr);
 
-        state_.position = pose_estimate.translation();
-        state_.attitude = Eigen::Quaterniond(pose_estimate.rotation().matrix());
-        state_.velocity = velocity_estimate;
-        state_.accelerometer_bias = bias_estimate.accelerometer();
-        state_.gyroscope_bias = bias_estimate.gyroscope();
+        state_.position = pose_estimate_.translation();
+        state_.attitude = Eigen::Quaterniond(pose_estimate_.rotation().matrix());
+        state_.velocity = velocity_estimate_;
+        state_.accelerometer_bias = bias_estimate_.accelerometer();
+        state_.gyroscope_bias = bias_estimate_.gyroscope();
 
         // Reset IMU preintegration
-        imu_preintegrated.resetIntegrationAndSetBias(bias_estimate);      
+        imu_preintegrated_.resetIntegrationAndSetBias(bias_estimate_);      
 
         // Update timestep
         t++;
@@ -515,6 +515,6 @@ namespace multirobot_slam
         //     std::cout << "Time: " << (duration.count() * 1000) << " ms (" << 1/duration.count() << " Hz)" << std::endl;
 
         // if (t%10 == 0)
-        //     std::cout << "Landmarks: " << landmark_symbols.size() << std::endl;
+        //     std::cout << "Landmarks: " << landmark_symbols_.size() << std::endl;
     }
 }

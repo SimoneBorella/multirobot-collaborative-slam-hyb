@@ -111,8 +111,8 @@ namespace multirobot_slam
         std::mutex map_mutex_;
         std::mutex frontiers_mutex_;
 
-        std::atomic<bool> mapping_merge_thread_running;
-        std::thread mapping_merge_thread;
+        std::atomic<bool> mapping_merge_thread_running_;
+        std::thread mapping_merge_thread_;
     };
 }
 

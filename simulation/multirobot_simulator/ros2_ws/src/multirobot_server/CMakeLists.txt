@@ -42,6 +42,7 @@ set(SRC_FILES
   src/mapping_merge.cpp
   src/task_planning.cpp
   src/global_planning.cpp
+  src/local_planning.cpp
 )
 
 
@@ -55,6 +56,7 @@ target_include_directories(${PROJECT_NAME}
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/mapping>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/task_planning>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/global_planning>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/local_planning>
     $<INSTALL_INTERFACE:include>
     ${rclcpp_INCLUDE_DIRS}
 )

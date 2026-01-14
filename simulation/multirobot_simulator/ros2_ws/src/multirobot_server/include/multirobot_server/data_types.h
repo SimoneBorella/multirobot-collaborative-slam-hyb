@@ -256,6 +256,18 @@ namespace multirobot_slam
         Path()
             : poses() {}
     };
+
+    struct VelCmd
+    {
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+        Eigen::Vector3d linear;
+        Eigen::Vector3d angular;
+
+        VelCmd()
+            : linear(Eigen::Vector3d::Zero()),
+              angular(Eigen::Vector3d::Zero()) {}
+    };
 }
 
 #endif // DATA_TYPES_H
