@@ -19,6 +19,8 @@
 #include "interfaces/msg/frontier.hpp"
 #include "interfaces/msg/frontier_array.hpp"
 #include "visualization_msgs/msg/marker.hpp"
+#include "nav_msgs/msg/path.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -88,8 +90,12 @@ public:
                     frontiers_callback(msg, robot);
                 }
             );
+
+            std::string robot_global_path_topic = "/" + robot + "/global_path";
+            robot_global_path_publishers_[robot] = this->create_publisher<nav_msgs::msg::Path>(robot_global_path_topic, 10);
             
-            robot_cmd_publishers_[robot] = this->create_publisher<geometry_msgs::msg::Twist>("/" + robot + "/cmd_vel", 10);
+            std::string robot_cmd_topic = "/" + robot + "/cmd_vel";
+            robot_cmd_publishers_[robot] = this->create_publisher<geometry_msgs::msg::Twist>(robot_cmd_topic, 10);
         }
 
         std::string map_topic = "/map";
@@ -355,6 +361,37 @@ public:
 
 
 
+    void publish_global_paths(std::map<std::string, Path> global_paths)
+    {
+        for (const auto& [robot, path] : global_paths)
+        {
+            nav_msgs::msg::Path path_msg;
+            path_msg.header.stamp = this->now();
+            path_msg.header.frame_id = world_frame_;
+
+            for (const auto& pose : path.poses)
+            {
+                geometry_msgs::msg::PoseStamped pose_stamped;
+                pose_stamped.header = path_msg.header;
+
+                pose_stamped.pose.position.x = pose.position.x();
+                pose_stamped.pose.position.y = pose.position.y();
+                pose_stamped.pose.position.z = pose.position.z();
+
+                pose_stamped.pose.orientation.w = pose.orientation.w();
+                pose_stamped.pose.orientation.x = pose.orientation.x();
+                pose_stamped.pose.orientation.y = pose.orientation.y();
+                pose_stamped.pose.orientation.z = pose.orientation.z();
+
+                path_msg.poses.push_back(pose_stamped);
+            }
+
+            robot_global_path_publishers_[robot]->publish(path_msg);
+        }
+    }
+
+
+
     void timer_callback()
     {
         const std::optional<Map> &map = mapping_merge_.get_map_if_updated();
@@ -393,9 +430,14 @@ public:
             std::map<std::string, Frontier> tasks = task_planning_.plan_tasks(robot_poses, frontiers.value());
 
             std::map<std::string, Path> global_paths = global_planning_.plan_global_path(robot_poses, tasks);
+
+            publish_global_paths(global_paths);
+
+            // Update global path to local planning
         }
 
-
+        // Get and publish veocity commands for each robot
+        
     }
 
     std::string world_frame_;
@@ -423,6 +465,7 @@ public:
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr map_publisher_;
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr costmap_publisher_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr frontiers_marker_publisher_;
+    std::map<std::string, rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr> robot_global_path_publishers_;
     std::map<std::string, rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr> robot_cmd_publishers_;
 };
 

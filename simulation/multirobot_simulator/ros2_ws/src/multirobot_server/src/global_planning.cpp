@@ -4,11 +4,12 @@
 namespace multirobot_slam
 {
     GlobalPlanning::GlobalPlanning()
+        : costmap_received_(false)
     {
     }
 
     GlobalPlanning::GlobalPlanning(GlobalPlanningParams &params)
-        : params_(params)
+        : params_(params), costmap_received_(false)
     {
     }
 
@@ -35,11 +36,15 @@ namespace multirobot_slam
     void GlobalPlanning::init(GlobalPlanningParams &params)
     {
         params_ = params;
+
+        directions_ = {{1,0},{-1,0},{0,1},{0,-1},{1,1},{-1,-1},{1,-1},{-1,1}};
+        directions_cost_ = {1.0, 1.0, 1.0, 1.0, std::sqrt(2.0), std::sqrt(2.0), std::sqrt(2.0), std::sqrt(2.0)};
     }
 
     void GlobalPlanning::update_costmap(Map costmap)
     {
         costmap_ = costmap;
+        costmap_received_ = true;
     }
 
 
@@ -59,43 +64,42 @@ namespace multirobot_slam
     {
         Path path;
 
-        // std::vector<geometry_msgs::msg::PoseStamped> temp_poses;
+        std::vector<Pose> temp_poses;
 
-        // std::shared_ptr<AStarNode> current = last;
-        // while (current) {
-        //     geometry_msgs::msg::PoseStamped pose;
-        //     pose.header.frame_id = all_frame;
-        //     pose.header.stamp = now;
-        //     pose.pose.position.x = current->x * costmap_->info.resolution + costmap_->info.origin.position.x;
-        //     pose.pose.position.y = current->y * costmap_->info.resolution + costmap_->info.origin.position.y;
+        std::shared_ptr<AStarNode> current = last;
 
-        //     temp_poses.push_back(pose);
-        //     current = current->parent;
-        // }
+        while (current) {
+            Pose pose;
+            pose.position.x() = current->x * costmap_.resolution + costmap_.origin_position.x();
+            pose.position.y() = current->y * costmap_.resolution + costmap_.origin_position.y();
 
-        // if(global_planner_type == "a_star")
-        //     std::reverse(temp_poses.begin(), temp_poses.end());
+            temp_poses.push_back(pose);
+            current = current->parent;
+        }
 
-        // // Compute orientation
-        // for(size_t i = 0; i < temp_poses.size(); ++i) {
-        //     geometry_msgs::msg::PoseStamped pose = temp_poses[i];
+        std::reverse(temp_poses.begin(), temp_poses.end());
 
-        //     if(i+1 < temp_poses.size()) {
-        //         double dx = temp_poses[i+1].pose.position.x - temp_poses[i].pose.position.x;
-        //         double dy = temp_poses[i+1].pose.position.y - temp_poses[i].pose.position.y;
-        //         double yaw = std::atan2(dy, dx);
+        // Compute orientation
+        for(size_t i = 0; i < temp_poses.size(); ++i) {
+            Pose pose = temp_poses[i];
 
-        //         tf2::Quaternion q;
-        //         q.setRPY(0, 0, yaw);
-        //         pose.pose.orientation = tf2::toMsg(q);
-        //     } else if(i > 0) {
-        //         pose.pose.orientation = temp_poses[i-1].pose.orientation;
-        //     } else {
-        //         pose.pose.orientation.w = 1.0;
-        //     }
+            if(i+1 < temp_poses.size()) {
+                double dx = temp_poses[i+1].position.x() - temp_poses[i].position.x();
+                double dy = temp_poses[i+1].position.y() - temp_poses[i].position.y();
+                double yaw = std::atan2(dy, dx);
 
-        //     path.poses.push_back(pose);
-        // }
+                pose.orientation = Eigen::Quaterniond(
+                    Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ())
+                );
+
+            } else if(i > 0) {
+                pose.orientation = temp_poses[i-1].orientation;
+            } else {
+                pose.orientation.w() = 1.0;
+            }
+
+            path.poses.push_back(pose);
+        }
 
         return path;
     }
@@ -103,47 +107,45 @@ namespace multirobot_slam
 
     Path GlobalPlanning::aStar(int sx, int sy, int gx, int gy)
     {
-        // std::priority_queue<std::shared_ptr<AStarNode>, std::vector<std::shared_ptr<AStarNode>>, CompareAStarNode> open;
-        // std::vector<std::vector<bool>> closed(costmap_->info.height, std::vector<bool>(costmap_->info.width, false));
+        std::priority_queue<std::shared_ptr<AStarNode>, std::vector<std::shared_ptr<AStarNode>>, CompareAStarNode> open;
+        std::vector<std::vector<bool>> closed(costmap_.height, std::vector<bool>(costmap_.width, false));
 
-        // std::shared_ptr<AStarNode> start = std::make_shared<AStarNode>(sx, sy, 0, heuristic(sx, sy, gx, gy));
-        // open.push(start);
+        std::shared_ptr<AStarNode> start = std::make_shared<AStarNode>(sx, sy, 0, heuristic(sx, sy, gx, gy));
+        open.push(start);
 
-        // while (!open.empty()) {
-        //     std::shared_ptr<AStarNode> current = open.top();
-        //     open.pop();
+        while (!open.empty()) {
+            std::shared_ptr<AStarNode> current = open.top();
+            open.pop();
 
-        //     if (current->x == gx && current->y == gy) {
-        //         return reconstructPath(current);
-        //     }
+            if (current->x == gx && current->y == gy)
+                return reconstructPath(current);
+            
+            if (closed[current->y][current->x])
+                continue;
 
-        //     if (closed[current->y][current->x]) {
-        //         continue;
-        //     }
-
-        //     closed[current->y][current->x] = true;
+            closed[current->y][current->x] = true;
 
             
-        //     for(size_t i=0; i<directions.size(); i++)
-        //     {
-        //         std::pair<int, int>& d = directions[i];
+            for(size_t i=0; i<directions_.size(); i++)
+            {
+                std::pair<int, int>& d = directions_[i];
 
-        //         int nx = current->x + d.first;
-        //         int ny = current->y + d.second;
+                int nx = current->x + d.first;
+                int ny = current->y + d.second;
                 
-        //         if (nx >= 0 && nx < static_cast<int>(costmap_->info.width) && ny >= 0 && ny < static_cast<int>(costmap_->info.height) && !closed[ny][nx]) {
-        //             int cost = costmap_->data[ny * costmap_->info.width + nx];
-        //             if (cost < 254)
-        //             {
-        //                 float step_cost = directions_cost[i];
-        //                 float g = current->g + step_cost + cost;
-        //                 float h = heuristic(nx, ny, gx, gy);
-        //                 std::shared_ptr<AStarNode> neighbor = std::make_shared<AStarNode>(nx, ny, g, h, current);
-        //                 open.push(neighbor);
-        //             }
-        //         }
-        //     }
-        // }
+                if (nx >= 0 && nx < static_cast<int>(costmap_.width) && ny >= 0 && ny < static_cast<int>(costmap_.height) && !closed[ny][nx]) {
+                    int cost = costmap_.data[ny * costmap_.width + nx];
+                    if (cost < 254)
+                    {
+                        float step_cost = directions_cost_[i];
+                        float g = current->g + step_cost + cost;
+                        float h = heuristic(nx, ny, gx, gy);
+                        std::shared_ptr<AStarNode> neighbor = std::make_shared<AStarNode>(nx, ny, g, h, current);
+                        open.push(neighbor);
+                    }
+                }
+            }
+        }
 
         return Path();
     }
@@ -152,6 +154,9 @@ namespace multirobot_slam
     std::map<std::string, Path> GlobalPlanning::plan_global_path(std::map<std::string, Pose> robot_poses, std::map<std::string, Frontier> tasks)
     {
         std::map<std::string, Path> global_paths;
+
+        if(!costmap_received_)
+            return global_paths;
         
         for(const auto& [robot, frontier] : tasks)
         {
@@ -164,9 +169,8 @@ namespace multirobot_slam
 
             Path path = aStar(sx, sy, gx, gy);
 
-            if (!path.poses.empty()) {
+            if (!path.poses.empty())
                 global_paths[robot] = path;
-            }
         }
         
         return global_paths;

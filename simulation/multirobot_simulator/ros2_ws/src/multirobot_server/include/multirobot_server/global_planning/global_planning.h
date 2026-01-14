@@ -68,7 +68,11 @@ namespace multirobot_slam
 
         GlobalPlanningParams params_;
 
+        std::vector<std::pair<int, int>> directions_;
+        std::vector<float> directions_cost_;
+
         Map costmap_;
+        bool costmap_received_;
     };
 }
 
