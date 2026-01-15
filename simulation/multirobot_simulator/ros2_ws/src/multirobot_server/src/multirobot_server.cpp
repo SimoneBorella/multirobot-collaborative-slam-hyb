@@ -56,10 +56,15 @@ public:
         robots_ = this->get_parameter("robots").as_string_array();
         initial_poses_ = this->get_parameter("initial_poses").as_double_array();
 
-        double timer_rate = 50.0;
+        double timer_rate = 10.0;
         timer_ = this->create_wall_timer(
             std::chrono::milliseconds(static_cast<int>(1000 / timer_rate)),
             std::bind(&MultirobotServer::timer_callback, this));
+
+        double local_planning_timer_rate = 20.0;
+        local_planning_timer_ = this->create_wall_timer(
+            std::chrono::milliseconds(static_cast<int>(1000 / local_planning_timer_rate)),
+            std::bind(&MultirobotServer::local_planning_timer_callback, this));
 
         tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
         tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
@@ -423,19 +428,6 @@ public:
 
     void timer_callback()
     {
-        std::map<std::string, Pose> robot_poses;
-
-        for (const auto& robot : robots_)
-        {
-            Pose pose;
-            if (get_robot_pose(robot, pose))
-            {
-                robot_poses[robot] = pose;
-            }
-        }
-
-        local_planning_.update_robot_poses(robot_poses);
-
         const std::optional<Map> &map = mapping_merge_.get_map_if_updated();
 
         if (map.has_value())
@@ -457,6 +449,17 @@ public:
 
         if (frontiers.has_value())
         {
+            std::map<std::string, Pose> robot_poses;
+
+            for (const auto& robot : robots_)
+            {
+                Pose pose;
+                if (get_robot_pose(robot, pose))
+                {
+                    robot_poses[robot] = pose;
+                }
+            }
+            
             publish_frontiers_marker(frontiers.value());
 
             std::map<std::string, Frontier> tasks = task_planning_.plan_tasks(robot_poses, frontiers.value());
@@ -467,7 +470,24 @@ public:
 
             local_planning_.update_global_paths(global_paths);
         }
+    }
 
+
+
+    void local_planning_timer_callback()
+    {
+        std::map<std::string, Pose> robot_poses;
+
+        for (const auto& robot : robots_)
+        {
+            Pose pose;
+            if (get_robot_pose(robot, pose))
+            {
+                robot_poses[robot] = pose;
+            }
+        }
+
+        local_planning_.update_robot_poses(robot_poses);
 
         std::map<std::string, VelCmd> vel_cmds = local_planning_.get_vel_cmds();
 
@@ -489,6 +509,7 @@ public:
     LocalPlanning local_planning_;
 
     rclcpp::TimerBase::SharedPtr timer_;
+    rclcpp::TimerBase::SharedPtr local_planning_timer_;
 
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;

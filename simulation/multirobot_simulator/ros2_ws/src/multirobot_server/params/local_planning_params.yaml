@@ -1,27 +1,10 @@
-local_planning_rate: 10.0
+local_planning_rate: 20.0
 
-# Small Indoor
-# stop_dist_threshold: 0.1
-# dt: 0.1
-# predict_time: 1.5
-# max_vel_x: 0.22
-# min_vel_x: -0.00
-# max_vel_theta: 1.0
-# lookahead_dist: 0.0
-# start_prior_noise: [0.001, 0.001, 0.001, 0.001]
-# goal_prior_noise: [0.02, 0.02, 0.02, 0.02]
-# dynamic_noise: 0.2
-# inter_robot_noise: 0.2
-# obstacle_noise: 0.2
-# robot_dist_threshold: 0.4
-# obstacle_dist_threshold: 0.3
-
-
-# Large Indoor
 stop_dist_threshold: 0.1
 dt: 0.1
 predict_time: 1.5
-max_vel_x: 0.22
+# max_vel_x: 0.22
+max_vel_x: 0.15
 min_vel_x: -0.00
 max_vel_theta: 1.0
 lookahead_dist: 0.0
@@ -31,4 +14,5 @@ dynamic_noise: 0.2
 inter_robot_noise: 0.2
 obstacle_noise: 0.2
 robot_dist_threshold: 0.4
-obstacle_dist_threshold: 0.25
+obstacle_dist_threshold: 0.3 # Small Indoor
+# obstacle_dist_threshold: 0.25 # Large Indoor

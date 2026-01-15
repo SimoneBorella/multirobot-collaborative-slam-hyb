@@ -359,7 +359,7 @@ namespace multirobot_slam
 
 
                 // Add obstacle factors
-                // graph.add(boost::make_shared<ObstacleFactor>(second_x, costmap_, obstacle_noise_, params_.obstacle_dist_threshold));
+                graph.add(boost::make_shared<ObstacleFactor>(second_x, costmap_, obstacle_noise_, params_.obstacle_dist_threshold));
             }
 
             // Add inter robot factors

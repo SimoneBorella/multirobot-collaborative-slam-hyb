@@ -68,38 +68,34 @@ namespace multirobot_slam
             double robot_dist_threshold_ = 0.4,
             double obstacle_dist_threshold_ = 0.25)
             : local_planning_rate(local_planning_rate_),
-            stop_dist_threshold(stop_dist_threshold_),
-            dt(dt_),
-            predict_time(predict_time_),
-            max_vel_x(max_vel_x_),
-            min_vel_x(min_vel_x_),
-            max_vel_theta(max_vel_theta_),
-            lookahead_dist(lookahead_dist_),
-            start_prior_noise(start_prior_noise_),
-            goal_prior_noise(goal_prior_noise_),
-            dynamic_noise(dynamic_noise_),
-            inter_robot_noise(inter_robot_noise_),
-            obstacle_noise(obstacle_noise_),
-            robot_dist_threshold(robot_dist_threshold_),
-            obstacle_dist_threshold(obstacle_dist_threshold_)
-        {}
+              stop_dist_threshold(stop_dist_threshold_),
+              dt(dt_),
+              predict_time(predict_time_),
+              max_vel_x(max_vel_x_),
+              min_vel_x(min_vel_x_),
+              max_vel_theta(max_vel_theta_),
+              lookahead_dist(lookahead_dist_),
+              start_prior_noise(start_prior_noise_),
+              goal_prior_noise(goal_prior_noise_),
+              dynamic_noise(dynamic_noise_),
+              inter_robot_noise(inter_robot_noise_),
+              obstacle_noise(obstacle_noise_),
+              robot_dist_threshold(robot_dist_threshold_),
+              obstacle_dist_threshold(obstacle_dist_threshold_){}
     };
 
-
-
-
-
-    class DynamicsFactor : public NoiseModelFactor2<Vector4, Vector4> {
-    double dt_;
+    class DynamicsFactor : public NoiseModelFactor2<Vector4, Vector4>
+    {
+        double dt_;
 
     public:
-        DynamicsFactor(Key key1, Key key2, const SharedNoiseModel& model, double dt)
+        DynamicsFactor(Key key1, Key key2, const SharedNoiseModel &model, double dt)
             : NoiseModelFactor2<Vector4, Vector4>(model, key1, key2), dt_(dt) {}
 
-        Vector evaluateError(const Vector4& state1,
-                            const Vector4& state2,
-                            boost::optional<Matrix&> H1 = boost::none,
-                            boost::optional<Matrix&> H2 = boost::none) const override
+        Vector evaluateError(const Vector4 &state1,
+                             const Vector4 &state2,
+                             boost::optional<Matrix &> H1 = boost::none,
+                             boost::optional<Matrix &> H2 = boost::none) const override
         {
 
             // Predicted next state from current state
@@ -113,23 +109,24 @@ namespace multirobot_slam
             Vector4 error = predicted - state2;
 
             // Jacobians
-            if (H1) {
+            if (H1)
+            {
                 *H1 = Matrix::Zero(4, 4);
-                (*H1)(0,0) = 1.0; (*H1)(0,2) = dt_;
-                (*H1)(1,1) = 1.0; (*H1)(1,3) = dt_;
-                (*H1)(2,2) = 1.0;
-                (*H1)(3,3) = 1.0;
+                (*H1)(0, 0) = 1.0;
+                (*H1)(0, 2) = dt_;
+                (*H1)(1, 1) = 1.0;
+                (*H1)(1, 3) = dt_;
+                (*H1)(2, 2) = 1.0;
+                (*H1)(3, 3) = 1.0;
             }
-            if (H2) {
+            if (H2)
+            {
                 *H2 = -Matrix::Identity(4, 4);
             }
 
             return error;
         }
     };
-
-
-
 
     class InterRobotFactor : public NoiseModelFactor2<Vector4, Vector4>
     {
@@ -138,19 +135,19 @@ namespace multirobot_slam
 
     public:
         InterRobotFactor(Key key1, Key key2,
-                        const SharedNoiseModel& model,
-                        double min_dist)
+                         const SharedNoiseModel &model,
+                         double min_dist)
             : NoiseModelFactor2<Vector4, Vector4>(model, key1, key2),
-            min_dist_(min_dist) {}
+              min_dist_(min_dist) {}
 
-        Vector evaluateError(const Vector4& state1,
-                                    const Vector4& state2,
-                                    boost::optional<Matrix&> H1 = boost::none,
-                                    boost::optional<Matrix&> H2 = boost::none) const override
+        Vector evaluateError(const Vector4 &state1,
+                             const Vector4 &state2,
+                             boost::optional<Matrix &> H1 = boost::none,
+                             boost::optional<Matrix &> H2 = boost::none) const override
         {
             // Relative position
             Vector2 diff(state1[0] - state2[0],
-                                state1[1] - state2[1]);
+                         state1[1] - state2[1]);
             double dist = diff.norm();
 
             // Error definition: shrinks to 0 at min_dist
@@ -165,14 +162,16 @@ namespace multirobot_slam
                     Vector2 grad_pos = (-1.0 / min_dist_) * dir;
 
                     if (H1)
-                        *H1 = (Matrix(1,4) << grad_pos(0), grad_pos(1), 0.0, 0.0).finished();
+                        *H1 = (Matrix(1, 4) << grad_pos(0), grad_pos(1), 0.0, 0.0).finished();
                     if (H2)
-                        *H2 = (Matrix(1,4) << -grad_pos(0), -grad_pos(1), 0.0, 0.0).finished();
+                        *H2 = (Matrix(1, 4) << -grad_pos(0), -grad_pos(1), 0.0, 0.0).finished();
                 }
                 else
                 {
-                    if (H1) *H1 = Matrix14::Zero();
-                    if (H2) *H2 = Matrix14::Zero();
+                    if (H1)
+                        *H1 = Matrix14::Zero();
+                    if (H2)
+                        *H2 = Matrix14::Zero();
                 }
             }
 
@@ -180,32 +179,30 @@ namespace multirobot_slam
         }
     };
 
-
-
     class ObstacleFactor : public NoiseModelFactor1<Vector4>
     {
     private:
         double resolution_;
         double origin_x_, origin_y_;
-        Map& costmap_;
+        Map &costmap_;
         double max_dist_;
 
     public:
         ObstacleFactor(Key key,
-                    Map& costmap,
-                    const SharedNoiseModel &model,
-                    double max_dist)
+                       Map &costmap,
+                       const SharedNoiseModel &model,
+                       double max_dist)
             : NoiseModelFactor1<Vector4>(model, key),
-            costmap_(costmap),
-            max_dist_(max_dist)
+              costmap_(costmap),
+              max_dist_(max_dist)
         {
             resolution_ = costmap_.resolution;
-            origin_x_   = costmap_.origin_position.x();
-            origin_y_   = costmap_.origin_position.y();
+            origin_x_ = costmap_.origin_position.x();
+            origin_y_ = costmap_.origin_position.y();
         }
 
         Vector evaluateError(const Vector4 &state,
-                                    boost::optional<Matrix &> H = boost::none) const override
+                             boost::optional<Matrix &> H = boost::none) const override
         {
             double x = state[0];
             double y = state[1];
@@ -219,7 +216,8 @@ namespace multirobot_slam
                 mx >= (int)costmap_.width ||
                 my >= (int)costmap_.height)
             {
-                if (H) *H = Matrix::Zero(1, 4);
+                if (H)
+                    *H = Matrix::Zero(1, 4);
                 return (Vector(1) << 10.0).finished();
             }
 
@@ -240,12 +238,13 @@ namespace multirobot_slam
                         ny >= (int)costmap_.height)
                         continue;
 
-                    double distance = std::sqrt(dx*dx + dy*dy) * resolution_;
+                    double distance = std::sqrt(dx * dx + dy * dy) * resolution_;
                     if (distance > max_dist_)
                         continue;
 
                     int cost = static_cast<int>(costmap_.data[ny * costmap_.width + nx]);
-                    if (cost < 0) continue;
+                    if (cost < 0)
+                        continue;
 
                     if (cost >= 50 && distance < min_dist)
                     {
@@ -264,7 +263,7 @@ namespace multirobot_slam
             // Jacobian
             if (H)
             {
-                Eigen::Vector2d grad(0,0);
+                Eigen::Vector2d grad(0, 0);
                 if (!std::isinf(min_dist) && closest_nx >= 0 && closest_ny >= 0)
                 {
                     double obs_x = origin_x_ + (closest_nx + 0.5) * resolution_;
@@ -272,22 +271,20 @@ namespace multirobot_slam
 
                     double dx = x - obs_x;
                     double dy = y - obs_y;
-                    double dist = std::sqrt(dx*dx + dy*dy);
+                    double dist = std::sqrt(dx * dx + dy * dy);
 
                     if (dist > 1e-6)
                     {
-                        Eigen::Vector2d dir(dx/dist, dy/dist);
+                        Eigen::Vector2d dir(dx / dist, dy / dist);
                         grad = (-1.0 / max_dist_) * dir;
                     }
                 }
-                *H = (Matrix(1,4) << grad.x(), grad.y(), 0, 0).finished();
+                *H = (Matrix(1, 4) << grad.x(), grad.y(), 0, 0).finished();
             }
 
             return (Vector(1) << penalty).finished();
         }
     };
-
-
 
     class VelocityLimitFactor : public NoiseModelFactor1<Vector4>
     {
@@ -297,38 +294,39 @@ namespace multirobot_slam
 
     public:
         VelocityLimitFactor(Key key,
-                            const SharedNoiseModel& model,
+                            const SharedNoiseModel &model,
                             double v_min, double v_max)
             : NoiseModelFactor1<Vector4>(model, key),
-            v_max_(v_max), v_min_(v_min) {}
+              v_max_(v_max), v_min_(v_min) {}
 
         Vector evaluateError(const Vector4 &state,
-                                    boost::optional<Matrix &> H = boost::none) const override
+                             boost::optional<Matrix &> H = boost::none) const override
         {
             double vx = state[2];
             double vy = state[3];
-            double speed = std::sqrt(vx*vx + vy*vy);
+            double speed = std::sqrt(vx * vx + vy * vy);
 
             double error_val = 0.0;
 
-            if(speed > v_max_) error_val = speed - v_max_;
-            else if(speed < v_min_) error_val = v_min_ - speed;
+            if (speed > v_max_)
+                error_val = speed - v_max_;
+            else if (speed < v_min_)
+                error_val = v_min_ - speed;
 
-            if(H) {
+            if (H)
+            {
                 Eigen::Vector4d grad = Eigen::Vector4d::Zero();
-                if(speed > 1e-6) {
+                if (speed > 1e-6)
+                {
                     grad[2] = (vx / speed) * (speed > v_max_ ? 1.0 : -1.0);
                     grad[3] = (vy / speed) * (speed > v_max_ ? 1.0 : -1.0);
                 }
-                *H = (Matrix(1,4) << grad.transpose()).finished();
+                *H = (Matrix(1, 4) << grad.transpose()).finished();
             }
 
             return (Vector(1) << error_val).finished();
         }
     };
-
-
-
 
     class AngularVelocityLimitFactor : public NoiseModelFactor2<Vector4, Vector4>
     {
@@ -338,15 +336,15 @@ namespace multirobot_slam
 
     public:
         AngularVelocityLimitFactor(Key key1, Key key2,
-                                const SharedNoiseModel& model,
-                                double dt, double max_ang)
+                                   const SharedNoiseModel &model,
+                                   double dt, double max_ang)
             : NoiseModelFactor2<Vector4, Vector4>(model, key1, key2),
-            dt_(dt), max_angular_(max_ang) {}
+              dt_(dt), max_angular_(max_ang) {}
 
         Vector evaluateError(const Vector4 &state1,
-                                    const Vector4 &state2,
-                                    boost::optional<Matrix &> H1 = boost::none,
-                                    boost::optional<Matrix &> H2 = boost::none) const override
+                             const Vector4 &state2,
+                             boost::optional<Matrix &> H1 = boost::none,
+                             boost::optional<Matrix &> H2 = boost::none) const override
         {
             double heading1 = std::atan2(state1[3], state1[2]);
             double heading2 = std::atan2(state2[3], state2[2]);
@@ -355,20 +353,21 @@ namespace multirobot_slam
             ang_vel = std::atan2(std::sin(ang_vel), std::cos(ang_vel)); // normalize
 
             double error_val = 0.0;
-            if(std::abs(ang_vel) > max_angular_)
+            if (std::abs(ang_vel) > max_angular_)
                 error_val = std::abs(ang_vel) - max_angular_;
 
-            if(H1 || H2) {
+            if (H1 || H2)
+            {
                 // Jacobians can be approximated numerically or analytically (slightly more complex)
-                if(H1) *H1 = Matrix::Zero(1,4);
-                if(H2) *H2 = Matrix::Zero(1,4);
+                if (H1)
+                    *H1 = Matrix::Zero(1, 4);
+                if (H2)
+                    *H2 = Matrix::Zero(1, 4);
             }
 
             return (Vector(1) << error_val).finished();
         }
     };
-
-
 
     class LocalPlanning
     {
@@ -378,7 +377,7 @@ namespace multirobot_slam
         ~LocalPlanning();
 
         static LocalPlanningParams params_from_yaml(std::string &params_path);
-        
+
         void init(LocalPlanningParams &params);
 
         void start();
@@ -405,7 +404,7 @@ namespace multirobot_slam
         noiseModel::Gaussian::shared_ptr dynamic_noise_;
         noiseModel::Gaussian::shared_ptr inter_robot_noise_;
         noiseModel::Gaussian::shared_ptr obstacle_noise_;
-        
+
         std::map<std::string, Pose> robot_poses_;
         std::map<std::string, Path> global_paths_;
         Map costmap_;
@@ -415,7 +414,7 @@ namespace multirobot_slam
         std::map<std::string, int> robot_ids_;
 
         std::map<std::string, VelCmd> last_vel_cmds_;
-        
+
         std::map<std::string, VelCmd> vel_cmds_;
 
         std::atomic<bool> local_planning_thread_running_;
