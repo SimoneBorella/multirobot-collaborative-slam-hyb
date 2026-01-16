@@ -201,7 +201,7 @@ void Lidar::publishLidarScan(std::vector<Point>& lidar_points)
 {
     sensor_msgs::msg::LaserScan scan;
 
-    scan.header.stamp = node->get_clock()->now();
+    scan.header.stamp = node->now();
     scan.header.frame_id = name + "_link";
     scan.angle_min = 0.0;
     scan.angle_max = 2 * M_PI;

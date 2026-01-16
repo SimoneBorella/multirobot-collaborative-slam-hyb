@@ -3,12 +3,12 @@
 namespace multirobot_slam
 {
     Localization::Localization()
-        : t(0), imu_timestamp_prev(0.0), odom_first_(true), gnss_first_(true), landmark_id_(0), localization_thread_running_(false)
+        : t_(0), odom_first_(true), landmark_id_(0), localization_thread_running_(false)
     {
     }
 
     Localization::Localization(LocalizationParams &params)
-        : params_(params), t(0), imu_timestamp_prev(0.0), odom_first_(true), gnss_first_(true), landmark_id_(0), localization_thread_running_(false)
+        : params_(params), t_(0), odom_first_(true), landmark_id_(0), localization_thread_running_(false)
     {
     }
 
@@ -39,45 +39,6 @@ namespace multirobot_slam
                     p.init_position = Eigen::Map<Eigen::Matrix<double, 6, 1>>(vec.data());
                 else
                     std::cerr << "Param init_position must have 6 elements, ignoring.\n";
-            }
-
-            if (config["init_velocity"])
-            {
-                std::vector<double> vec = config["init_velocity"].as<std::vector<double>>();
-                if (vec.size() == 3)
-                    p.init_velocity = Eigen::Map<Eigen::Vector3d>(vec.data());
-                else
-                    std::cerr << "Param init_velocity must have 3 elements, ignoring.\n";
-            }
-
-            if (config["init_accelerometer_bias"])
-            {
-                std::vector<double> vec = config["init_accelerometer_bias"].as<std::vector<double>>();
-                if (vec.size() == 3)
-                    p.init_accelerometer_bias = Eigen::Map<Eigen::Vector3d>(vec.data());
-                else
-                    std::cerr << "Param init_accelerometer_bias must have 3 elements, ignoring.\n";
-            }
-
-            if (config["init_gyroscope_bias"])
-            {
-                std::vector<double> vec = config["init_gyroscope_bias"].as<std::vector<double>>();
-                if (vec.size() == 3)
-                    p.init_gyroscope_bias = Eigen::Map<Eigen::Vector3d>(vec.data());
-                else
-                    std::cerr << "Param init_gyroscope_bias must have 3 elements, ignoring.\n";
-            }
-
-            if (config["sigma_accelerometer_noise_density"])
-            {
-                double val = config["sigma_accelerometer_noise_density"].as<double>();
-                p.sigma_accelerometer_noise_density = val;
-            }
-
-            if (config["sigma_gyroscope_noise_density"])
-            {
-                double val = config["sigma_gyroscope_noise_density"].as<double>();
-                p.sigma_gyroscope_noise_density = val;
             }
         }
         catch (const std::exception &e)
@@ -115,43 +76,12 @@ namespace multirobot_slam
         new_factors.add(PriorFactor<Pose3>(x0, init_pose, init_pose_prior_noise));
         new_init_estimates.insert(x0, init_pose);
 
-        // Velocity prior
-        Symbol v0('v', 0);
-        Vector3 init_velocity(params_.init_velocity); // v_x, v_y, v_z
-        noiseModel::Diagonal::shared_ptr init_vel_prior_noise = noiseModel::Diagonal::Sigmas(Vector3::Constant(1e-4));
-        new_factors.add(PriorFactor<Vector3>(v0, init_velocity, init_vel_prior_noise));
-        new_init_estimates.insert(v0, init_velocity);
-
-        // Imu bias prior
-        Symbol b0('b', 0);
-        imuBias::ConstantBias init_bias = imuBias::ConstantBias(params_.init_accelerometer_bias, params_.init_gyroscope_bias);
-        noiseModel::Diagonal::shared_ptr init_bias_prior_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(1), Vector3::Constant(1)).finished());
-        new_factors.add(PriorFactor<imuBias::ConstantBias>(b0, init_bias, init_bias_prior_noise));
-        new_init_estimates.insert(b0, init_bias);
-
         // Update new factors
         isam_.update(new_factors, new_init_estimates);
 
-        // Imu preintegration
-        auto imu_params = PreintegratedImuMeasurements::Params::MakeSharedU(9.81);
-
-        double var_acc = params_.sigma_accelerometer_noise_density *
-                         params_.sigma_accelerometer_noise_density * params_.localization_rate;
-
-        double var_gyr = params_.sigma_gyroscope_noise_density *
-                         params_.sigma_gyroscope_noise_density * params_.localization_rate;
-
-        imu_params->accelerometerCovariance = I_3x3 * var_acc; // 0.1   m/s² noise²
-        imu_params->gyroscopeCovariance = I_3x3 * var_gyr;     // 0.01  rad/s² noise²
-        imu_params->integrationCovariance = I_3x3 * 1e-6;      // integration uncertainty
-
-        imu_preintegrated_ = PreintegratedImuMeasurements(imu_params, init_bias);
-
         pose_estimate_ = init_pose;
-        velocity_estimate_ = init_velocity;
-        bias_estimate_ = init_bias;
 
-        t = 1;
+        t_ = 1;
     }
 
     void Localization::start()
@@ -177,11 +107,6 @@ namespace multirobot_slam
                 } });
     }
 
-    void Localization::add_imu_measurement(ImuData &imu_data)
-    {
-        std::lock_guard<std::mutex> lock(buffer_mutex_);
-        imu_buffer_.push_back(imu_data);
-    }
 
     void Localization::add_odom_measurement(OdomData &odom_data)
     {
@@ -189,21 +114,7 @@ namespace multirobot_slam
         odom_buffer_.push_back(odom_data);
     }
 
-    void Localization::add_gnss_measurement(GNSSData &gnss_data)
-    {
-        std::lock_guard<std::mutex> lock(buffer_mutex_);
 
-        if (gnss_first_)
-        {
-            wgs84_reference_[0] = gnss_data.latitude;
-            wgs84_reference_[1] = gnss_data.longitude;
-            altitude_reference_ = gnss_data.altitude;
-
-            gnss_first_ = false;
-        }
-
-        gnss_buffer_.push_back(gnss_data);
-    }
 
     void Localization::add_landmarks_measurement(LandmarksData &landmarks_data)
     {
@@ -243,8 +154,8 @@ namespace multirobot_slam
             if (dist.norm() > data_association_distance)
                 continue;
 
+            // Could throw exception if marginal is singular
             // Matrix3 cov;
-            // // Could throw exception if marginal is singular
             // try {
             //     cov = marginals.marginalCovariance(l);
             // } catch (...) {
@@ -298,118 +209,113 @@ namespace multirobot_slam
 
     void Localization::localization()
     {
-        auto start = std::chrono::high_resolution_clock::now();
+        // auto start = std::chrono::high_resolution_clock::now();
 
-
-        std::deque<ImuData> imu_buffer;
         std::deque<OdomData> odom_buffer;
-        std::deque<GNSSData> gnss_buffer;
         std::deque<LandmarksData> landmarks_buffer;
 
         {
             std::lock_guard<std::mutex> lock(buffer_mutex_);
-            imu_buffer = imu_buffer_;
             odom_buffer = odom_buffer_;
-            gnss_buffer = gnss_buffer_;
             landmarks_buffer = landmarks_buffer_;
 
-            if (imu_buffer.empty() || (imu_timestamp_prev == 0.0 && imu_buffer.size() < 2))
-                return;
-
-            imu_buffer_.clear();
             odom_buffer_.clear();
-            gnss_buffer_.clear();
             landmarks_buffer_.clear();
         }
 
-        Symbol x_prev('x', t - 1);
-        Symbol v_prev('v', t - 1);
-        Symbol b_prev('b', t - 1);
-        Symbol x_curr('x', t);
-        Symbol v_curr('v', t);
-        Symbol b_curr('b', t);
-
-        NonlinearFactorGraph new_factors;
-        Values new_estimates;
-
-        // Imu preintegration
-        double total_dt = 0.0;
-        for (const auto &imu_data : imu_buffer)
+        if(odom_buffer.empty())
         {
-            double dt;
-            double imu_timestamp_curr = imu_data.timestamp;
-
-            if (imu_timestamp_prev == 0.0)
-            {
-                imu_timestamp_prev = imu_timestamp_curr;
-                continue;
-            }
-
-            dt = imu_timestamp_curr - imu_timestamp_prev;
-            imu_timestamp_prev = imu_data.timestamp;
-
-            total_dt += dt;
-
-            imu_preintegrated_.integrateMeasurement(imu_data.linear_acceleration, imu_data.angular_velocity, dt);
+            return;
         }
 
-        // Imu factor
-        new_factors.add(ImuFactor(x_prev, v_prev, x_curr, v_curr, b_prev, imu_preintegrated_));
-
-        // Odom factor
-        if (!odom_buffer.empty())
+        int prev_t = t_-1;
+        
+        NonlinearFactorGraph new_factors;
+        Values new_estimates;
+            
+            
+        // Odom factors
+        Pose3 prev_pose = last_odom_pose_;
+        double prev_timestamp = state_.timestamp;
+        
+        Symbol x_prev('x', prev_t);
+        
+        for (const OdomData &odom : odom_buffer)
         {
-            const OdomData& odom = odom_buffer.back();
-
             Pose3 odom_pose(
                 Rot3::Quaternion(odom.orientation.w(), odom.orientation.x(), odom.orientation.y(), odom.orientation.z()),
                 Point3(odom.position.x(), odom.position.y(), odom.position.z())
             );
 
-            if(odom_first_)
+            if (odom_first_)
             {
                 last_odom_pose_ = odom_pose;
+                prev_pose = odom_pose;
                 odom_first_ = false;
+                prev_timestamp = odom.timestamp;
+                continue;
             }
-            else
-            {
-                Pose3 delta_odom = last_odom_pose_.between(odom_pose);
-    
-                auto odom_noise = noiseModel::Diagonal::Sigmas((Vector6() << 0.02, 0.02, 0.02, 0.01, 0.01, 0.01).finished());
-    
-                new_factors.add(BetweenFactor<Pose3>(x_prev, x_curr, delta_odom, odom_noise));
 
-                last_odom_pose_ = odom_pose;
-            }
+            Pose3 delta_odom = prev_pose.between(odom_pose);
+
+            auto odom_noise = noiseModel::Diagonal::Sigmas((Vector6() << 0.02,0.02,0.02,0.01,0.01,0.01).finished());
+
+            Symbol x_curr('x', t_++);
+            new_factors.add(BetweenFactor<Pose3>(x_prev, x_curr, delta_odom, odom_noise));
+
+            new_estimates.insert(x_curr, pose_estimate_ * delta_odom);
+
+            // Update previous
+            prev_pose = odom_pose;
+            x_prev = x_curr;
+            prev_timestamp = odom.timestamp;
         }
 
-        // Landmarks factors
-        noiseModel::Diagonal::shared_ptr landmark_noise = noiseModel::Diagonal::Sigmas(Vector3(0.02, 0.02, 0.02));
-
-        if (!landmarks_buffer.empty())
-        {
-            LandmarksData landmarks_data = landmarks_buffer.back();
+        last_odom_pose_ = prev_pose;
         
-            Values estimates = isam_.calculateEstimate();
-            // Marginals marginals = Marginals(isam_.getFactorsUnsafe(), estimates);
-            Marginals marginals;
 
-            Pose3 current_pose = estimates.at<Pose3>(x_prev);
 
-            for (const Eigen::Vector3d &point : landmarks_data.points)
+
+        // Landmarks factors
+        Values estimates = isam_.calculateEstimate();
+        // Marginals marginals = Marginals(isam_.getFactorsUnsafe(), estimates);
+        Marginals marginals;
+
+        auto landmark_noise = noiseModel::Diagonal::Sigmas(Vector3(0.1,0.1,0.1));
+
+        for (const LandmarksData &landmarks : landmarks_buffer)
+        {
+            int closest_index = 0;
+            double min_time_gap = std::numeric_limits<double>::infinity();
+
+            for (size_t i = 0; i < odom_buffer.size(); i++)
             {
+                double time_gap = std::abs(odom_buffer[i].timestamp - landmarks.timestamp);
+                if (time_gap < min_time_gap)
+                {
+                    min_time_gap = time_gap;
+                    closest_index = i;
+                }
+            }
+
+            int closest_t = t_ - odom_buffer.size() + closest_index;
+            Symbol x_ref('x', closest_t);
+            
+            
+            // Data association
+            for (const Eigen::Vector3d &point : landmarks.points)
+            {
+                Eigen::Vector3d point_map = landmarks.pose.orientation * point + landmarks.pose.position;
+
                 Point3 landmark_measurement(point.x(), point.y(), point.z());
-                Point3 landmark_observation = current_pose.transformFrom(landmark_measurement);
-
-                // Unit3 bearing = current_pose.bearing(landmark_observation);
-                // double range = current_pose.range(landmark_observation);
-
                 Unit3 bearing(landmark_measurement);
                 double range = landmark_measurement.norm();
-    
+
+                Point3 landmark_observation(point_map.x(), point_map.y(), point_map.z());
+
                 // Data association
                 auto associations = probabilistic_data_association(landmark_observation, estimates, marginals);
-                
+
                 if (!associations.empty())
                 {
                     for (const auto& [associated_l, probability] : associations)
@@ -423,7 +329,7 @@ namespace multirobot_slam
                             )
                         );
     
-                        new_factors.add(BearingRangeFactor<Pose3, Point3>(x_curr, associated_l, bearing, range, scaled_noise));
+                        new_factors.add(BearingRangeFactor<Pose3, Point3>(x_ref, associated_l, bearing, range, scaled_noise));
                     }
                 }
                 else
@@ -437,12 +343,12 @@ namespace multirobot_slam
                         landmark_noise
                     );
     
-                    new_factors.add(BearingRangeFactor<Pose3, Point3>(x_curr, l, bearing, range, huber_noise));
+                    new_factors.add(BearingRangeFactor<Pose3, Point3>(x_ref, l, bearing, range, huber_noise));
                 }
             }
         }
 
-        size_t landmarks_max_size = 150;
+        size_t landmarks_max_size = 200;
 
         if (landmark_symbols_.size() > landmarks_max_size)
         {
@@ -450,71 +356,21 @@ namespace multirobot_slam
         }
 
 
-
-        // Bias evolution factor
-        gtsam::Matrix6 bias_noise_covariance = gtsam::Matrix6::Zero();
-        bias_noise_covariance.block<3, 3>(0, 0) = (params_.sigma_accelerometer_noise_density * params_.sigma_accelerometer_noise_density * total_dt) * gtsam::Matrix3::Identity();
-        bias_noise_covariance.block<3, 3>(3, 3) = (params_.sigma_gyroscope_noise_density * params_.sigma_gyroscope_noise_density * total_dt) * gtsam::Matrix3::Identity();
-
-        auto bias_noise = noiseModel::Gaussian::Covariance(bias_noise_covariance);
-
-        new_factors.add(BetweenFactor<imuBias::ConstantBias>(b_prev, b_curr, imuBias::ConstantBias(), bias_noise));
-
-        // Predict current state as initial estimate
-        NavState predicted_state = imu_preintegrated_.predict(NavState(pose_estimate_, velocity_estimate_), bias_estimate_);
-
-        new_estimates.insert(x_curr, predicted_state.pose());
-        new_estimates.insert(v_curr, predicted_state.v());
-        new_estimates.insert(b_curr, bias_estimate_);
-
-
-
-        // GNSS factor
-        if (!gnss_buffer.empty())
-        {
-            GNSSData gnss_data = gnss_buffer.back();
-            std::array<double, 2> wgs84_position{gnss_data.latitude, gnss_data.longitude};
-
-            std::array<double, 2> xy = wgs84::to_cartesian(wgs84_reference_, wgs84_position);
-            double z = gnss_data.altitude - altitude_reference_;
-
-            Eigen::Vector3d gnss_position(xy[0], xy[1], z);
-
-            Eigen::Matrix3d gnss_covariance = gnss_data.covariance;
-            noiseModel::Gaussian::shared_ptr gnss_noise = noiseModel::Gaussian::Covariance(gnss_covariance);
-            // noiseModel::Diagonal::shared_ptr gnss_noise = noiseModel::Diagonal::Sigmas(Vector3::Constant(0.001));
-
-            new_factors.add(GPSFactor(x_curr, Point3(gnss_position), gnss_noise));
-        }
-
         // Update ISAM2
         isam_.update(new_factors, new_estimates);
 
         // Compute current estimate
+        Symbol x_curr('x', t_-1);
         pose_estimate_ = isam_.calculateEstimate<Pose3>(x_curr);
-        velocity_estimate_ = isam_.calculateEstimate<Vector3>(v_curr);
-        bias_estimate_ = isam_.calculateEstimate<imuBias::ConstantBias>(b_curr);
 
+        state_.timestamp = prev_timestamp;
         state_.position = pose_estimate_.translation();
         state_.attitude = Eigen::Quaterniond(pose_estimate_.rotation().matrix());
-        state_.velocity = velocity_estimate_;
-        state_.accelerometer_bias = bias_estimate_.accelerometer();
-        state_.gyroscope_bias = bias_estimate_.gyroscope();
 
-        // Reset IMU preintegration
-        imu_preintegrated_.resetIntegrationAndSetBias(bias_estimate_);      
+        // auto end = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double> duration = end - start;
 
-        // Update timestep
-        t++;
-
-        auto end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> duration = end - start;
-
-
-        // if (t%10 == 0)
+        // if (t_%10 == 0)
         //     std::cout << "Time: " << (duration.count() * 1000) << " ms (" << 1/duration.count() << " Hz)" << std::endl;
-
-        // if (t%10 == 0)
-        //     std::cout << "Landmarks: " << landmark_symbols_.size() << std::endl;
     }
 }

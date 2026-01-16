@@ -56,7 +56,7 @@ public:
         robots_ = this->get_parameter("robots").as_string_array();
         initial_poses_ = this->get_parameter("initial_poses").as_double_array();
 
-        double timer_rate = 10.0;
+        double timer_rate = 1.0;
         timer_ = this->create_wall_timer(
             std::chrono::milliseconds(static_cast<int>(1000 / timer_rate)),
             std::bind(&MultirobotServer::timer_callback, this));

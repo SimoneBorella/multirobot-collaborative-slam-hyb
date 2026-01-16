@@ -7,6 +7,16 @@
 
 namespace multirobot_slam
 {
+    struct Pose
+    {
+        Eigen::Vector3d position;
+        Eigen::Quaterniond orientation;
+
+        Pose()
+            : position(),
+              orientation() {}
+    };
+
     struct ImuData
     {
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -93,8 +103,9 @@ namespace multirobot_slam
         double timestamp;
         std::vector<
             Eigen::Vector3d,
-            Eigen::aligned_allocator<Eigen::Vector3d>
-        > points;
+            Eigen::aligned_allocator<Eigen::Vector3d>>
+            points;
+        Pose pose;
 
         LandmarksData()
             : timestamp(0.0),
@@ -103,16 +114,18 @@ namespace multirobot_slam
         LandmarksData(double timestamp,
                       const std::vector<
                           Eigen::Vector3d,
-                          Eigen::aligned_allocator<Eigen::Vector3d>
-                      > &points)
+                          Eigen::aligned_allocator<Eigen::Vector3d>> &points,
+                      Pose pose)
             : timestamp(timestamp),
-              points(points) {}
+              points(points),
+              pose(pose) {}
     };
 
     struct State
     {
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
+        double timestamp;
         Eigen::Vector3d position;
         Eigen::Vector3d velocity;
         Eigen::Quaterniond attitude;
@@ -120,21 +133,13 @@ namespace multirobot_slam
         Eigen::Vector3d gyroscope_bias;
 
         State()
-            : position(Eigen::Vector3d::Zero()),
+            : timestamp(0.0),
+              position(Eigen::Vector3d::Zero()),
               velocity(Eigen::Vector3d::Zero()),
               attitude(Eigen::Quaterniond::Identity()),
               accelerometer_bias(Eigen::Vector3d::Zero()),
               gyroscope_bias(Eigen::Vector3d::Zero()) {}
     };
-
-
-
-
-
-
-
-
-    
 
     struct Map
     {
@@ -197,7 +202,6 @@ namespace multirobot_slam
         std::vector<float> ranges;
         std::vector<float> intensities;
 
-
         PosedScan()
             : timestamp(0.0),
               position(Eigen::Vector3d::Zero()),
@@ -213,17 +217,17 @@ namespace multirobot_slam
               intensities() {}
 
         PosedScan(double timestamp,
-                      const Eigen::Vector3d &position,
-                      const Eigen::Quaterniond &orientation,
-                      float angle_min,
-                      float angle_max,
-                      float angle_increment,
-                      float time_increment,
-                      float scan_time,
-                      float range_min,
-                      float range_max,
-                      const std::vector<float> &ranges,
-                      const std::vector<float> &intensities)
+                  const Eigen::Vector3d &position,
+                  const Eigen::Quaterniond &orientation,
+                  float angle_min,
+                  float angle_max,
+                  float angle_increment,
+                  float time_increment,
+                  float scan_time,
+                  float range_min,
+                  float range_max,
+                  const std::vector<float> &ranges,
+                  const std::vector<float> &intensities)
             : timestamp(timestamp),
               position(position),
               orientation(orientation),
@@ -248,6 +252,26 @@ namespace multirobot_slam
         Frontier()
             : centroid(Eigen::Vector2d::Zero()),
               size(0.0) {}
+    };
+
+    struct Path
+    {
+        std::vector<Pose> poses;
+
+        Path()
+            : poses() {}
+    };
+
+    struct VelCmd
+    {
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+        Eigen::Vector3d linear;
+        Eigen::Vector3d angular;
+
+        VelCmd()
+            : linear(Eigen::Vector3d::Zero()),
+              angular(Eigen::Vector3d::Zero()) {}
     };
 }
 

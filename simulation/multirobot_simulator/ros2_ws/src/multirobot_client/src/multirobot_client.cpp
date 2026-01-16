@@ -10,11 +10,15 @@
 
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2/LinearMath/Quaternion.h>
-#include <tf2/LinearMath/Matrix3x3.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/static_transform_broadcaster.h>
+
+#include <tf2_ros/message_filter.h>
+#include <tf2_ros/create_timer_ros.h>
+#include <message_filters/subscriber.h>
+
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
 #include "nav_msgs/msg/odometry.hpp"
@@ -58,8 +62,23 @@ public:
             std::chrono::milliseconds(static_cast<int>(1000 / timer_rate)),
             std::bind(&MultirobotClient::timer_callback, this));
 
+
+            
+
         tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+
+        auto timer_interface =
+            std::make_shared<tf2_ros::CreateTimerROS>(
+                this->get_node_base_interface(),
+                this->get_node_timers_interface());
+
+        tf_buffer_->setCreateTimerInterface(timer_interface);
+
         tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+
+
+
+
 
         tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
 
@@ -74,14 +93,32 @@ public:
         );
 
         std::string landmarks_topic = "/" + ns_ + "/landmarks";
-        landmarks_subscription_ = this->create_subscription<interfaces::msg::PointArray>(
-            landmarks_topic, 10, std::bind(&MultirobotClient::landmarks_callback, this, std::placeholders::_1)
-        );
+        landmarks_subscription_.subscribe(this, landmarks_topic, rclcpp::SensorDataQoS().get_rmw_qos_profile());
+
+        landmarks_filter_ = std::make_shared<tf2_ros::MessageFilter<interfaces::msg::PointArray>>(
+            landmarks_subscription_,
+            *tf_buffer_,
+            map_frame_,
+            10,
+            this->get_node_logging_interface(),
+            this->get_node_clock_interface());
+        
+        landmarks_filter_->registerCallback(std::bind(&MultirobotClient::landmarks_callback, this, std::placeholders::_1));
 
         std::string scan_topic = "/" + ns_ + "/scan";
-        scan_subscription_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
-            scan_topic, 10, std::bind(&MultirobotClient::scan_callback, this, std::placeholders::_1)
-        );
+        scan_subscription_.subscribe(this, scan_topic, rclcpp::SensorDataQoS().get_rmw_qos_profile());
+
+        scan_filter_ = std::make_shared<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>>(
+            scan_subscription_,
+            *tf_buffer_,
+            map_frame_,
+            10,
+            this->get_node_logging_interface(),
+            this->get_node_clock_interface());
+        
+        scan_filter_->registerCallback(std::bind(&MultirobotClient::scan_callback, this, std::placeholders::_1));
+
+
 
 
         rclcpp::QoS map_qos_profile(10);
@@ -129,27 +166,31 @@ public:
 private:
 
     void publish_map_to_odom(const State& state)
-    {
-        geometry_msgs::msg::TransformStamped odom_to_base;
-
-        try
+    { 
+        const rclcpp::Time state_time(
+            static_cast<int64_t>(state.timestamp * 1e9)
+        );
+        
+        if (!tf_buffer_->canTransform(
+            odom_frame_,
+            base_frame_,
+            state_time,
+            rclcpp::Duration::from_seconds(0.1)))
         {
-            odom_to_base = tf_buffer_->lookupTransform(
-                odom_frame_,
-                base_frame_,
-                tf2::TimePointZero);
-        }
-        catch (const tf2::TransformException &ex)
-        {
-            // std::cout << "[Client " << ns_ << "] Could not read transform " << odom_frame_ << " -> " << base_frame_ << ": " << ex.what() << std::endl;
+            std::cout << "[Client " << ns_ << "] Could not read transform " << odom_frame_ << " -> " << base_frame_ << " at timestep " << state.timestamp << std::endl;
             return;
         }
 
-        // Convert odom->base_link to tf2
+        geometry_msgs::msg::TransformStamped odom_to_base =
+            tf_buffer_->lookupTransform(
+                odom_frame_,
+                base_frame_,
+                state_time);
+
+
         tf2::Transform T_odom_base;
         tf2::fromMsg(odom_to_base.transform, T_odom_base);
 
-        // Build map->base_link from localization state
         tf2::Transform T_map_base;
         tf2::Quaternion q_map_base(
             state.attitude.x(),
@@ -167,12 +208,11 @@ private:
         tf2::Transform T_map_odom = T_map_base * T_odom_base.inverse();
 
         geometry_msgs::msg::TransformStamped map_to_odom;
-        map_to_odom.header.stamp = this->now();
+        map_to_odom.header.stamp = state_time;
         map_to_odom.header.frame_id = map_frame_;
         map_to_odom.child_frame_id = odom_frame_;
         map_to_odom.transform = tf2::toMsg(T_map_odom);
 
-        // std::cout << "[Client " << ns_ << "] map->odom: [x: " << T_map_odom.getOrigin().x() << ", y: " << T_map_odom.getOrigin().y() << ", z: " << T_map_odom.getOrigin().z() << "]" << std::endl;
         tf_broadcaster_->sendTransform(map_to_odom);
     }
 
@@ -298,59 +338,59 @@ private:
     void imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg)
     {
 
-        Eigen::Matrix3d R_flip;
-        R_flip << 1, 0, 0,
-            0, -1, 0,
-            0, 0, -1;
-        Eigen::Quaterniond q_flip(R_flip);
+        // Eigen::Matrix3d R_flip;
+        // R_flip << 1, 0, 0,
+        //     0, -1, 0,
+        //     0, 0, -1;
+        // Eigen::Quaterniond q_flip(R_flip);
 
-        if (imu_first_)
-        {
-            Eigen::Quaterniond q_init(
-                msg->orientation.w,
-                msg->orientation.x,
-                msg->orientation.y,
-                msg->orientation.z);
+        // if (imu_first_)
+        // {
+        //     Eigen::Quaterniond q_init(
+        //         msg->orientation.w,
+        //         msg->orientation.x,
+        //         msg->orientation.y,
+        //         msg->orientation.z);
 
-            imu_initial_orientation_ = q_flip * q_init;
-            imu_initial_orientation_.normalize();
+        //     imu_initial_orientation_ = q_flip * q_init;
+        //     imu_initial_orientation_.normalize();
 
-            imu_first_ = false;
-            return;
-        }
+        //     imu_first_ = false;
+        //     return;
+        // }
 
-        ImuData imu_data;
+        // ImuData imu_data;
 
-        imu_data.timestamp =
-            msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
+        // imu_data.timestamp =
+        //     msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
 
-        // Orientation
-        Eigen::Quaterniond q_current(
-            msg->orientation.w,
-            msg->orientation.x,
-            msg->orientation.y,
-            msg->orientation.z);
+        // // Orientation
+        // Eigen::Quaterniond q_current(
+        //     msg->orientation.w,
+        //     msg->orientation.x,
+        //     msg->orientation.y,
+        //     msg->orientation.z);
 
-        Eigen::Quaterniond q_map = q_flip * q_current;
-        Eigen::Quaterniond q_relative = imu_initial_orientation_.inverse() * q_map;
-        q_relative.normalize();
-        imu_data.orientation = q_relative;
+        // Eigen::Quaterniond q_map = q_flip * q_current;
+        // Eigen::Quaterniond q_relative = imu_initial_orientation_.inverse() * q_map;
+        // q_relative.normalize();
+        // imu_data.orientation = q_relative;
 
-        // Angular velocity
-        imu_data.angular_velocity = Eigen::Vector3d(
-            msg->angular_velocity.x,
-            -msg->angular_velocity.y,
-            -msg->angular_velocity.z);
+        // // Angular velocity
+        // imu_data.angular_velocity = Eigen::Vector3d(
+        //     msg->angular_velocity.x,
+        //     -msg->angular_velocity.y,
+        //     -msg->angular_velocity.z);
 
-        // Linear acceleration
-        imu_data.linear_acceleration = Eigen::Vector3d(
-            msg->linear_acceleration.x,
-            -msg->linear_acceleration.y,
-            -msg->linear_acceleration.z);
+        // // Linear acceleration
+        // imu_data.linear_acceleration = Eigen::Vector3d(
+        //     msg->linear_acceleration.x,
+        //     -msg->linear_acceleration.y,
+        //     -msg->linear_acceleration.z);
 
-        // std::cout << "[Client " << ns_ << "] IMU Linear acceleration: (x: " << msg->linear_acceleration.x << ", y: " << msg->linear_acceleration.y << ", z: " << msg->linear_acceleration.z << ")" << std::endl;
-        // std::cout << "[Client " << ns_ << "] IMU Angular velocity: (x: " << msg->angular_velocity.x << ", y: " << msg->angular_velocity.y << ", z: " << msg->angular_velocity.z << ")" << std::endl;
-        localization_.add_imu_measurement(imu_data);
+        // // std::cout << "[Client " << ns_ << "] IMU Linear acceleration: (x: " << msg->linear_acceleration.x << ", y: " << msg->linear_acceleration.y << ", z: " << msg->linear_acceleration.z << ")" << std::endl;
+        // // std::cout << "[Client " << ns_ << "] IMU Angular velocity: (x: " << msg->angular_velocity.x << ", y: " << msg->angular_velocity.y << ", z: " << msg->angular_velocity.z << ")" << std::endl;
+        // localization_.add_imu_measurement(imu_data);
     }
 
     void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
@@ -370,53 +410,80 @@ private:
         localization_.add_odom_measurement(odom_data);
     }
 
-    void landmarks_callback(const interfaces::msg::PointArray::SharedPtr msg)
+    void landmarks_callback(const interfaces::msg::PointArray::ConstSharedPtr msg)
     {
-        // std::cout << "[Client " << ns_ << "] Received " << msg->points.size() << " landmarks." << std::endl;
-
         LandmarksData landmarks_data;
         
         landmarks_data.timestamp = msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
 
+        const rclcpp::Time landmarks_time = msg->header.stamp;
+
+        geometry_msgs::msg::TransformStamped base_to_landmarks =
+            tf_buffer_->lookupTransform(
+                base_frame_,
+                msg->header.frame_id,
+                landmarks_time
+            );
+
+        tf2::Transform T_base_to_landmarks;
+        tf2::fromMsg(base_to_landmarks.transform, T_base_to_landmarks);
+
         for (const auto &p : msg->points)
         {
-            landmarks_data.points.emplace_back(p.x, p.y, p.z);
+            tf2::Vector3 p_landmark(p.x, p.y, p.z);
+            tf2::Vector3 p_base = T_base_to_landmarks * p_landmark;
+
+            landmarks_data.points.emplace_back(p_base.x(), p_base.y(), p_base.z());
         }
 
-        localization_.add_landmarks_measurement(landmarks_data);
 
-    }
 
-    void scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr msg)
-    {
-        PosedScan posed_scan;
-
-        posed_scan.timestamp = msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
-
-        geometry_msgs::msg::TransformStamped map_to_base;
-        try
-        {
-            map_to_base = tf_buffer_->lookupTransform(
+        geometry_msgs::msg::TransformStamped map_to_base =
+            tf_buffer_->lookupTransform(
                 map_frame_,
                 base_frame_,
-                tf2::TimePointZero);
-        }
-        catch (const tf2::TransformException &ex)
-        {
-            // std::cout << "[Client " << ns_ << "] Could not read transform " << odom_frame_ << " -> " << base_frame_ << ": " << ex.what() << std::endl;
-            return;
-        }
-
-        posed_scan.position = Eigen::Vector3d(
+                landmarks_time
+            );
+        
+        landmarks_data.pose.position = Eigen::Vector3d(
             map_to_base.transform.translation.x,
             map_to_base.transform.translation.y,
             map_to_base.transform.translation.z);
 
-        posed_scan.orientation = Eigen::Quaterniond(
+        landmarks_data.pose.orientation = Eigen::Quaterniond(
             map_to_base.transform.rotation.w,
             map_to_base.transform.rotation.x,
             map_to_base.transform.rotation.y,
             map_to_base.transform.rotation.z);
+
+        localization_.add_landmarks_measurement(landmarks_data);
+    }
+
+    
+    void scan_callback(const sensor_msgs::msg::LaserScan::ConstSharedPtr msg)
+    {
+        PosedScan posed_scan;
+        posed_scan.timestamp = msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
+
+        const rclcpp::Time scan_time = msg->header.stamp;
+
+        geometry_msgs::msg::TransformStamped map_to_scan =
+            tf_buffer_->lookupTransform(
+                map_frame_,
+                msg->header.frame_id,
+                scan_time
+            );
+
+        posed_scan.position = Eigen::Vector3d(
+            map_to_scan.transform.translation.x,
+            map_to_scan.transform.translation.y,
+            map_to_scan.transform.translation.z);
+
+        posed_scan.orientation = Eigen::Quaterniond(
+            map_to_scan.transform.rotation.w,
+            map_to_scan.transform.rotation.x,
+            map_to_scan.transform.rotation.y,
+            map_to_scan.transform.rotation.z);
 
         posed_scan.angle_min = msg->angle_min;
         posed_scan.angle_max = msg->angle_max;
@@ -487,8 +554,10 @@ private:
     
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_subscription_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscription_;
-    rclcpp::Subscription<interfaces::msg::PointArray>::SharedPtr landmarks_subscription_;
-    rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_subscription_;
+    message_filters::Subscriber<interfaces::msg::PointArray> landmarks_subscription_;
+    std::shared_ptr<tf2_ros::MessageFilter<interfaces::msg::PointArray>> landmarks_filter_;
+    message_filters::Subscriber<sensor_msgs::msg::LaserScan> scan_subscription_;
+    std::shared_ptr<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>> scan_filter_;
 
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr map_publisher_;
     rclcpp::Publisher<interfaces::msg::MapLogOddsUpdate>::SharedPtr map_log_odds_update_publisher_;
