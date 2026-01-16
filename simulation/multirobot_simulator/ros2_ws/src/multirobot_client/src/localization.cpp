@@ -239,6 +239,8 @@ namespace multirobot_slam
         double prev_timestamp = state_.timestamp;
         
         Symbol x_prev('x', prev_t);
+
+        auto odom_noise = noiseModel::Diagonal::Sigmas((Vector6() << 0.05,0.05,0.05,0.01,0.01,0.01).finished());
         
         for (const OdomData &odom : odom_buffer)
         {
@@ -258,8 +260,6 @@ namespace multirobot_slam
 
             Pose3 delta_odom = prev_pose.between(odom_pose);
 
-            auto odom_noise = noiseModel::Diagonal::Sigmas((Vector6() << 0.02,0.02,0.02,0.01,0.01,0.01).finished());
-
             Symbol x_curr('x', t_++);
             new_factors.add(BetweenFactor<Pose3>(x_prev, x_curr, delta_odom, odom_noise));
 
@@ -277,83 +277,83 @@ namespace multirobot_slam
 
 
         // Landmarks factors
-        Values estimates = isam_.calculateEstimate();
-        // Marginals marginals = Marginals(isam_.getFactorsUnsafe(), estimates);
-        Marginals marginals;
+        // Values estimates = isam_.calculateEstimate();
+        // // Marginals marginals = Marginals(isam_.getFactorsUnsafe(), estimates);
+        // Marginals marginals;
 
-        auto landmark_noise = noiseModel::Diagonal::Sigmas(Vector3(0.1,0.1,0.1));
+        // auto landmark_noise = noiseModel::Diagonal::Sigmas(Vector3(0.1,0.1,0.1));
 
-        for (const LandmarksData &landmarks : landmarks_buffer)
-        {
-            int closest_index = 0;
-            double min_time_gap = std::numeric_limits<double>::infinity();
+        // for (const LandmarksData &landmarks : landmarks_buffer)
+        // {
+        //     int closest_index = 0;
+        //     double min_time_gap = std::numeric_limits<double>::infinity();
 
-            for (size_t i = 0; i < odom_buffer.size(); i++)
-            {
-                double time_gap = std::abs(odom_buffer[i].timestamp - landmarks.timestamp);
-                if (time_gap < min_time_gap)
-                {
-                    min_time_gap = time_gap;
-                    closest_index = i;
-                }
-            }
+        //     for (size_t i = 0; i < odom_buffer.size(); i++)
+        //     {
+        //         double time_gap = std::abs(odom_buffer[i].timestamp - landmarks.timestamp);
+        //         if (time_gap < min_time_gap)
+        //         {
+        //             min_time_gap = time_gap;
+        //             closest_index = i;
+        //         }
+        //     }
 
-            int closest_t = t_ - odom_buffer.size() + closest_index;
-            Symbol x_ref('x', closest_t);
+        //     int closest_t = t_ - odom_buffer.size() + closest_index;
+        //     Symbol x_ref('x', closest_t);
             
             
-            // Data association
-            for (const Eigen::Vector3d &point : landmarks.points)
-            {
-                Eigen::Vector3d point_map = landmarks.pose.orientation * point + landmarks.pose.position;
+        //     // Data association
+        //     for (const Eigen::Vector3d &point : landmarks.points)
+        //     {
+        //         Eigen::Vector3d point_map = landmarks.pose.orientation * point + landmarks.pose.position;
 
-                Point3 landmark_measurement(point.x(), point.y(), point.z());
-                Unit3 bearing(landmark_measurement);
-                double range = landmark_measurement.norm();
+        //         Point3 landmark_measurement(point.x(), point.y(), point.z());
+        //         Unit3 bearing(landmark_measurement);
+        //         double range = landmark_measurement.norm();
 
-                Point3 landmark_observation(point_map.x(), point_map.y(), point_map.z());
+        //         Point3 landmark_observation(point_map.x(), point_map.y(), point_map.z());
 
-                // Data association
-                auto associations = probabilistic_data_association(landmark_observation, estimates, marginals);
+        //         // Data association
+        //         auto associations = probabilistic_data_association(landmark_observation, estimates, marginals);
 
-                if (!associations.empty())
-                {
-                    for (const auto& [associated_l, probability] : associations)
-                    {
-                        // To scale information
-                        // I * p  =>  S / p => sigmas / sqrt(p)
-                        auto scaled_noise = noiseModel::Robust::Create(
-                            noiseModel::mEstimator::Huber::Create(1.345),
-                            noiseModel::Diagonal::Sigmas(
-                                landmark_noise->sigmas() / std::sqrt(probability)
-                            )
-                        );
+        //         if (!associations.empty())
+        //         {
+        //             for (const auto& [associated_l, probability] : associations)
+        //             {
+        //                 // To scale information
+        //                 // I * p  =>  S / p => sigmas / sqrt(p)
+        //                 auto scaled_noise = noiseModel::Robust::Create(
+        //                     noiseModel::mEstimator::Huber::Create(1.345),
+        //                     noiseModel::Diagonal::Sigmas(
+        //                         landmark_noise->sigmas() / std::sqrt(probability)
+        //                     )
+        //                 );
     
-                        new_factors.add(BearingRangeFactor<Pose3, Point3>(x_ref, associated_l, bearing, range, scaled_noise));
-                    }
-                }
-                else
-                {
-                    Symbol l('l', landmark_id_++);
-                    new_estimates.insert(l, landmark_observation);
-                    landmark_symbols_.push_back(l);
+        //                 new_factors.add(BearingRangeFactor<Pose3, Point3>(x_ref, associated_l, bearing, range, scaled_noise));
+        //             }
+        //         }
+        //         else
+        //         {
+        //             Symbol l('l', landmark_id_++);
+        //             new_estimates.insert(l, landmark_observation);
+        //             landmark_symbols_.push_back(l);
     
-                    auto huber_noise = noiseModel::Robust::Create(
-                        noiseModel::mEstimator::Huber::Create(1.345),
-                        landmark_noise
-                    );
+        //             auto huber_noise = noiseModel::Robust::Create(
+        //                 noiseModel::mEstimator::Huber::Create(1.345),
+        //                 landmark_noise
+        //             );
     
-                    new_factors.add(BearingRangeFactor<Pose3, Point3>(x_ref, l, bearing, range, huber_noise));
-                }
-            }
-        }
+        //             new_factors.add(BearingRangeFactor<Pose3, Point3>(x_ref, l, bearing, range, huber_noise));
+        //         }
+        //     }
+        // }
 
-        size_t landmarks_max_size = 200;
+        // size_t landmarks_max_size = 200;
 
-        if (landmark_symbols_.size() > landmarks_max_size)
-        {
-            landmark_symbols_.erase(landmark_symbols_.begin(), landmark_symbols_.begin() + (landmark_symbols_.size() - landmarks_max_size));
-        }
+        // if (landmark_symbols_.size() > landmarks_max_size)
+        // {
+        //     landmark_symbols_.erase(landmark_symbols_.begin(), landmark_symbols_.begin() + (landmark_symbols_.size() - landmarks_max_size));
+        // }
 
 
         // Update ISAM2
