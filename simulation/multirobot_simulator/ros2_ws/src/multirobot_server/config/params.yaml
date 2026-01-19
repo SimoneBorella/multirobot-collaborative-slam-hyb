@@ -5,117 +5,15 @@ multirobot_server:
     odom_frame: odom
     base_frame: base_link
 
-    robots: ["robot_0"]
-    # robots: ["robot_0", "robot_1"]
+    # robots: ["robot_0"]
+    robots: ["robot_0", "robot_1"]
     # robots: ["robot_0", "robot_1", "robot_2", "robot_3"]
 
     initial_poses: [
       1.0,  0.0, 0.0,
-      # 0.0, 1.0, 1.57,
+      0.0, 1.0, 1.57,
       # -1.0, 0.0, 3.142,
       # 0.0, -1.0, 4.71
     ]
 
-    
-
-
-
-
-
-
-
-
-
-    # Mapping merge parameters
-
-    # ## Costmap parameters
-    # # kernel_distance: 0.25 # Small Indoor
-    # kernel_distance: 0.2 # Large Indoor
-    # cost_decay_rate: 4.0
-
-
-
-
-    # # Decision making and global planning parameters
-    # decision_global_planning_rate: 1.0
-
-    # ## Decision making
-    # alpha_distance: 1.0
-    # beta_dimension: 0.01
-    # conflict_penalty: 0.001
-
-    # ## Global planning
-    # global_planner_type: "a_star"
-    # # heuristic_type: "manhattan" 
-    # heuristic_type: "euclidean"
-
-
-    # # Local planning parameters
-    # local_planning_rate: 10.0
-
-    # # DWA
-
-    # # local_planner_type: "dwa"
-    # # keep_internal_state: True
-    # # stop_dist_threshold: 0.1
-    # # dt: 0.1
-    # # predict_time: 1.0
-    # # max_vel_x: 0.22
-    # # min_vel_x: -0.1
-    # # max_vel_theta: 1.2
-    # # max_acc_theta: 3.5
-    # # max_acc_x: 0.8
-    # # lookahead_dist: 0.5
-    # # robot_dist_threshold: 0.5
-    # # obstacle_dist_threshold: 0.4
-    # # w_progress_score: 0.5
-    # # w_heading_score: 0.5
-    # # w_robot_collision_score: 3.0
-    # # w_costmap_score: 3.0
-
-
-    # # FGP
-
-    # # Small Indoor
-    # # local_planner_type: "fgp"
-    # # keep_internal_state: True
-    # # stop_dist_threshold: 0.1
-    # # dt: 0.1
-    # # predict_time: 1.5
-    # # max_vel_x: 0.22
-    # # min_vel_x: -0.00
-    # # max_vel_theta: 1.0
-    # # lookahead_dist: 0.0
-    # # start_prior_noise: [0.001, 0.001, 0.001, 0.001]
-    # # goal_prior_noise: [0.02, 0.02, 0.02, 0.02]
-    # # dynamic_noise: 0.2
-    # # inter_robot_noise: 0.2
-    # # obstacle_noise: 0.2
-    # # robot_dist_threshold: 0.4
-    # # obstacle_dist_threshold: 0.3
-
-
-    # # Large Indoor
-    # local_planner_type: "fgp"
-    # keep_internal_state: True
-    # stop_dist_threshold: 0.1
-    # dt: 0.1
-    # predict_time: 1.5
-    # max_vel_x: 0.22
-    # min_vel_x: -0.00
-    # max_vel_theta: 1.0
-    # lookahead_dist: 0.0
-    # start_prior_noise: [0.001, 0.001, 0.001, 0.001]
-    # goal_prior_noise: [0.02, 0.02, 0.02, 0.02]
-    # dynamic_noise: 0.2
-    # inter_robot_noise: 0.2
-    # obstacle_noise: 0.2
-    # robot_dist_threshold: 0.4
-    # obstacle_dist_threshold: 0.25
-
-
-
-
-
-
-    use_sim_time: False
+    use_sim_time: false

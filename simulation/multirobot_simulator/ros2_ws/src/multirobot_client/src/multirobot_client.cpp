@@ -166,7 +166,7 @@ public:
 private:
 
     void publish_map_to_odom(const State& state)
-    { 
+    {
         const rclcpp::Time state_time(
             static_cast<int64_t>(state.timestamp * 1e9)
         );
@@ -501,12 +501,7 @@ private:
     void timer_callback()
     {
         const State &state = localization_.get_state();
-        publish_map_to_odom(state);
-
-        // const std::optional<State> &state = localization_.get_state_if_updated();
-        // if(state.has_value())
-        //     publish_map_to_odom(state.value());
-        
+        publish_map_to_odom(state);        
 
         const std::optional<MapLogOddsUpdate> &map_log_odds_update = mapping_.get_map_log_odds_update();
 
