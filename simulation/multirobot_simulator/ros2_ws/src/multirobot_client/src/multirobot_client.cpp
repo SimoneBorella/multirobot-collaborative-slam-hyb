@@ -177,7 +177,7 @@ private:
             state_time,
             rclcpp::Duration::from_seconds(0.1)))
         {
-            std::cout << "[Client " << ns_ << "] Could not read transform " << odom_frame_ << " -> " << base_frame_ << " at timestep " << state.timestamp << std::endl;
+            // std::cout << "[Client " << ns_ << "] Could not read transform " << odom_frame_ << " -> " << base_frame_ << " at timestep " << state.timestamp << std::endl;
             return;
         }
 
@@ -337,60 +337,59 @@ private:
 
     void imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg)
     {
+        Eigen::Matrix3d R_flip;
+        R_flip << 1, 0, 0,
+            0, -1, 0,
+            0, 0, -1;
+        Eigen::Quaterniond q_flip(R_flip);
 
-        // Eigen::Matrix3d R_flip;
-        // R_flip << 1, 0, 0,
-        //     0, -1, 0,
-        //     0, 0, -1;
-        // Eigen::Quaterniond q_flip(R_flip);
+        if (imu_first_)
+        {
+            Eigen::Quaterniond q_init(
+                msg->orientation.w,
+                msg->orientation.x,
+                msg->orientation.y,
+                msg->orientation.z);
 
-        // if (imu_first_)
-        // {
-        //     Eigen::Quaterniond q_init(
-        //         msg->orientation.w,
-        //         msg->orientation.x,
-        //         msg->orientation.y,
-        //         msg->orientation.z);
+            imu_initial_orientation_ = q_flip * q_init;
+            imu_initial_orientation_.normalize();
 
-        //     imu_initial_orientation_ = q_flip * q_init;
-        //     imu_initial_orientation_.normalize();
+            imu_first_ = false;
+            return;
+        }
 
-        //     imu_first_ = false;
-        //     return;
-        // }
+        ImuData imu_data;
 
-        // ImuData imu_data;
+        imu_data.timestamp =
+            msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
 
-        // imu_data.timestamp =
-        //     msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
+        // Orientation
+        Eigen::Quaterniond q_current(
+            msg->orientation.w,
+            msg->orientation.x,
+            msg->orientation.y,
+            msg->orientation.z);
 
-        // // Orientation
-        // Eigen::Quaterniond q_current(
-        //     msg->orientation.w,
-        //     msg->orientation.x,
-        //     msg->orientation.y,
-        //     msg->orientation.z);
+        Eigen::Quaterniond q_map = q_flip * q_current;
+        Eigen::Quaterniond q_relative = imu_initial_orientation_.inverse() * q_map;
+        q_relative.normalize();
+        imu_data.orientation = q_relative;
 
-        // Eigen::Quaterniond q_map = q_flip * q_current;
-        // Eigen::Quaterniond q_relative = imu_initial_orientation_.inverse() * q_map;
-        // q_relative.normalize();
-        // imu_data.orientation = q_relative;
+        // Angular velocity
+        imu_data.angular_velocity = Eigen::Vector3d(
+            msg->angular_velocity.x,
+            -msg->angular_velocity.y,
+            -msg->angular_velocity.z);
 
-        // // Angular velocity
-        // imu_data.angular_velocity = Eigen::Vector3d(
-        //     msg->angular_velocity.x,
-        //     -msg->angular_velocity.y,
-        //     -msg->angular_velocity.z);
+        // Linear acceleration
+        imu_data.linear_acceleration = Eigen::Vector3d(
+            msg->linear_acceleration.x,
+            -msg->linear_acceleration.y,
+            -msg->linear_acceleration.z);
 
-        // // Linear acceleration
-        // imu_data.linear_acceleration = Eigen::Vector3d(
-        //     msg->linear_acceleration.x,
-        //     -msg->linear_acceleration.y,
-        //     -msg->linear_acceleration.z);
-
-        // // std::cout << "[Client " << ns_ << "] IMU Linear acceleration: (x: " << msg->linear_acceleration.x << ", y: " << msg->linear_acceleration.y << ", z: " << msg->linear_acceleration.z << ")" << std::endl;
-        // // std::cout << "[Client " << ns_ << "] IMU Angular velocity: (x: " << msg->angular_velocity.x << ", y: " << msg->angular_velocity.y << ", z: " << msg->angular_velocity.z << ")" << std::endl;
-        // localization_.add_imu_measurement(imu_data);
+        // std::cout << "[Client " << ns_ << "] IMU Linear acceleration: (x: " << msg->linear_acceleration.x << ", y: " << msg->linear_acceleration.y << ", z: " << msg->linear_acceleration.z << ")" << std::endl;
+        // std::cout << "[Client " << ns_ << "] IMU Angular velocity: (x: " << msg->angular_velocity.x << ", y: " << msg->angular_velocity.y << ", z: " << msg->angular_velocity.z << ")" << std::endl;
+        localization_.add_imu_measurement(imu_data);
     }
 
     void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
@@ -502,8 +501,12 @@ private:
     void timer_callback()
     {
         const State &state = localization_.get_state();
-        
         publish_map_to_odom(state);
+
+        // const std::optional<State> &state = localization_.get_state_if_updated();
+        // if(state.has_value())
+        //     publish_map_to_odom(state.value());
+        
 
         const std::optional<MapLogOddsUpdate> &map_log_odds_update = mapping_.get_map_log_odds_update();
 

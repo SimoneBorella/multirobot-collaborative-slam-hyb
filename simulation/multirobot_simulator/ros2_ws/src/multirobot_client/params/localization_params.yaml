@@ -4,8 +4,15 @@ init_velocity: [0.0, 0.0, 0.0]
 init_accelerometer_bias: [0.0, 0.0, 0.0]
 init_gyroscope_bias: [0.0, 0.0, 0.0]
 
+sigma_odom_position_noise: 0.05
+sigma_odom_orientation_noise: 0.01
+
 # sigma_accelerometer_noise_density: 1e-3    # PSD_accelerometer (m/s^2)/sqrt(s)
 # sigma_gyroscope_noise_density: 1e-4        # PSD_gyroscope (rad/s)/sqrt(s) 
 
 sigma_accelerometer_noise_density: 6e-1    # PSD_accelerometer (m/s^2)/sqrt(s)
-sigma_gyroscope_noise_density: 6e-1        # PSD_gyroscope (rad/s)/sqrt(s) 
+sigma_gyroscope_noise_density: 6e-1        # PSD_gyroscope (rad/s)/sqrt(s)
+
+sigma_landmark_noise: 0.1
+
+data_association_distance: 0.2

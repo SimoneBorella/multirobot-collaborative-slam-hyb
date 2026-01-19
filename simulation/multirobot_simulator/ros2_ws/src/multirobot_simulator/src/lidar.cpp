@@ -4,7 +4,7 @@ void Lidar::sensorUpdate()
 {
     std::vector<Point> lidar_points = getLidarPoints();
     publishLidarScan(lidar_points);
-    publishLidarPointCloud2(lidar_points);
+    // publishLidarPointCloud2(lidar_points);
 }
 
 
@@ -245,7 +245,7 @@ void Lidar::publishLidarPointCloud2(std::vector<Point>& lidar_points)
 {
     sensor_msgs::msg::PointCloud2 pcl;
 
-    pcl.header.stamp = node->get_clock()->now();
+    pcl.header.stamp = node->now();
     pcl.header.frame_id = name + "_link";
     pcl.height = 1;
     pcl.width = points;

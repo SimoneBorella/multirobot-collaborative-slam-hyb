@@ -89,7 +89,6 @@ std::vector<Point> Camera::getLandmarks()
 
         bool obstacle = bresenhamObstacleCheck(cam_x_grid, cam_y_grid, landmark_x_grid, landmark_y_grid,
                                             occupancy_map_width, occupancy_map_height, occupancy_map);
-
         
         if (!obstacle)
         {
@@ -120,7 +119,7 @@ void Camera::publishLandmarksMarker(std::vector<Point>& landmarks)
     visualization_msgs::msg::Marker marker = visualization_msgs::msg::Marker();
 
     marker.header.frame_id = robot_name + "/" + name + "_link";
-    marker.header.stamp = node->get_clock()->now();
+    marker.header.stamp = node->now();
 
     marker.ns = robot_name + "/" + name;
     marker.id = 0;
@@ -153,7 +152,7 @@ void Camera::publishLandmarks(std::vector<Point>& landmarks)
     interfaces::msg::PointArray landmarks_msg = interfaces::msg::PointArray();
 
     landmarks_msg.header.frame_id = name + "_link";
-    landmarks_msg.header.stamp = node->get_clock()->now();
+    landmarks_msg.header.stamp = node->now();
 
     for (const auto& landmark : landmarks) {
         geometry_msgs::msg::Point p;
