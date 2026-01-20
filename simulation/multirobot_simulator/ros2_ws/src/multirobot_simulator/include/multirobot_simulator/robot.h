@@ -147,8 +147,8 @@ public:
             transform.header.frame_id = name + "/odom";
             transform.child_frame_id = name + "/base_link";
         
-            double dx = imu_position.x - init_position.x;
-            double dy = imu_position.y - init_position.y;
+            double dx = imu_position.x;
+            double dy = imu_position.y;
 
             double translated_x = dx * cos(-init_position.theta) - dy * sin(-init_position.theta);
             double translated_y = dx * sin(-init_position.theta) + dy * cos(-init_position.theta);
@@ -158,7 +158,7 @@ public:
             transform.transform.translation.z = 0.0;
         
             tf2::Quaternion q;
-            double theta = imu_position.theta - init_position.theta;
+            double theta = imu_position.theta;
 
             theta = fmod(theta + M_PI, 2 * M_PI);
             if (theta < 0)
@@ -180,8 +180,8 @@ public:
             transform.header.frame_id = name + "/map";
             transform.child_frame_id = name + "/base_link_imu";
         
-            double dx = imu_position.x - init_position.x;
-            double dy = imu_position.y - init_position.y;
+            double dx = imu_position.x;
+            double dy = imu_position.y;
 
             double translated_x = dx * cos(-init_position.theta) - dy * sin(-init_position.theta);
             double translated_y = dx * sin(-init_position.theta) + dy * cos(-init_position.theta);
@@ -191,7 +191,7 @@ public:
             transform.transform.translation.z = 0.0;
         
             tf2::Quaternion q;
-            double theta = imu_position.theta - init_position.theta;
+            double theta = imu_position.theta;
 
             theta = fmod(theta + M_PI, 2 * M_PI);
             if (theta < 0)

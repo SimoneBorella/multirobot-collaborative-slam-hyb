@@ -52,7 +52,6 @@ void Robot::loadRobotConfiguration(const std::string& robot_yaml_path) {
         init_position.theta = config["position"]["theta"].as<double>() * (M_PI / 180);
         
         position = init_position;
-        imu_position = init_position;
     }
 
     shape.type = config["shape"]["type"].as<std::string>();
@@ -213,7 +212,7 @@ void Robot::spawnIfNotInitialized()
     }   
 
     position = init_position;
-    imu_position = init_position;
+    // imu_position = init_position;
     random_spawn = false;
 }
 
@@ -345,17 +344,18 @@ void Robot::publishOdometry() {
     odom_msg.header.stamp = node->get_clock()->now();
     odom_msg.header.frame_id = "odom";
 
-    odom_msg.pose.pose.position.x = imu_position.x - init_position.x;
-    odom_msg.pose.pose.position.y = imu_position.y - init_position.y;
+    odom_msg.pose.pose.position.x = imu_position.x;
+    odom_msg.pose.pose.position.y = imu_position.y;
     odom_msg.pose.pose.position.z = 0.0;
 
     tf2::Quaternion q;
-    double theta = imu_position.theta - init_position.theta;
+    double theta = imu_position.theta;
 
     theta = fmod(theta + M_PI, 2 * M_PI);
     if (theta < 0)
         theta += 2 * M_PI;
     theta -= M_PI;
+
 
     q.setRPY(0, 0, theta);
 
