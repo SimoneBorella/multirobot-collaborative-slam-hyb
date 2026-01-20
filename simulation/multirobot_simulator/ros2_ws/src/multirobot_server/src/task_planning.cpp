@@ -90,9 +90,27 @@ namespace multirobot_slam
                 Eigen::Vector2d frontier_centroid = frontiers[j].centroid;
                 double size = frontiers[j].size;
 
-                double dist = (robot_position - frontier_centroid).norm();
+                Eigen::Vector2d delta_position = frontier_centroid - robot_position;
 
-                values[j] = std::exp(std::min(-params_.alpha_distance * dist + params_.beta_dimension * size, 0.0));
+                double euclidean_dist = delta_position.norm();
+
+                double robot_yaw = Eigen::AngleAxisd(poses[i].orientation).angle() * Eigen::AngleAxisd(poses[i].orientation).axis().z();
+                double frontier_bearing = std::atan2(delta_position.y(), delta_position.x());
+
+                double orientation_dist = std::abs(std::atan2(
+                    std::sin(frontier_bearing - robot_yaw),
+                    std::cos(frontier_bearing - robot_yaw)
+                ));
+
+                double frontier_switch_dist = 0.0;
+
+                if (last_planned_tasks_.count(robots[i]))
+                {
+                    const Frontier& old_frontier = last_planned_tasks_[robots[i]];
+                    frontier_switch_dist = (frontier_centroid - old_frontier.centroid).norm();
+                }
+
+                values[j] = std::exp(std::min(-params_.alpha_distance * (euclidean_dist + orientation_dist*5 + frontier_switch_dist) + params_.beta_dimension * size, 0.0));
             }
 
             DecisionTreeFactor unary_factor(robot_keys[i], values);
@@ -115,18 +133,6 @@ namespace multirobot_slam
             }
         }
 
-        // graph.print();
-
-        // DiscreteMarginals marginals(graph);
-
-        // for (size_t i = 0; i < poses.size(); i++)
-        // {
-        //     const std::string& robot = robots[i];
-        //     const DiscreteKey& robot_key = robot_keys[i];
-
-        //     std::cout << "Robot: " << robot << " - Marginal: " << marginals.marginalProbabilities(robot_key) << std::endl;
-        // }
-
         DiscreteValues result = graph.optimize();
 
         for (size_t i = 0; i < poses.size(); i++)
@@ -136,6 +142,8 @@ namespace multirobot_slam
             size_t assignment = result[robot_keys[i].first];
             tasks[robot] = frontiers[assignment];
         }
+
+        last_planned_tasks_ = tasks;
 
         return tasks;
     }

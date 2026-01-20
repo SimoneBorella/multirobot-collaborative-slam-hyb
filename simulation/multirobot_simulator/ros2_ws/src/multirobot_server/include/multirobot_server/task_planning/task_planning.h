@@ -54,6 +54,8 @@ namespace multirobot_slam
     private:
 
         TaskPlanningParams params_;
+
+        std::map<std::string, Frontier> last_planned_tasks_;
     };
 }
 
