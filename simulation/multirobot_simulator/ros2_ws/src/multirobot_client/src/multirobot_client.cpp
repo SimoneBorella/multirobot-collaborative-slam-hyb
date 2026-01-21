@@ -125,21 +125,21 @@ public:
         map_qos_profile.reliable();
         map_qos_profile.transient_local();
         
-        std::string map_topic = "/" + ns_ + "/map";
-        map_publisher_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(map_topic, map_qos_profile);
+        // std::string map_topic = "/" + ns_ + "/map";
+        // map_publisher_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(map_topic, map_qos_profile);
 
         std::string map_log_odds_update_topic = "/" + ns_ + "/map_log_odds_update";
         map_log_odds_update_publisher_ = this->create_publisher<interfaces::msg::MapLogOddsUpdate>(map_log_odds_update_topic, map_qos_profile);
         
-        std::string frontier_map_topic = "/" + ns_ + "/frontier_map";
-        frontier_map_publisher_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(frontier_map_topic, map_qos_profile);
+        // std::string frontier_map_topic = "/" + ns_ + "/frontier_map";
+        // frontier_map_publisher_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(frontier_map_topic, map_qos_profile);
 
         std::string frontiers_topic = "/" + ns_ + "/frontiers";
         frontiers_publisher_ = this->create_publisher<interfaces::msg::FrontierArray>(frontiers_topic, 10);
 
 
-        std::string frontiers_marker_topic = "/" + ns_ + "/frontiers_marker";
-        frontiers_marker_publisher_ = this->create_publisher<visualization_msgs::msg::Marker>(frontiers_marker_topic, 10);
+        // std::string frontiers_marker_topic = "/" + ns_ + "/frontiers_marker";
+        // frontiers_marker_publisher_ = this->create_publisher<visualization_msgs::msg::Marker>(frontiers_marker_topic, 10);
     }
 
     void setup()
@@ -239,43 +239,43 @@ private:
         map_log_odds_update_publisher_->publish(map_log_odds_update_msg);
     }
 
-    void publish_map(const Map& map)
-    {
-        nav_msgs::msg::OccupancyGrid map_msg;
-        map_msg.header.stamp = this->now();
-        map_msg.header.frame_id = ns_ + "/" + map_frame_;
-        map_msg.info.resolution = map.resolution;
-        map_msg.info.width = map.width;
-        map_msg.info.height = map.height;
-        map_msg.info.origin.position.x = map.origin_position.x();
-        map_msg.info.origin.position.y = map.origin_position.y();
-        map_msg.info.origin.position.z = map.origin_position.z();
-        map_msg.info.origin.orientation.w = map.origin_orientation.w();
-        map_msg.info.origin.orientation.x = map.origin_orientation.x();
-        map_msg.info.origin.orientation.y = map.origin_orientation.y();
-        map_msg.info.origin.orientation.z = map.origin_orientation.z();
-        map_msg.data = map.data;
-        map_publisher_->publish(map_msg);
-    }
+    // void publish_map(const Map& map)
+    // {
+    //     nav_msgs::msg::OccupancyGrid map_msg;
+    //     map_msg.header.stamp = this->now();
+    //     map_msg.header.frame_id = ns_ + "/" + map_frame_;
+    //     map_msg.info.resolution = map.resolution;
+    //     map_msg.info.width = map.width;
+    //     map_msg.info.height = map.height;
+    //     map_msg.info.origin.position.x = map.origin_position.x();
+    //     map_msg.info.origin.position.y = map.origin_position.y();
+    //     map_msg.info.origin.position.z = map.origin_position.z();
+    //     map_msg.info.origin.orientation.w = map.origin_orientation.w();
+    //     map_msg.info.origin.orientation.x = map.origin_orientation.x();
+    //     map_msg.info.origin.orientation.y = map.origin_orientation.y();
+    //     map_msg.info.origin.orientation.z = map.origin_orientation.z();
+    //     map_msg.data = map.data;
+    //     map_publisher_->publish(map_msg);
+    // }
 
-    void publish_frontier_map(const Map& frontier_map)
-    {
-        nav_msgs::msg::OccupancyGrid map_msg;
-        map_msg.header.stamp = this->now();
-        map_msg.header.frame_id = ns_ + "/" + map_frame_;
-        map_msg.info.resolution = frontier_map.resolution;
-        map_msg.info.width = frontier_map.width;
-        map_msg.info.height = frontier_map.height;
-        map_msg.info.origin.position.x = frontier_map.origin_position.x();
-        map_msg.info.origin.position.y = frontier_map.origin_position.y();
-        map_msg.info.origin.position.z = frontier_map.origin_position.z();
-        map_msg.info.origin.orientation.w = frontier_map.origin_orientation.w();
-        map_msg.info.origin.orientation.x = frontier_map.origin_orientation.x();
-        map_msg.info.origin.orientation.y = frontier_map.origin_orientation.y();
-        map_msg.info.origin.orientation.z = frontier_map.origin_orientation.z();
-        map_msg.data = frontier_map.data;
-        frontier_map_publisher_->publish(map_msg);
-    }
+    // void publish_frontier_map(const Map& frontier_map)
+    // {
+    //     nav_msgs::msg::OccupancyGrid map_msg;
+    //     map_msg.header.stamp = this->now();
+    //     map_msg.header.frame_id = ns_ + "/" + map_frame_;
+    //     map_msg.info.resolution = frontier_map.resolution;
+    //     map_msg.info.width = frontier_map.width;
+    //     map_msg.info.height = frontier_map.height;
+    //     map_msg.info.origin.position.x = frontier_map.origin_position.x();
+    //     map_msg.info.origin.position.y = frontier_map.origin_position.y();
+    //     map_msg.info.origin.position.z = frontier_map.origin_position.z();
+    //     map_msg.info.origin.orientation.w = frontier_map.origin_orientation.w();
+    //     map_msg.info.origin.orientation.x = frontier_map.origin_orientation.x();
+    //     map_msg.info.origin.orientation.y = frontier_map.origin_orientation.y();
+    //     map_msg.info.origin.orientation.z = frontier_map.origin_orientation.z();
+    //     map_msg.data = frontier_map.data;
+    //     frontier_map_publisher_->publish(map_msg);
+    // }
 
     void publish_frontiers(const std::vector<Frontier>& frontiers)
     {
@@ -305,35 +305,35 @@ private:
     }
 
 
-    void publish_frontiers_marker(const std::vector<Frontier>& frontiers)
-    {
-        visualization_msgs::msg::Marker frontiers_marker = visualization_msgs::msg::Marker();
-        frontiers_marker.header.stamp = this->now();
-        frontiers_marker.header.frame_id = ns_ + "/" + map_frame_;
+    // void publish_frontiers_marker(const std::vector<Frontier>& frontiers)
+    // {
+    //     visualization_msgs::msg::Marker frontiers_marker = visualization_msgs::msg::Marker();
+    //     frontiers_marker.header.stamp = this->now();
+    //     frontiers_marker.header.frame_id = ns_ + "/" + map_frame_;
     
-        frontiers_marker.ns = "frontiers";
-        frontiers_marker.id = 0;
-        frontiers_marker.type = visualization_msgs::msg::Marker::POINTS;
-        frontiers_marker.action = visualization_msgs::msg::Marker::ADD;
+    //     frontiers_marker.ns = "frontiers";
+    //     frontiers_marker.id = 0;
+    //     frontiers_marker.type = visualization_msgs::msg::Marker::POINTS;
+    //     frontiers_marker.action = visualization_msgs::msg::Marker::ADD;
 
-        frontiers_marker.color.r = 0.3f;
-        frontiers_marker.color.g = 0.6f;
-        frontiers_marker.color.b = 0.3f;
-        frontiers_marker.color.a = 1.0f;
+    //     frontiers_marker.color.r = 0.3f;
+    //     frontiers_marker.color.g = 0.6f;
+    //     frontiers_marker.color.b = 0.3f;
+    //     frontiers_marker.color.a = 1.0f;
 
-        frontiers_marker.scale.x = 0.2;
-        frontiers_marker.scale.y = 0.2;
+    //     frontiers_marker.scale.x = 0.2;
+    //     frontiers_marker.scale.y = 0.2;
 
-        for (const auto& frontier : frontiers) {
-            geometry_msgs::msg::Point p;
-            p.x = frontier.centroid.x();
-            p.y = frontier.centroid.y();
-            p.z = 0.0;
-            frontiers_marker.points.push_back(p);
-        }
+    //     for (const auto& frontier : frontiers) {
+    //         geometry_msgs::msg::Point p;
+    //         p.x = frontier.centroid.x();
+    //         p.y = frontier.centroid.y();
+    //         p.z = 0.0;
+    //         frontiers_marker.points.push_back(p);
+    //     }
 
-        frontiers_marker_publisher_->publish(frontiers_marker);
-    }
+    //     frontiers_marker_publisher_->publish(frontiers_marker);
+    // }
 
     void imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg)
     {
@@ -510,23 +510,23 @@ private:
             publish_map_log_odds_update(map_log_odds_update.value());
         }
 
-        const std::optional<Map> &map = mapping_.get_map_if_updated();
-        if (map.has_value())
-        {
-            publish_map(map.value());
-        }
+        // const std::optional<Map> &map = mapping_.get_map_if_updated();
+        // if (map.has_value())
+        // {
+        //     publish_map(map.value());
+        // }
 
-        const std::optional<Map> &frontier_map = mapping_.get_frontier_map_if_updated();
-        if (frontier_map.has_value())
-        {
-            publish_frontier_map(frontier_map.value());
-        }
+        // const std::optional<Map> &frontier_map = mapping_.get_frontier_map_if_updated();
+        // if (frontier_map.has_value())
+        // {
+        //     publish_frontier_map(frontier_map.value());
+        // }
 
         const std::optional<std::vector<Frontier>> &frontiers = mapping_.get_frontiers_if_updated();
         if (frontiers.has_value())
         {
             publish_frontiers(frontiers.value());
-            publish_frontiers_marker(frontiers.value());
+            // publish_frontiers_marker(frontiers.value());
         }
     }
 
@@ -557,11 +557,11 @@ private:
     message_filters::Subscriber<sensor_msgs::msg::LaserScan> scan_subscription_;
     std::shared_ptr<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>> scan_filter_;
 
-    rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr map_publisher_;
+    // rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr map_publisher_;
     rclcpp::Publisher<interfaces::msg::MapLogOddsUpdate>::SharedPtr map_log_odds_update_publisher_;
-    rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr frontier_map_publisher_;
+    // rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr frontier_map_publisher_;
     rclcpp::Publisher<interfaces::msg::FrontierArray>::SharedPtr frontiers_publisher_;
-    rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr frontiers_marker_publisher_;
+    // rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr frontiers_marker_publisher_;
 };
 
 int main(int argc, char *argv[])

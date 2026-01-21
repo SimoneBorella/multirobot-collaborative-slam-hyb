@@ -108,104 +108,50 @@ public:
 
     void publishOdomToBaseLinkTransform()
     {
-        // {
-        //     geometry_msgs::msg::TransformStamped transform;
-        //     transform.header.stamp = node->get_clock()->now();
-        //     transform.header.frame_id = name + "/odom";
-        //     transform.child_frame_id = name + "/base_link";
-        
-        //     double dx = position.x - init_position.x;
-        //     double dy = position.y - init_position.y;
+        geometry_msgs::msg::TransformStamped transform;
+        transform.header.stamp = node->get_clock()->now();
+        transform.header.frame_id = name + "/odom";
+        transform.child_frame_id = name + "/base_link";
+    
+        // double dx = imu_position.x;
+        // double dy = imu_position.y;
 
-        //     double translated_x = dx * cos(-init_position.theta) - dy * sin(-init_position.theta);
-        //     double translated_y = dx * sin(-init_position.theta) + dy * cos(-init_position.theta);
+        // double translated_x = dx * cos(-init_position.theta) - dy * sin(-init_position.theta);
+        // double translated_y = dx * sin(-init_position.theta) + dy * cos(-init_position.theta);
 
-        //     transform.transform.translation.x = translated_x;
-        //     transform.transform.translation.y = translated_y;
-        //     transform.transform.translation.z = 0.0;
-        
-        //     tf2::Quaternion q;
-        //     double theta = position.theta - init_position.theta;
+        // transform.transform.translation.x = translated_x;
+        // transform.transform.translation.y = translated_y;
+        // transform.transform.translation.z = 0.0;
+    
+        // tf2::Quaternion q;
+        // double theta = imu_position.theta;
 
-        //     theta = fmod(theta + M_PI, 2 * M_PI);
-        //     if (theta < 0)
-        //         theta += 2 * M_PI;
-        //     theta -= M_PI;
+        // theta = fmod(theta + M_PI, 2 * M_PI);
+        // if (theta < 0)
+        //     theta += 2 * M_PI;
+        // theta -= M_PI;
 
-        //     q.setRPY(0, 0, theta);
-        //     transform.transform.rotation.x = q.x();
-        //     transform.transform.rotation.y = q.y();
-        //     transform.transform.rotation.z = q.z();
-        //     transform.transform.rotation.w = q.w();
+        // q.setRPY(0, 0, theta);
 
-        //     tf_broadcaster->sendTransform(transform);
-        // }
 
-        {
-            geometry_msgs::msg::TransformStamped transform;
-            transform.header.stamp = node->get_clock()->now();
-            transform.header.frame_id = name + "/odom";
-            transform.child_frame_id = name + "/base_link";
-        
-            double dx = imu_position.x;
-            double dy = imu_position.y;
+        transform.transform.translation.x = imu_position.x;
+        transform.transform.translation.y = imu_position.y;
+        transform.transform.translation.z = 0.0;
 
-            double translated_x = dx * cos(-init_position.theta) - dy * sin(-init_position.theta);
-            double translated_y = dx * sin(-init_position.theta) + dy * cos(-init_position.theta);
+        tf2::Quaternion q;
+        q.setRPY(0,0, imu_position.theta);
 
-            transform.transform.translation.x = translated_x;
-            transform.transform.translation.y = translated_y;
-            transform.transform.translation.z = 0.0;
-        
-            tf2::Quaternion q;
-            double theta = imu_position.theta;
 
-            theta = fmod(theta + M_PI, 2 * M_PI);
-            if (theta < 0)
-                theta += 2 * M_PI;
-            theta -= M_PI;
 
-            q.setRPY(0, 0, theta);
-            transform.transform.rotation.x = q.x();
-            transform.transform.rotation.y = q.y();
-            transform.transform.rotation.z = q.z();
-            transform.transform.rotation.w = q.w();
 
-            tf_broadcaster->sendTransform(transform);
-        }
 
-        {
-            geometry_msgs::msg::TransformStamped transform;
-            transform.header.stamp = node->get_clock()->now();
-            transform.header.frame_id = name + "/map";
-            transform.child_frame_id = name + "/base_link_imu";
-        
-            double dx = imu_position.x;
-            double dy = imu_position.y;
 
-            double translated_x = dx * cos(-init_position.theta) - dy * sin(-init_position.theta);
-            double translated_y = dx * sin(-init_position.theta) + dy * cos(-init_position.theta);
+        transform.transform.rotation.x = q.x();
+        transform.transform.rotation.y = q.y();
+        transform.transform.rotation.z = q.z();
+        transform.transform.rotation.w = q.w();
 
-            transform.transform.translation.x = translated_x;
-            transform.transform.translation.y = translated_y;
-            transform.transform.translation.z = 0.0;
-        
-            tf2::Quaternion q;
-            double theta = imu_position.theta;
-
-            theta = fmod(theta + M_PI, 2 * M_PI);
-            if (theta < 0)
-                theta += 2 * M_PI;
-            theta -= M_PI;
-
-            q.setRPY(0, 0, theta);
-            transform.transform.rotation.x = q.x();
-            transform.transform.rotation.y = q.y();
-            transform.transform.rotation.z = q.z();
-            transform.transform.rotation.w = q.w();
-
-            tf_broadcaster->sendTransform(transform);
-        }
+        tf_broadcaster->sendTransform(transform);
     }
 
     void publishBaseLinkToBaseFootprintTransform()
