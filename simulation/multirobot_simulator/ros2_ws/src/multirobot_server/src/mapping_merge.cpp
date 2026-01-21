@@ -359,6 +359,8 @@ namespace multirobot_slam
 
     void MappingMerge::mapping_merge()
     {
+        // auto start = std::chrono::high_resolution_clock::now();
+
         map_updated_ = true;
 
         // Create filtered map
@@ -479,5 +481,10 @@ namespace multirobot_slam
         frontiers_ = merge_frontiers_dbscan(current_frontiers);
 
         frontiers_updated_ = true;
+
+        // auto end = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double> duration = end - start;
+
+        // std::cout << "Time: " << (duration.count() * 1000) << " ms (" << 1/duration.count() << " Hz)" << std::endl;
     }   
 }

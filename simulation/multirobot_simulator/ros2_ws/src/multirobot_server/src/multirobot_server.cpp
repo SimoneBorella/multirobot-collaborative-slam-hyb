@@ -262,6 +262,24 @@ public:
         std::cout << "[Server]: " << "Local planning initialized." << std::endl;
 
 
+        local_planning_.set_robot_pose_callback(
+            [this]() -> std::map<std::string, Pose>
+            {
+                std::map<std::string, Pose> robot_poses;
+
+                for (const auto& robot : robots_)
+                {
+                    Pose pose;
+                    if (get_robot_pose(robot, pose))
+                    {
+                        robot_poses[robot] = pose;
+                    }
+                }
+                return robot_poses;
+            }
+        );
+
+
         mapping_merge_.start();
         std::cout << "[Server]: " << "Mapping merge started." << std::endl;
 
@@ -476,21 +494,7 @@ public:
 
     void local_planning_timer_callback()
     {
-        std::map<std::string, Pose> robot_poses;
-
-        for (const auto& robot : robots_)
-        {
-            Pose pose;
-            if (get_robot_pose(robot, pose))
-            {
-                robot_poses[robot] = pose;
-            }
-        }
-
-        local_planning_.update_robot_poses(robot_poses);
-
         std::map<std::string, VelCmd> vel_cmds = local_planning_.get_vel_cmds();
-
         publish_vel_cmds(vel_cmds);
     }
 

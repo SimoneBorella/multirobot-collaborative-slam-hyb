@@ -124,9 +124,9 @@ namespace multirobot_slam
         obstacle_noise_ = noiseModel::Diagonal::Sigmas(Vector1(params_.obstacle_noise));
     }
 
-    void LocalPlanning::update_robot_poses(std::map<std::string, Pose> robot_poses)
+    void LocalPlanning::set_robot_pose_callback(std::function<std::map<std::string, Pose>()> callback)
     {
-        robot_poses_ = robot_poses;
+        get_robot_poses_callback_ = std::move(callback);
     }
 
     void LocalPlanning::update_global_paths(std::map<std::string, Path> global_paths)
@@ -172,11 +172,18 @@ namespace multirobot_slam
 
     void LocalPlanning::local_planning()
     {
-        if(robot_poses_.empty() || global_paths_.empty() || !costmap_received_)
+        // auto start = std::chrono::high_resolution_clock::now();
+
+        if(!get_robot_poses_callback_)
+            return;
+
+        std::map<std::string, Pose> robot_poses = get_robot_poses_callback_();
+
+        if(robot_poses.empty() || global_paths_.empty() || !costmap_received_)
             return;
 
         // Initialization of new robots
-        for (const auto& [robot, pose] : robot_poses_)
+        for (const auto& [robot, pose] : robot_poses)
         {
             if (robot_ids_.find(robot) == robot_ids_.end())
             {
@@ -189,7 +196,7 @@ namespace multirobot_slam
 
         std::vector<std::string> robots;
 
-        for (const auto& [robot, _] : robot_poses_)
+        for (const auto& [robot, _] : robot_poses)
         {
             if (global_paths_.find(robot) != global_paths_.end())
                 robots.push_back(robot);
@@ -207,7 +214,7 @@ namespace multirobot_slam
 
         for (std::string& robot : robots)
         {
-            Eigen::Vector3d robot_position = robot_poses_[robot].position;
+            Eigen::Vector3d robot_position = robot_poses[robot].position;
             robot_position.z() = 0.0;
             Eigen::Vector3d robot_goal = global_paths_[robot].poses.back().position;
 
@@ -234,11 +241,11 @@ namespace multirobot_slam
 
         for (std::string &robot : current_robots)
         {
-            double state_x = robot_poses_[robot].position.x();
-            double state_y = robot_poses_[robot].position.y();
-            // double state_z = robot_poses_[robot].position.z();
+            double state_x = robot_poses[robot].position.x();
+            double state_y = robot_poses[robot].position.y();
+            // double state_z = robot_poses[robot].position.z();
 
-            const Eigen::Quaterniond &orientation = robot_poses_[robot].orientation;
+            const Eigen::Quaterniond &orientation = robot_poses[robot].orientation;
             double state_yaw = std::atan2(
                 2.0 * (orientation.w() * orientation.z() + orientation.x() * orientation.y()),
                 1.0 - 2.0 * (orientation.y() * orientation.y() + orientation.z() * orientation.z())
@@ -276,7 +283,7 @@ namespace multirobot_slam
 
             for (int i = 0; i < static_cast<int>(global_paths_[robot].poses.size()); i++)
             {
-                Eigen::Vector3d robot_position = robot_poses_[robot].position;
+                Eigen::Vector3d robot_position = robot_poses[robot].position;
                 robot_position.z() = 0.0;
 
                 double dist = (global_paths_[robot].poses[i].position - robot_position).norm();
@@ -453,5 +460,10 @@ namespace multirobot_slam
         }
 
         iter_count++;
+
+        // auto end = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double> duration = end - start;
+
+        // std::cout << "Time: " << (duration.count() * 1000) << " ms (" << 1/duration.count() << " Hz)" << std::endl;
     }   
 }

@@ -153,6 +153,8 @@ namespace multirobot_slam
     
     std::map<std::string, Path> GlobalPlanning::plan_global_path(std::map<std::string, Pose> robot_poses, std::map<std::string, Frontier> tasks)
     {
+        // auto start = std::chrono::high_resolution_clock::now();
+
         std::map<std::string, Path> global_paths;
 
         if(!costmap_received_)
@@ -172,6 +174,11 @@ namespace multirobot_slam
             if (!path.poses.empty())
                 global_paths[robot] = path;
         }
+
+        // auto end = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double> duration = end - start;
+
+        // std::cout << "Time: " << (duration.count() * 1000) << " ms (" << 1/duration.count() << " Hz)" << std::endl;
         
         return global_paths;
     }

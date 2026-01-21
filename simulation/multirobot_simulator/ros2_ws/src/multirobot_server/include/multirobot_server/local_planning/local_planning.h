@@ -382,7 +382,8 @@ namespace multirobot_slam
 
         void start();
 
-        void update_robot_poses(std::map<std::string, Pose> robot_poses);
+        void set_robot_pose_callback(std::function<std::map<std::string, Pose>()> callback);
+
         void update_global_paths(std::map<std::string, Path> global_paths);
         void update_costmap(Map costmap);
 
@@ -395,6 +396,8 @@ namespace multirobot_slam
 
         LocalPlanningParams params_;
 
+        std::function<std::map<std::string, Pose>()> get_robot_poses_callback_;
+
         int iter_count;
 
         int horizon_steps_;
@@ -405,7 +408,7 @@ namespace multirobot_slam
         noiseModel::Gaussian::shared_ptr inter_robot_noise_;
         noiseModel::Gaussian::shared_ptr obstacle_noise_;
 
-        std::map<std::string, Pose> robot_poses_;
+        // std::map<std::string, Pose> robot_poses_;
         std::map<std::string, Path> global_paths_;
         Map costmap_;
 
