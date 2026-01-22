@@ -88,7 +88,6 @@ install(DIRECTORY
   launch
   config
   params
-  rviz
   DESTINATION share/${PROJECT_NAME})
 
 ament_package()

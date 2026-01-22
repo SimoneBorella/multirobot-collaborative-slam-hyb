@@ -53,19 +53,20 @@ docker run -it \
     --rm \
     --privileged \
     --volume $DOCKERFILE_PATH/ros2_ws:/ros2_ws \
-    --volume /dev/bus/usb:/dev/bus/usb \
-    --net host \
-    --ipc=host \
-    --env DISPLAY=$DISPLAY \
-    --env QT_X11_NO_MITSHM=1 \
-    --volume /tmp/.X11-unix:/tmp/.X11-unix:rw \
-    --env XAUTHORITY=$XAUTH \
+    -p 6981:6080 \
     --env VNC_PASSWORD="vncpswd#" \
     --name $IMAGE \
     --hostname $IMAGE \
     $IMAGE:$TAG \
     bash
 
+    # --volume /dev/bus/usb:/dev/bus/usb \
+    # --net host \
+    # --ipc=host \
     
+    # --env DISPLAY=$DISPLAY \
+    # --env QT_X11_NO_MITSHM=1 \
+    # --volume /tmp/.X11-unix:/tmp/.X11-unix:rw \
+    # --env XAUTHORITY=$XAUTH \
 
     # --gpus all \

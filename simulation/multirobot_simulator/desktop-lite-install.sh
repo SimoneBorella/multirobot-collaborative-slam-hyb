@@ -384,6 +384,10 @@ screen_geometry="\${VNC_RESOLUTION%*x*}"
 screen_depth="\${VNC_RESOLUTION##*x}"
 
 # Check if VNC_PASSWORD is set and use the appropriate command
+if [ -n "\${VNC_PASSWORD+x}" ]; then
+    echo "\${VNC_PASSWORD}" | vncpasswd -f > /usr/local/etc/vscode-dev-containers/vnc-passwd
+fi
+
 common_options="tigervncserver \${DISPLAY} -geometry \${screen_geometry} -depth \${screen_depth} -rfbport \${VNC_PORT} -dpi \${VNC_DPI:-96} -localhost -desktop fluxbox -fg"
 
 if [ -n "\${VNC_PASSWORD+x}" ]; then
