@@ -88,6 +88,32 @@ RUN apt -y update \
 # RUN pip install <package> --break-system-packages
 
 
+COPY ros2_ws /ros2_ws
+
+# Configuration .bashrc
+
+RUN echo "# Set default XDG_RUNTIME_DIR" >> /root/.bashrc \
+    && echo "export XDG_RUNTIME_DIR=/tmp/runtime-root" >> /root/.bashrc
+
+RUN echo "# Avoid graphic issues using DRI2 instead of DRI3 with Intel Iris" >> /root/.bashrc \
+    && echo "export LIBGL_DRI3_DISABLE=1" >> /root/.bashrc
+
+RUN echo "# Setup domain identifier to avoid wrong communications" >> /root/.bashrc \
+    && echo "export ROS_DOMAIN_ID=17" >> /root/.bashrc
+
+# RUN echo "# Setup ROS2 middleware implementation" >> /root/.bashrc \
+#     && echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> /root/.bashrc
+#     && echo "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp" >> /root/.bashrc
+
+RUN echo "# Source ROS2 Jazzy environment" >> /root/.bashrc \
+    && echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc
+
+RUN echo "# Change dir to ros2_ws when container is started" >> /root/.bashrc \
+    && echo "cd /ros2_ws/" >> /root/.bashrc
+
+
+
+
 
 # Remote desktop lite vnc novnc
 COPY desktop-lite-install.sh /tmp/desktop-lite-install.sh
@@ -112,31 +138,7 @@ RUN ln -s /etc/profile.d/vte-2.91.sh /etc/profile.d/vte.sh && \
     echo "if [ \$TILIX_ID ] || [ \$VTE_VERSION ]; then source /etc/profile.d/vte.sh; fi" >> /root/.bashrc && \
     sed -i 's|^session.styleFile:.*|session.styleFile: /usr/share/fluxbox/styles/ubuntu-dark|' /root/.fluxbox/init
 
-ENTRYPOINT ["/usr/local/share/desktop-init.sh"]
+RUN cp /usr/local/share/desktop-init.sh /remote_desktop_init.sh
 
-
-
-COPY ros2_ws /ros2_ws
-
-# Configuration .bashrc
-
-RUN echo "# Set default XDG_RUNTIME_DIR" >> /root/.bashrc \
-    && echo "export XDG_RUNTIME_DIR=/tmp/runtime-root" >> /root/.bashrc
-
-RUN echo "# Avoid graphic issues using DRI2 instead of DRI3 with Intel Iris" >> /root/.bashrc \
-    && echo "export LIBGL_DRI3_DISABLE=1" >> /root/.bashrc
-
-RUN echo "# Setup domain identifier to avoid wrong communications" >> /root/.bashrc \
-    && echo "export ROS_DOMAIN_ID=17" >> /root/.bashrc
-
-# RUN echo "# Setup ROS2 middleware implementation" >> /root/.bashrc \
-#     && echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> /root/.bashrc
-#     && echo "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp" >> /root/.bashrc
-
-RUN echo "# Source ROS2 Jazzy environment" >> /root/.bashrc \
-    && echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc
-
-RUN echo "# Change dir to ros2_ws when container is started" >> /root/.bashrc \
-    && echo "cd /ros2_ws/" >> /root/.bashrc
 
 WORKDIR /ros2_ws
