@@ -3,7 +3,7 @@ w_orientation: 0.1
 w_frontier_switch: 0.2
 w_frontier_size: 0.2
 
-w_coverage: 0.5
+w_coverage: 0.4
 coverage_scale: 1.0
 
 conflict_penalty: 0.001
