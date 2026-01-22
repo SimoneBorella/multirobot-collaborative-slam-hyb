@@ -99,9 +99,8 @@ RUN chmod +x /tmp/desktop-lite-install.sh && \
     apt-get update && /tmp/desktop-lite-install.sh
     # "none" "vscode" "true" "5901" "6080"
 
-    # VNC_RESOLUTION="1440x768x16" \
 ENV DBUS_SESSION_BUS_ADDRESS="autolaunch:" \
-    VNC_RESOLUTION="1920x1080x16" \
+    VNC_RESOLUTION="1440x768x16" \
     VNC_DPI="96" \
     VNC_PORT="5901" \
     NOVNC_PORT="6080" \
