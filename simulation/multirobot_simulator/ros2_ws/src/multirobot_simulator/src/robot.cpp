@@ -100,9 +100,21 @@ void Robot::loadRobotConfiguration(const std::string& robot_yaml_path) {
             }
 
             std::shared_ptr<Lidar> lidar = std::make_shared<Lidar>(
-                node, name, position, environment, lidar_name, lidar_position, lidar_frequency,
-                lidar_min_range, lidar_max_range, lidar_resolution, lidar_points, scan_topic, pcl_topic
+                node,
+                name,
+                position,
+                environment,
+                lidar_name,
+                lidar_position,
+                lidar_frequency,
+                lidar_min_range,
+                lidar_max_range,
+                lidar_resolution,
+                lidar_points,
+                scan_topic,
+                pcl_topic
             );
+
 
             sensors.push_back(lidar);
         }

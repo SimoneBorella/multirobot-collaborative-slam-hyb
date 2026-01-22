@@ -42,6 +42,8 @@ namespace multirobot_slam
 
     std::map<std::string, Frontier> TaskPlanning::plan_tasks(std::map<std::string, Pose> robot_poses, std::vector<Frontier> frontiers)
     {
+        // auto start = std::chrono::high_resolution_clock::now();
+
         std::map<std::string, Frontier> tasks;
 
         DiscreteFactorGraph graph;
@@ -144,6 +146,11 @@ namespace multirobot_slam
         }
 
         last_planned_tasks_ = tasks;
+
+        // auto end = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double> duration = end - start;
+
+        // std::cout << "Task planning time: " << (duration.count() * 1000) << " ms (" << 1/duration.count() << " Hz)" << std::endl;
 
         return tasks;
     }

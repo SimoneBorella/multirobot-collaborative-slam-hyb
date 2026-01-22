@@ -1,113 +1,133 @@
 #include "camera.h"
 
+Camera::Camera(
+    rclcpp::Node::SharedPtr node,
+    const std::string& robot_name,
+    Position& robot_position,
+    std::shared_ptr<Environment> environment,
+    const std::string& name,
+    Position& position,
+    double frequency,
+    double max_range,
+    double field_of_view,
+    double noise_std_dev,
+    std::string& topic)
+    : Sensor(node, robot_name, robot_position, environment, name, position, frequency),
+      max_range(max_range),
+      field_of_view(field_of_view),
+      noise_std_dev(noise_std_dev),
+      max_range_sq_(max_range * max_range),
+      noise_dist_(0.0, noise_std_dev)
+{
+    landmarks_publisher =
+        node->create_publisher<interfaces::msg::PointArray>(topic, 10);
+
+    landmarks_marker_publisher =
+        node->create_publisher<visualization_msgs::msg::Marker>(topic + "/plot", 10);
+
+    landmarks_.reserve(64);
+}
+
+
 void Camera::sensorUpdate()
 {
-    std::vector<Point> landmarks_marker = getLandmarks();
-    publishLandmarks(landmarks_marker);
-    publishLandmarksMarker(landmarks_marker);
+    auto& landmarks = getLandmarks();
+    publishLandmarks(landmarks);
+    publishLandmarksMarker(landmarks);
 }
+
 
 
 bool Camera::bresenhamObstacleCheck(
-    int x0, int y0, int x1, int y1,
-    int occupancy_map_width, int occupancy_map_height,
-    std::shared_ptr<std::vector<std::vector<int8_t>>> occupancy_map)
+    int x0, int y0,
+    int x1, int y1,
+    int w, int h,
+    const std::vector<std::vector<int8_t>>& map)
 {
-    int dx = abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
-    int dy = -abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    int dx = std::abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    int dy = -std::abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
     int err = dx + dy;
 
-    int x = x0, y = y0;
-
-    while (true)
-    {
-        if (x < 0 || y < 0 || x >= occupancy_map_width || y >= occupancy_map_height)
-            break;
-
-        if ((*occupancy_map)[y][x] == 100)
+    while (true) {
+        if (x0 < 0 || y0 < 0 || x0 >= w || y0 >= h)
             return true;
 
-        if (x == x1 && y == y1)
-            break;
+        if (map[y0][x0] == 100)
+            return true;
+
+        if (x0 == x1 && y0 == y1)
+            return false;
 
         int e2 = 2 * err;
-        if (e2 >= dy) { err += dy; x += sx; }
-        if (e2 <= dx) { err += dx; y += sy; }
+        if (e2 >= dy) { err += dy; x0 += sx; }
+        if (e2 <= dx) { err += dx; y0 += sy; }
     }
-
-    return false;
 }
 
 
-std::vector<Point> Camera::getLandmarks()
+
+std::vector<Point>& Camera::getLandmarks()
 {
-    std::vector<Point> landmarks;
+    landmarks_.clear();
 
-    // Get environment data
-    std::shared_ptr<std::vector<std::vector<int8_t>>> occupancy_map = environment->getOccupancyMap();
-    int occupancy_map_width = environment->getWidth();
-    int occupancy_map_height = environment->getHeight();
-    std::vector<double> origin = environment->getOrigin();
-    double env_resolution = environment->getResolution();
-    std::vector<Point> global_landmarks = environment->getLandmarks();
+    const auto& map = *environment->getOccupancyMap();
+    int w = environment->getWidth();
+    int h = environment->getHeight();
+    auto origin = environment->getOrigin();
+    double res = environment->getResolution();
+    double inv_res = 1.0 / res;
 
-    
-    double camera_global_x = robot_position.x + position.x * cos(robot_position.theta) - position.y * sin(robot_position.theta);
-    double camera_global_y = robot_position.y + position.x * sin(robot_position.theta) + position.y * cos(robot_position.theta);
+    const auto& global_landmarks = environment->getLandmarks();
 
-    std::normal_distribution<double> noise_dist(0.0, noise_std_dev);
+    double base_theta = robot_position.theta + position.theta;
+    double cos_t = std::cos(base_theta);
+    double sin_t = std::sin(base_theta);
 
-    for(Point landmark : global_landmarks)
+    double cam_x = robot_position.x + position.x * std::cos(robot_position.theta)
+                 - position.y * std::sin(robot_position.theta);
+    double cam_y = robot_position.y + position.x * std::sin(robot_position.theta)
+                 + position.y * std::cos(robot_position.theta);
+
+    int cam_xg = static_cast<int>((cam_x - origin[0]) * inv_res);
+    int cam_yg = static_cast<int>((cam_y - origin[1]) * inv_res);
+
+    double half_fov = field_of_view * 0.5;
+
+    for (const auto& lm : global_landmarks)
     {
-        // Check if there is in camera field of view
-        double x_dist = landmark.x - camera_global_x;
-        double y_dist = landmark.y - camera_global_y;
+        double dx = lm.x - cam_x;
+        double dy = lm.y - cam_y;
 
-        double landmark_theta = std::atan2(y_dist, x_dist);
-
-        double theta_dist = (robot_position.theta + position.theta) - landmark_theta;
-
-        theta_dist = std::fmod(theta_dist + M_PI, 2 * M_PI);
-        if (theta_dist < 0)
-            theta_dist += 2 * M_PI;
-        theta_dist -= M_PI;
-
-        theta_dist = std::abs(theta_dist);
-
-        double dist = std::sqrt(x_dist*x_dist + y_dist*y_dist);
-
-        if (dist > max_range || theta_dist > field_of_view/2)
+        double dist_sq = dx*dx + dy*dy;
+        if (dist_sq > max_range_sq_)
             continue;
 
+        double angle = std::atan2(dy, dx);
+        double dtheta = std::fabs(std::atan2(
+            std::sin(angle - base_theta),
+            std::cos(angle - base_theta)));
 
+        if (dtheta > half_fov)
+            continue;
 
-        // Check if there is an obstacle in the middle
-        int cam_x_grid = round((camera_global_x - origin[0]) / env_resolution);
-        int cam_y_grid = round((camera_global_y - origin[1]) / env_resolution);
-        int landmark_x_grid = round((landmark.x - origin[0]) / env_resolution);
-        int landmark_y_grid = round((landmark.y - origin[1]) / env_resolution);
+        int lm_xg = static_cast<int>((lm.x - origin[0]) * inv_res);
+        int lm_yg = static_cast<int>((lm.y - origin[1]) * inv_res);
 
-        bool obstacle = bresenhamObstacleCheck(cam_x_grid, cam_y_grid, landmark_x_grid, landmark_y_grid,
-                                            occupancy_map_width, occupancy_map_height, occupancy_map);
-        
-        if (!obstacle)
-        {
-            double translated_x = landmark.x - camera_global_x;
-            double translated_y = landmark.y - camera_global_y;
+        if (bresenhamObstacleCheck(cam_xg, cam_yg, lm_xg, lm_yg, w, h, map))
+            continue;
 
-            double rototranslated_x = translated_x * cos(-(robot_position.theta + position.theta)) - translated_y * sin(-(robot_position.theta + position.theta));
-            double rototranslated_y = translated_x * sin(-(robot_position.theta + position.theta)) + translated_y * cos(-(robot_position.theta + position.theta));
+        double rx =  dx * cos_t + dy * sin_t;
+        double ry = -dx * sin_t + dy * cos_t;
 
-            // Add Gaussian noise
-            double x = rototranslated_x + noise_dist(generator);
-            double y = rototranslated_y + noise_dist(generator);
-
-            landmarks.push_back(Point{x, y});
-        }
+        landmarks_.push_back({
+            rx + noise_dist_(generator),
+            ry + noise_dist_(generator)
+        });
     }
 
-    return landmarks;
+    return landmarks_;
 }
+
 
 
 

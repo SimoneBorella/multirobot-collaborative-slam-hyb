@@ -485,6 +485,6 @@ namespace multirobot_slam
         // auto end = std::chrono::high_resolution_clock::now();
         // std::chrono::duration<double> duration = end - start;
 
-        // std::cout << "Time: " << (duration.count() * 1000) << " ms (" << 1/duration.count() << " Hz)" << std::endl;
+        // std::cout << "Mapping merge time: " << (duration.count() * 1000) << " ms (" << 1/duration.count() << " Hz)" << std::endl;
     }   
 }

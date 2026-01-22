@@ -139,11 +139,42 @@ namespace multirobot_slam
         new_factors.add(PriorFactor<Pose3>(x0, init_pose, init_pose_prior_noise));
         new_init_estimates.insert(x0, init_pose);
 
+        // Velocity prior
+        Symbol v0('v', 0);
+        Vector3 init_velocity(params_.init_velocity); // v_x, v_y, v_z
+        noiseModel::Diagonal::shared_ptr init_vel_prior_noise = noiseModel::Diagonal::Sigmas(Vector3::Constant(1e-4));
+        new_factors.add(PriorFactor<Vector3>(v0, init_velocity, init_vel_prior_noise));
+        new_init_estimates.insert(v0, init_velocity);
+
+        // Imu bias prior
+        Symbol b0('b', 0);
+        imuBias::ConstantBias init_bias = imuBias::ConstantBias(params_.init_accelerometer_bias, params_.init_gyroscope_bias);
+        noiseModel::Diagonal::shared_ptr init_bias_prior_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(1), Vector3::Constant(1)).finished());
+        new_factors.add(PriorFactor<imuBias::ConstantBias>(b0, init_bias, init_bias_prior_noise));
+        new_init_estimates.insert(b0, init_bias);
+
         // Update new factors
         isam_.update(new_factors, new_init_estimates);
 
+        // Imu preintegration
+        auto imu_params = PreintegratedImuMeasurements::Params::MakeSharedU(9.81);
+
+        double var_acc = params_.sigma_accelerometer_noise_density *
+                         params_.sigma_accelerometer_noise_density * params_.localization_rate;
+
+        double var_gyr = params_.sigma_gyroscope_noise_density *
+                         params_.sigma_gyroscope_noise_density * params_.localization_rate;
+
+        imu_params->accelerometerCovariance = I_3x3 * var_acc; // 0.1   m/s² noise²
+        imu_params->gyroscopeCovariance = I_3x3 * var_gyr;     // 0.01  rad/s² noise²
+        imu_params->integrationCovariance = I_3x3 * 1e-6;      // integration uncertainty
+
+        imu_preintegrated_ = PreintegratedImuMeasurements(imu_params, init_bias);
+
         // Initial estimates
         pose_estimate_ = init_pose;
+        velocity_estimate_ = init_velocity;
+        bias_estimate_ = init_bias;
 
         t_ = 1;
     }
@@ -179,7 +210,8 @@ namespace multirobot_slam
 
     void Localization::add_imu_measurement(ImuData &imu_data)
     {
-
+        std::lock_guard<std::mutex> lock(buffer_mutex_);
+        imu_buffer_.push_back(imu_data);
     }
 
     void Localization::add_landmarks_measurement(LandmarksData &landmarks_data)
@@ -341,21 +373,24 @@ namespace multirobot_slam
 
     void Localization::localization()
     {
-        // auto start = std::chrono::high_resolution_clock::now();
+        auto start = std::chrono::high_resolution_clock::now();
 
         std::deque<OdomData> odom_buffer;
+        std::deque<ImuData> imu_buffer;
         std::deque<LandmarksData> landmarks_buffer;
 
         {
             std::lock_guard<std::mutex> lock(buffer_mutex_);
 
-            if (odom_buffer_.empty())
+            if (odom_buffer_.empty() || imu_buffer_.empty())
                 return;
 
             odom_buffer = odom_buffer_;
+            imu_buffer = imu_buffer_;
             landmarks_buffer = landmarks_buffer_;
 
             odom_buffer_.clear();
+            imu_buffer_.clear();
             landmarks_buffer_.clear();
         }
 
@@ -363,7 +398,12 @@ namespace multirobot_slam
         Values new_estimates;
 
         Symbol x_prev('x', t_ - 1);
+        Symbol v_prev('v', t_ - 1);
+        Symbol b_prev('b', t_ - 1);
+
         Symbol x_curr('x', t_);
+        Symbol v_curr('v', t_);
+        Symbol b_curr('b', t_);
 
         // Odom factors
         const OdomData &odom = odom_buffer.back();
@@ -391,7 +431,7 @@ namespace multirobot_slam
                     .finished());
 
             new_factors.add(BetweenFactor<Pose3>(x_prev, x_curr, delta_odom, odom_noise));
-            new_estimates.insert(x_curr, pose_estimate_ * delta_odom);
+            // new_estimates.insert(x_curr, pose_estimate_ * delta_odom);
             last_odom_pose_ = odom_pose;
         }
 
@@ -399,6 +439,47 @@ namespace multirobot_slam
 
         timestamped_pose_queue_.emplace_back(ts, x_curr);
 
+        // Imu preintegration
+        double total_dt = 0.0;
+        for (const auto &imu_data : imu_buffer)
+        {
+            double imu_timestamp_curr = imu_data.timestamp;
+
+            if (imu_timestamp_prev_ == 0.0)
+            {
+                imu_timestamp_prev_ = imu_timestamp_curr;
+                continue;
+            }
+
+            double dt = imu_timestamp_curr - imu_timestamp_prev_;
+            if (dt <= 0.0)
+                continue;
+
+            imu_preintegrated_.integrateMeasurement(imu_data.linear_acceleration,
+                                                    imu_data.angular_velocity,
+                                                    dt);
+            total_dt += dt;
+            imu_timestamp_prev_ = imu_timestamp_curr;
+        }
+
+        // Imu factor
+        new_factors.add(ImuFactor(x_prev, v_prev, x_curr, v_curr, b_prev, imu_preintegrated_));
+
+        // Bias evolution factor
+        gtsam::Matrix6 bias_noise_covariance = gtsam::Matrix6::Zero();
+        bias_noise_covariance.block<3, 3>(0, 0) = (params_.sigma_accelerometer_noise_density * params_.sigma_accelerometer_noise_density * total_dt) * gtsam::Matrix3::Identity();
+        bias_noise_covariance.block<3, 3>(3, 3) = (params_.sigma_gyroscope_noise_density * params_.sigma_gyroscope_noise_density * total_dt) * gtsam::Matrix3::Identity();
+
+        auto bias_noise = noiseModel::Gaussian::Covariance(bias_noise_covariance);
+
+        new_factors.add(BetweenFactor<imuBias::ConstantBias>(b_prev, b_curr, imuBias::ConstantBias(), bias_noise));
+
+        // Predict current state as initial estimate
+        NavState predicted_state = imu_preintegrated_.predict(NavState(pose_estimate_, velocity_estimate_), bias_estimate_);
+
+        new_estimates.insert(x_curr, predicted_state.pose());
+        new_estimates.insert(v_curr, predicted_state.v());
+        new_estimates.insert(b_curr, bias_estimate_);
 
         // Landmarks factors
         Values estimates = isam_.calculateEstimate();
@@ -497,17 +578,24 @@ namespace multirobot_slam
 
         // Compute current estimate
         pose_estimate_ = isam_.calculateEstimate<Pose3>(x_curr);
+        velocity_estimate_ = isam_.calculateEstimate<Vector3>(v_curr);
+        bias_estimate_ = isam_.calculateEstimate<imuBias::ConstantBias>(b_curr);
 
         state_.timestamp = odom.timestamp;
         state_.position = pose_estimate_.translation();
         state_.attitude = Eigen::Quaterniond(pose_estimate_.rotation().matrix());
+        state_.velocity = velocity_estimate_;
+        state_.accelerometer_bias = bias_estimate_.accelerometer();
+        state_.gyroscope_bias = bias_estimate_.gyroscope();
 
         state_updated_ = true;
-        
+
+        // Reset IMU preintegration
+        imu_preintegrated_.resetIntegrationAndSetBias(bias_estimate_);
+
+
         // Update discrete time
         t_++;
-
-
 
 
         // if (t_%100 == 0)
@@ -519,10 +607,11 @@ namespace multirobot_slam
         //     save_graph(isam_.getFactorsUnsafe(), isam_estimates, std::nullopt, "./output/localization/isam_graph_" + std::to_string(t_) + ".txt");
         // }
 
-        // auto end = std::chrono::high_resolution_clock::now();
-        // std::chrono::duration<double> duration = end - start;
 
-        // std::cout << "Localization time: " << (duration.count() * 1000) << " ms (" << 1/duration.count() << " Hz)" << std::endl;
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> duration = end - start;
+
+        std::cout << "Localization time: " << (duration.count() * 1000) << " ms (" << 1/duration.count() << " Hz)" << std::endl;
     }
 
     void Localization::save_graph(NonlinearFactorGraph graph, Values estimates, std::optional<gtsam::Marginals> marginals, const std::string &filename)
