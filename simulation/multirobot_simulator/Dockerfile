@@ -114,10 +114,6 @@ RUN ln -s /etc/profile.d/vte-2.91.sh /etc/profile.d/vte.sh && \
     echo "if [ \$TILIX_ID ] || [ \$VTE_VERSION ]; then source /etc/profile.d/vte.sh; fi" >> /root/.bashrc && \
     sed -i 's|^session.styleFile:.*|session.styleFile: /usr/share/fluxbox/styles/ubuntu-dark|' /root/.fluxbox/init
 
-RUN cp /usr/local/share/desktop-init.sh /remote_desktop_init.sh
-
-
-
 
 
 
@@ -125,6 +121,9 @@ RUN cp /usr/local/share/desktop-init.sh /remote_desktop_init.sh
 COPY ros2_ws /ros2_ws
 
 # Configuration .bashrc
+
+RUN echo "# Set alias to run script for remote desktop" >> /root/.bashrc \
+    && echo "alias remote-desktop-lite='bash /usr/local/share/desktop-init.sh'" >> /root/.bashrc
 
 RUN echo "# Set default XDG_RUNTIME_DIR" >> /root/.bashrc \
     && echo "export XDG_RUNTIME_DIR=/tmp/runtime-root" >> /root/.bashrc
