@@ -22,7 +22,7 @@
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
 #include "nav_msgs/msg/odometry.hpp"
-#include "interfaces/msg/point_array.hpp"
+#include "interfaces/msg/key_point_array.hpp"
 #include "nav_msgs/msg/occupancy_grid.hpp"
 #include "visualization_msgs/msg/marker.hpp"
 #include "interfaces/msg/map_log_odds_update.hpp"
@@ -92,18 +92,18 @@ public:
             odom_topic, 10, std::bind(&MultirobotClient::odom_callback, this, std::placeholders::_1)
         );
 
-        std::string landmarks_topic = "/" + ns_ + "/landmarks";
-        landmarks_subscription_.subscribe(this, landmarks_topic, rclcpp::SensorDataQoS().get_rmw_qos_profile());
+        std::string keypoints_topic = "/" + ns_ + "/keypoints";
+        keypoints_subscription_.subscribe(this, keypoints_topic, rclcpp::SensorDataQoS().get_rmw_qos_profile());
 
-        landmarks_filter_ = std::make_shared<tf2_ros::MessageFilter<interfaces::msg::PointArray>>(
-            landmarks_subscription_,
+        keypoints_filter_ = std::make_shared<tf2_ros::MessageFilter<interfaces::msg::KeyPointArray>>(
+            keypoints_subscription_,
             *tf_buffer_,
             map_frame_,
             10,
             this->get_node_logging_interface(),
             this->get_node_clock_interface());
         
-        landmarks_filter_->registerCallback(std::bind(&MultirobotClient::landmarks_callback, this, std::placeholders::_1));
+        keypoints_filter_->registerCallback(std::bind(&MultirobotClient::keypoints_callback, this, std::placeholders::_1));
 
         std::string scan_topic = "/" + ns_ + "/scan";
         scan_subscription_.subscribe(this, scan_topic, rclcpp::SensorDataQoS().get_rmw_qos_profile());
@@ -409,7 +409,7 @@ private:
         localization_.add_odom_measurement(odom_data);
     }
 
-    void landmarks_callback(const interfaces::msg::PointArray::ConstSharedPtr msg)
+    void keypoints_callback(const interfaces::msg::KeyPointArray::ConstSharedPtr msg)
     {
         LandmarksData landmarks_data;
         
@@ -427,9 +427,9 @@ private:
         tf2::Transform T_base_to_landmarks;
         tf2::fromMsg(base_to_landmarks.transform, T_base_to_landmarks);
 
-        for (const auto &p : msg->points)
+        for (const auto &p : msg->keypoints)
         {
-            tf2::Vector3 p_landmark(p.x, p.y, p.z);
+            tf2::Vector3 p_landmark(p.point.x, p.point.y, p.point.z);
             tf2::Vector3 p_base = T_base_to_landmarks * p_landmark;
 
             landmarks_data.points.emplace_back(p_base.x(), p_base.y(), p_base.z());
@@ -552,8 +552,8 @@ private:
     
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_subscription_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscription_;
-    message_filters::Subscriber<interfaces::msg::PointArray> landmarks_subscription_;
-    std::shared_ptr<tf2_ros::MessageFilter<interfaces::msg::PointArray>> landmarks_filter_;
+    message_filters::Subscriber<interfaces::msg::KeyPointArray> keypoints_subscription_;
+    std::shared_ptr<tf2_ros::MessageFilter<interfaces::msg::KeyPointArray>> keypoints_filter_;
     message_filters::Subscriber<sensor_msgs::msg::LaserScan> scan_subscription_;
     std::shared_ptr<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>> scan_filter_;
 

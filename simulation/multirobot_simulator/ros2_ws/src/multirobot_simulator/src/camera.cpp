@@ -19,23 +19,22 @@ Camera::Camera(
       max_range_sq_(max_range * max_range),
       noise_dist_(0.0, noise_std_dev)
 {
-    landmarks_publisher =
-        node->create_publisher<interfaces::msg::PointArray>(topic, 10);
+    keypoints_publisher =
+        node->create_publisher<interfaces::msg::KeyPointArray>(topic, 10);
 
-    landmarks_marker_publisher =
+    keypoints_marker_publisher =
         node->create_publisher<visualization_msgs::msg::Marker>(topic + "/plot", 10);
 
-    landmarks_.reserve(64);
+    keypoints_.reserve(64);
 }
 
 
 void Camera::sensorUpdate()
 {
-    auto& landmarks = getLandmarks();
-    publishLandmarks(landmarks);
-    publishLandmarksMarker(landmarks);
+    auto& keypoints = getKeyPoints();
+    publishKeyPoints(keypoints);
+    publishKeyPointsMarker(keypoints);
 }
-
 
 
 bool Camera::bresenhamObstacleCheck(
@@ -64,11 +63,21 @@ bool Camera::bresenhamObstacleCheck(
     }
 }
 
-
-
-std::vector<Point>& Camera::getLandmarks()
+inline void Camera::addDescriptorNoise(std::array<uint8_t, 32>& descriptor)
 {
-    landmarks_.clear();
+    // Assumes descriptor size is 32 bytes (256 bits)
+    for (int i = 0; i < 4; ++i)
+    {
+        const int byte = byte_dist_(generator);
+        const int bit  = bit_dist_(generator);
+        descriptor[byte] ^= static_cast<uint8_t>(1u << bit);
+    }
+}
+
+
+std::vector<KeyPoint>& Camera::getKeyPoints()
+{
+    keypoints_.clear();
 
     const auto& map = *environment->getOccupancyMap();
     int w = environment->getWidth();
@@ -95,8 +104,8 @@ std::vector<Point>& Camera::getLandmarks()
 
     for (const auto& lm : global_landmarks)
     {
-        double dx = lm.x - cam_x;
-        double dy = lm.y - cam_y;
+        double dx = lm.point.x - cam_x;
+        double dy = lm.point.y - cam_y;
 
         double dist_sq = dx*dx + dy*dy;
         if (dist_sq > max_range_sq_)
@@ -110,31 +119,30 @@ std::vector<Point>& Camera::getLandmarks()
         if (dtheta > half_fov)
             continue;
 
-        int lm_xg = static_cast<int>((lm.x - origin[0]) * inv_res);
-        int lm_yg = static_cast<int>((lm.y - origin[1]) * inv_res);
+        int lm_xg = static_cast<int>((lm.point.x - origin[0]) * inv_res);
+        int lm_yg = static_cast<int>((lm.point.y - origin[1]) * inv_res);
 
         if (bresenhamObstacleCheck(cam_xg, cam_yg, lm_xg, lm_yg, w, h, map))
             continue;
 
         double rx =  dx * cos_t + dy * sin_t;
         double ry = -dx * sin_t + dy * cos_t;
+        
+        // Keypoint generated with noise
+        KeyPoint kp(rx + noise_dist_(generator), ry + noise_dist_(generator));
 
-        landmarks_.push_back({
-            rx + noise_dist_(generator),
-            ry + noise_dist_(generator)
-        });
+        // Descriptor generated with noise
+        kp.descriptor = lm.descriptor;
+        addDescriptorNoise(kp.descriptor);
+
+        keypoints_.push_back(kp);
     }
 
-    return landmarks_;
+    return keypoints_;
 }
 
 
-
-
-
-
-
-void Camera::publishLandmarksMarker(std::vector<Point>& landmarks)
+void Camera::publishKeyPointsMarker(std::vector<KeyPoint>& keypoints)
 {
     visualization_msgs::msg::Marker marker = visualization_msgs::msg::Marker();
 
@@ -154,34 +162,36 @@ void Camera::publishLandmarksMarker(std::vector<Point>& landmarks)
     marker.scale.x = 0.1;
     marker.scale.y = 0.1;
 
-    for (const auto& landmark : landmarks) {
+    for (const auto& keypoint : keypoints) {
         geometry_msgs::msg::Point p;
-        p.x = landmark.x;
-        p.y = landmark.y;
-        p.z = 0.0;
+        p.x = keypoint.point.x;
+        p.y = keypoint.point.y;
+        p.z = keypoint.point.z;
         marker.points.push_back(p);
     }
 
-    landmarks_marker_publisher->publish(marker);
+    keypoints_marker_publisher->publish(marker);
 }
 
 
-
-void Camera::publishLandmarks(std::vector<Point>& landmarks)
+void Camera::publishKeyPoints(std::vector<KeyPoint>& keypoints)
 {
-    interfaces::msg::PointArray landmarks_msg = interfaces::msg::PointArray();
+    interfaces::msg::KeyPointArray keypoints_msg;
 
-    landmarks_msg.header.frame_id = name + "_link";
-    landmarks_msg.header.stamp = node->now();
+    keypoints_msg.header.frame_id = name + "_link";
+    keypoints_msg.header.stamp = node->now();
 
-    for (const auto& landmark : landmarks) {
-        geometry_msgs::msg::Point p;
-        p.x = landmark.x;
-        p.y = landmark.y;
-        p.z = 0.0;
+    for (const auto& keypoint : keypoints) {
+        interfaces::msg::KeyPoint kp;
 
-        landmarks_msg.points.push_back(p);
+        kp.point.x = keypoint.point.x;
+        kp.point.y = keypoint.point.y;
+        kp.point.z = keypoint.point.z;
+
+        kp.descriptor = keypoint.descriptor;  // <-- now works
+
+        keypoints_msg.keypoints.push_back(kp);
     }
 
-    landmarks_publisher->publish(landmarks_msg);
+    keypoints_publisher->publish(keypoints_msg);
 }

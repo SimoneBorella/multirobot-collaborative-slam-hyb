@@ -5,9 +5,18 @@
 
 struct Point
 {
-    double x, y;
-    Point(double x = 0.0, double y = 0.0)
-        : x(x), y(y) {}
+    double x, y, z;
+    Point(double x = 0.0, double y = 0.0, double z = 0.0)
+        : x(x), y(y), z(z) {}
+};
+
+struct KeyPoint
+{
+    Point point;
+    std::array<uint8_t, 32> descriptor;
+
+    KeyPoint(double x = 0.0, double y = 0.0)
+        : point(x, y, 0.0) {}
 };
 
 struct Position

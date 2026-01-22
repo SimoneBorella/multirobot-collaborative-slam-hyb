@@ -12,9 +12,9 @@
 #include <iostream>
 #include <fstream>
 #include <memory>
-#include <array>
 
 #include "types.h"
+
 
 class Environment
 {
@@ -29,7 +29,7 @@ public:
 
         map_publisher = node->create_publisher<nav_msgs::msg::OccupancyGrid>("map_ground_truth", 10);
         landmarks_marker_publisher = node->create_publisher<visualization_msgs::msg::Marker>("landmarks/plot", 10);
-
+    
         RCLCPP_INFO_STREAM(node->get_logger(), "Initializing environment...");
 
         loadMap(map_yaml_path, map_pgm_path);
@@ -41,8 +41,10 @@ public:
         RCLCPP_INFO_STREAM(node->get_logger(), "Environment initialized.");
     }
 
+
     void loadMap(const std::string& map_yaml_path, const std::string& map_pgm_path)
     {
+        
         YAML::Node map_config = YAML::LoadFile(map_yaml_path);
         std::string map_filename = map_config["image"].as<std::string>();
         resolution = map_config["resolution"].as<double>();
@@ -77,10 +79,11 @@ public:
                     (*occupancy_map)[h][w] = 0;   // Free
                 } else {
                     (*occupancy_map)[h][w] = 100;  // Set as occupied
+                    // (*occupancy_map)[h][w] = -1;  // Unknown
                 }
             }
         }
-
+    
         file.close();
     }
 
@@ -89,32 +92,27 @@ public:
         double width_dim = width * resolution;
         double height_dim = height * resolution;
 
-        size_t n_landmarks = round((width_dim * height_dim) * landmarks_density);
+        size_t n_landmarks = round((width_dim*height_dim)*landmarks_density);
+
 
         std::random_device rd;
         std::mt19937 gen(rd());
         std::uniform_real_distribution<> dis_x(origin[0], origin[0] + width_dim);
         std::uniform_real_distribution<> dis_y(origin[1], origin[1] + height_dim);
-        std::uniform_int_distribution<uint8_t> descriptor_dist(0, 255);
 
+        
         for (size_t i = 0; i < n_landmarks; ++i) {
             double x = dis_x(gen);
             double y = dis_y(gen);
 
             size_t x_grid = std::clamp<size_t>(round((x - origin[0]) / resolution), 0, width - 1);
             size_t y_grid = std::clamp<size_t>(round((y - origin[1]) / resolution), 0, height - 1);
-
-            if ((*occupancy_map)[y_grid][x_grid] == 0)
+            
+            if((*occupancy_map)[y_grid][x_grid] == 0)
             {
                 KeyPoint landmark;
-                landmark.point.x = x;
-                landmark.point.y = y;
-                landmark.point.z = 0.0;
-
-                // Generate random descriptor (32 bytes)
-                for (int b = 0; b < 32; ++b)
-                    landmark.descriptor[b] = descriptor_dist(gen);
-
+                landmark.x = x;
+                landmark.y = y;
                 landmarks.push_back(landmark);
             }
         }
@@ -133,7 +131,7 @@ public:
     {
         if (landmarks_marker_publisher->get_subscription_count() != landmarks_subscription_count)
         {
-            publishLandmarksMarker();
+            publishLandmarksMarker();            
             landmarks_subscription_count = landmarks_marker_publisher->get_subscription_count();
         }
     }
@@ -146,7 +144,7 @@ public:
         map_msg.info.resolution = resolution;
         map_msg.info.width = width;
         map_msg.info.height = height;
-
+        
         map_msg.info.origin.position.x = origin[0];
         map_msg.info.origin.position.y = origin[1];
         map_msg.info.origin.position.z = 0.0;
@@ -167,17 +165,18 @@ public:
                 map_msg.data[index] = (*occupancy_map)[h][w];
             }
         }
-
+        
         map_publisher->publish(map_msg);
     }
+
 
     void publishLandmarksMarker()
     {
         visualization_msgs::msg::Marker marker = visualization_msgs::msg::Marker();
-
+        
         marker.header.frame_id = "all";
         marker.header.stamp = node->get_clock()->now();
-
+        
         marker.ns = "all";
         marker.id = 0;
         marker.type = visualization_msgs::msg::Marker::POINTS;
@@ -193,19 +192,37 @@ public:
 
         for (const auto& landmark : landmarks) {
             geometry_msgs::msg::Point p;
-            p.x = landmark.point.x;
-            p.y = landmark.point.y;
-            p.z = landmark.point.z;
+            p.x = landmark.x;
+            p.y = landmark.y;
+            p.z = 0.0;
             marker.points.push_back(p);
         }
 
         landmarks_marker_publisher->publish(marker);
     }
 
-    double getResolution() { return resolution; }
-    double getWidth() { return width; }
-    double getHeight() { return height; }
-    std::shared_ptr<std::vector<std::vector<int8_t>>> getOccupancyMap() { return occupancy_map; }
+
+    double getResolution()
+    {
+        return resolution;
+        
+    }
+
+    double getWidth()
+    {
+        return width;
+    }
+
+    double getHeight()
+    {
+        return height;
+    }
+
+    std::shared_ptr<std::vector<std::vector<int8_t>>> getOccupancyMap()
+    {
+        return occupancy_map;
+    }
+
     std::vector<std::vector<int8_t>> getOccupancyMapCopy()
     {
         std::vector<std::vector<int8_t>> occupancy_map_copy = std::vector<std::vector<int8_t>>(height, std::vector<int8_t>(width));
@@ -216,10 +233,17 @@ public:
 
         return occupancy_map_copy;
     }
-    std::vector<double>& getOrigin() { return origin; }
-    std::vector<KeyPoint>& getLandmarks() { return landmarks; }
 
-private:
+    std::vector<double>& getOrigin()
+    {
+        return origin;
+    }
+
+    std::vector<KeyPoint>& getLandmarks()
+    {
+        return landmarks;
+    }
+
     std::vector<KeyPoint> landmarks;
 
     size_t width, height;

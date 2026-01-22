@@ -4,7 +4,7 @@
 #include <random>
 #include <rclcpp/rclcpp.hpp>
 #include <visualization_msgs/msg/marker.hpp>
-#include "interfaces/msg/point_array.hpp"
+#include "interfaces/msg/key_point_array.hpp"
 #include "types.h"
 #include "sensor.h"
 
@@ -24,6 +24,8 @@ public:
            std::string& topic);
 
 private:
+    inline void addDescriptorNoise(std::array<uint8_t, 32>& descriptor);
+
     void sensorUpdate() override;
 
     bool bresenhamObstacleCheck(
@@ -32,10 +34,10 @@ private:
         int map_w, int map_h,
         const std::vector<std::vector<int8_t>>& map);
 
-    std::vector<Point>& getLandmarks();
+    std::vector<KeyPoint>& getKeyPoints();
 
-    void publishLandmarksMarker(std::vector<Point>& landmarks);
-    void publishLandmarks(std::vector<Point>& landmarks);
+    void publishKeyPointsMarker(std::vector<KeyPoint>& keypoints);
+    void publishKeyPoints(std::vector<KeyPoint>& keypoints);
 
     double max_range;
     double field_of_view;
@@ -45,10 +47,13 @@ private:
     std::default_random_engine generator;
     std::normal_distribution<double> noise_dist_;
 
-    std::vector<Point> landmarks_;
+    std::uniform_int_distribution<int> byte_dist_{0, 32 - 1};
+    std::uniform_int_distribution<int> bit_dist_{0, 7};
 
-    rclcpp::Publisher<interfaces::msg::PointArray>::SharedPtr landmarks_publisher;
-    rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr landmarks_marker_publisher;
+    std::vector<KeyPoint> keypoints_;
+
+    rclcpp::Publisher<interfaces::msg::KeyPointArray>::SharedPtr keypoints_publisher;
+    rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr keypoints_marker_publisher;
 };
 
 #endif

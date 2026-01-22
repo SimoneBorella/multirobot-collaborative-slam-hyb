@@ -1,3 +1,21 @@
+/*
+
+    REMEMBER TO CHANGE PUBLISHERS, PUBLISH KEYPOINTS WITH DESCRIPTORS NOT ONLY POINTS
+
+
+*/
+
+
+
+
+
+
+
+
+
+
+
+
 #include <memory>
 #include <string>
 #include <vector>
@@ -7,7 +25,8 @@
 #include "cv_bridge/cv_bridge.h"
 #include "image_transport/image_transport.hpp"
 #include "visualization_msgs/msg/marker.hpp"
-#include "interfaces/msg/point_array.hpp"
+#include "interfaces/msg/key_point.hpp"
+#include "interfaces/msg/key_point_array.hpp"
 
 
 #include <opencv2/opencv.hpp>
@@ -126,14 +145,30 @@ private:
         cv::Mat descriptors;
         orb->detectAndCompute(rgb_image, cv::noArray(), keypoints, descriptors);
 
-        std::sort(keypoints.begin(), keypoints.end(),
-                  [](const cv::KeyPoint &a, const cv::KeyPoint &b) {
-                      return a.response > b.response;
-                  });
+        if (keypoints.empty())
+            return;
 
-        if (keypoints.size() > max_keypoints)
-            keypoints.resize(max_keypoints);
+        std::vector<int> indices(keypoints.size());
+        std::iota(indices.begin(), indices.end(), 0);
 
+        std::sort(indices.begin(), indices.end(),
+            [&](int a, int b) {
+                return keypoints[a].response > keypoints[b].response;
+            });
+
+        std::vector<cv::KeyPoint> sorted_kps;
+        cv::Mat sorted_desc;
+
+        size_t keep = std::min((size_t)max_keypoints, keypoints.size());
+
+        for (size_t i = 0; i < keep; ++i)
+        {
+            sorted_kps.push_back(keypoints[indices[i]]);
+            sorted_desc.push_back(descriptors.row(indices[i]));
+        }
+
+        keypoints = sorted_kps;
+        descriptors = sorted_desc;
         
         cv::Mat img_with_keypoints;
         cv::drawKeypoints(rgb_image, keypoints, img_with_keypoints, cv::Scalar(0, 255, 0));
@@ -145,8 +180,11 @@ private:
 
 
         std::vector<cv::Point3f> landmarks;
-        for (const auto &kp : keypoints)
+        for (int i = 0; i < keypoints.size(); ++i)
         {
+            const cv::KeyPoint &kp = keypoints[i];
+            const cv::Mat descriptor = descriptors.row(i);
+
             int x = static_cast<int>(kp.pt.x);
             int y = static_cast<int>(kp.pt.y);
 

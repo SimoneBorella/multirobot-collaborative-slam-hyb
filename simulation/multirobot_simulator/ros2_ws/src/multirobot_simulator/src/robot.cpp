@@ -134,7 +134,7 @@ void Robot::loadRobotConfiguration(const std::string& robot_yaml_path) {
             if (sensor_node["topic"]) {
                 topic = sensor_node["topic"].as<std::string>();
             } else {
-                topic = name + "/landmarks";
+                topic = name + "/keypoints";
             }
 
             std::shared_ptr<Camera> camera = std::make_shared<Camera>(
