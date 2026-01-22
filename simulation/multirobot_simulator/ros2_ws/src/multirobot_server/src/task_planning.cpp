@@ -23,6 +23,8 @@ namespace multirobot_slam
             if (config["w_orientation"]) p.w_orientation = config["w_orientation"].as<double>();
             if (config["w_frontier_switch"]) p.w_frontier_switch = config["w_frontier_switch"].as<double>();
             if (config["w_frontier_size"]) p.w_frontier_size = config["w_frontier_size"].as<double>();
+            if (config["w_coverage"]) p.w_coverage = config["w_coverage"].as<double>();
+            if (config["coverage_scale"]) p.coverage_scale = config["coverage_scale"].as<double>();
             if (config["conflict_penalty"]) p.conflict_penalty = config["conflict_penalty"].as<double>();
         }
         catch (const std::exception &e)
@@ -165,13 +167,38 @@ namespace multirobot_slam
         {
             for (size_t j = i + 1; j < n_robots; j++)
             {
-                std::vector<double> table(n_frontiers * n_frontiers, 1.0);
-                for (size_t f = 0; f < n_frontiers; f++)
+                // Conflict factor
                 {
-                    table[f * n_frontiers + f] = params_.conflict_penalty; 
+                    std::vector<double> table(n_frontiers * n_frontiers, 1.0);
+                    for (size_t f = 0; f < n_frontiers; f++)
+                    {
+                        table[f * n_frontiers + f] = params_.conflict_penalty; 
+                    }
+                    DecisionTreeFactor conflict_factor({robot_keys[i], robot_keys[j]}, table);
+                    graph.add(conflict_factor);
                 }
-                DecisionTreeFactor conflict_factor({robot_keys[i], robot_keys[j]}, table);
-                graph.add(conflict_factor);
+
+                // Coverage factor
+                {
+                    std::vector<double> table(n_frontiers * n_frontiers, 1.0);
+
+                    for (size_t f1 = 0; f1 < n_frontiers; f1++)
+                    {
+                        for (size_t f2 = 0; f2 < n_frontiers; f2++)
+                        {
+                            double dist = (frontiers[f1].centroid - frontiers[f2].centroid).norm();
+
+                            double coverage_raw = 1.0 - std::exp(-dist / params_.coverage_scale);
+                            double coverage_score = (1.0 - params_.w_coverage) + params_.w_coverage * coverage_raw;
+
+                            table[f1 * n_frontiers + f2] = coverage_score;
+                        }
+                    }
+
+                    DecisionTreeFactor coverage_factor({robot_keys[i], robot_keys[j]}, table);
+                    graph.add(coverage_factor);
+                }
+                
             }
         }
 

@@ -32,6 +32,9 @@ namespace multirobot_slam
         double w_frontier_switch = 0.2;
         double w_frontier_size = 0.2;
 
+        double w_coverage = 0.5;
+        double coverage_scale = 1.0;
+
         double conflict_penalty = 0.001;
 
         TaskPlanningParams(
@@ -39,6 +42,8 @@ namespace multirobot_slam
             double w_orientation = 0.2,
             double w_frontier_switch = 0.2,
             double w_frontier_size = 0.2,
+            double w_coverage = 0.5,
+            double coverage_scale = 1.0,
             double conflict_penalty = 0.001)
             : w_distance(w_distance),
             w_orientation(w_orientation),
