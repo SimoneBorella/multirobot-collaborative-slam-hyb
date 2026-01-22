@@ -19,12 +19,11 @@ namespace multirobot_slam
         {
             YAML::Node config = YAML::LoadFile(params_path);
 
-            if (config["alpha_distance"])
-                p.alpha_distance = config["alpha_distance"].as<double>();
-            if (config["beta_dimension"])
-                p.beta_dimension = config["beta_dimension"].as<double>();
-            if (config["conflict_penalty"])
-                p.conflict_penalty = config["conflict_penalty"].as<double>();
+            if (config["w_distance"]) p.w_distance = config["w_distance"].as<double>();
+            if (config["w_orientation"]) p.w_orientation = config["w_orientation"].as<double>();
+            if (config["w_frontier_switch"]) p.w_frontier_switch = config["w_frontier_switch"].as<double>();
+            if (config["w_frontier_size"]) p.w_frontier_size = config["w_frontier_size"].as<double>();
+            if (config["conflict_penalty"]) p.conflict_penalty = config["conflict_penalty"].as<double>();
         }
         catch (const std::exception &e)
         {
@@ -35,15 +34,25 @@ namespace multirobot_slam
         return p;
     }
 
+
     void TaskPlanning::init(TaskPlanningParams &params)
     {
         params_ = params;
+
+        double sumw = params_.w_distance + params_.w_orientation + params_.w_frontier_switch + params_.w_frontier_size;
+        if (sumw > 0) {
+            params_.w_distance /= sumw;
+            params_.w_orientation /= sumw;
+            params_.w_frontier_switch /= sumw;
+            params_.w_frontier_size /= sumw;
+        }
+
     }
+
+
 
     std::map<std::string, Frontier> TaskPlanning::plan_tasks(std::map<std::string, Pose> robot_poses, std::vector<Frontier> frontiers)
     {
-        // auto start = std::chrono::high_resolution_clock::now();
-
         std::map<std::string, Frontier> tasks;
 
         DiscreteFactorGraph graph;
@@ -64,7 +73,22 @@ namespace multirobot_slam
         size_t n_frontiers = frontiers.size();
         size_t n_robots = poses.size();
 
+        // Create dynamic max distance & size
+        double max_distance = 0.0;
+        double max_size = 0.0;
 
+        for (const auto& pose : poses) {
+            Eigen::Vector2d robot_position(pose.position.x(), pose.position.y());
+            for (const auto& f : frontiers) {
+                double d = (f.centroid - robot_position).norm();
+                if (d > max_distance) max_distance = d;
+                if (f.size > max_size) max_size = f.size;
+            }
+        }
+
+        // Avoid division by zero
+        max_distance = std::max(max_distance, 1e-6);
+        max_size = std::max(max_size, 1e-6);
 
         // Create discrete keys for each robot
         std::vector<DiscreteKey> robot_keys;
@@ -79,11 +103,10 @@ namespace multirobot_slam
             robot_keys.push_back(robot_key);
         }
 
-
         // Add unary factors for each robot
         for (size_t i = 0; i < n_robots; i++)
         {
-            Eigen::Vector2d robot_position = Eigen::Vector2d(poses[i].position.x(), poses[i].position.y());
+            Eigen::Vector2d robot_position(poses[i].position.x(), poses[i].position.y());
 
             std::vector<double> values(n_frontiers);
 
@@ -112,13 +135,30 @@ namespace multirobot_slam
                     frontier_switch_dist = (frontier_centroid - old_frontier.centroid).norm();
                 }
 
-                values[j] = std::exp(std::min(-params_.alpha_distance * (euclidean_dist + orientation_dist*5 + frontier_switch_dist) + params_.beta_dimension * size, 0.0));
+                // Normalize each contribution [0,1]
+                double distance_score = 1.0 - std::min(euclidean_dist / max_distance, 1.0);
+                double orientation_score = 1.0 - std::min(orientation_dist / M_PI, 1.0);
+                double frontier_switch_score = 1.0 - std::min(frontier_switch_dist / max_distance, 1.0);
+                double frontier_size_score = std::min(size / max_size, 1.0);
+
+                // Weighted sum
+                double score =
+                    params_.w_distance * distance_score +
+                    params_.w_orientation * orientation_score +
+                    params_.w_frontier_switch * frontier_switch_score +
+                    params_.w_frontier_size * frontier_size_score;
+
+                // Normalize weights
+                double sumw = params_.w_distance + params_.w_orientation + params_.w_frontier_switch + params_.w_frontier_size;
+                if (sumw > 0)
+                    score /= sumw;
+
+                values[j] = std::max(score, 1e-6);
             }
 
             DecisionTreeFactor unary_factor(robot_keys[i], values);
             graph.add(unary_factor);
         }
-
 
         // Add pairwise factors between robots and frontiers
         for (size_t i = 0; i < n_robots; i++)
@@ -140,20 +180,14 @@ namespace multirobot_slam
         for (size_t i = 0; i < poses.size(); i++)
         {
             const std::string& robot = robots[i];
-
             size_t assignment = result[robot_keys[i].first];
             tasks[robot] = frontiers[assignment];
         }
 
         last_planned_tasks_ = tasks;
-
-        // auto end = std::chrono::high_resolution_clock::now();
-        // std::chrono::duration<double> duration = end - start;
-
-        // std::cout << "Task planning time: " << (duration.count() * 1000) << " ms (" << 1/duration.count() << " Hz)" << std::endl;
-
         return tasks;
     }
+
 }
 
 

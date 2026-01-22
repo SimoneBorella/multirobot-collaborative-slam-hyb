@@ -89,6 +89,32 @@ RUN apt -y update \
 
 
 
+# Remote desktop lite vnc novnc
+COPY desktop-lite-install.sh /tmp/desktop-lite-install.sh
+
+ENV USERNAME="root"
+RUN chmod +x /tmp/desktop-lite-install.sh && \
+    apt-get update && /tmp/desktop-lite-install.sh
+    # "none" "vscode" "true" "5901" "6080"
+
+ENV DBUS_SESSION_BUS_ADDRESS="autolaunch:" \
+    VNC_RESOLUTION="1440x768x16" \
+    VNC_DPI="96" \
+    VNC_PORT="5901" \
+    NOVNC_PORT="6080" \
+    DISPLAY=":1" \
+    LANG="en_US.UTF-8" \
+    LANGUAGE="en_US.UTF-8"
+
+# Visual improvements and customizations
+RUN ln -s /etc/profile.d/vte-2.91.sh /etc/profile.d/vte.sh && \
+    echo "if [ \$TILIX_ID ] || [ \$VTE_VERSION ]; then source /etc/profile.d/vte.sh; fi" >> /root/.bashrc && \
+    sed -i 's|^session.styleFile:.*|session.styleFile: /usr/share/fluxbox/styles/ubuntu-dark|' /root/.fluxbox/init
+
+ENTRYPOINT ["/usr/local/share/desktop-init.sh"]
+
+
+
 COPY ros2_ws /ros2_ws
 
 # Configuration .bashrc

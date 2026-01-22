@@ -27,18 +27,26 @@ namespace multirobot_slam
 {
     struct TaskPlanningParams
     {
-        double alpha_distance;
-        double beta_dimension;
-        double conflict_penalty;
+        double w_distance = 0.4;
+        double w_orientation = 0.3;
+        double w_frontier_switch = 0.2;
+        double w_frontier_size = 0.2;
+
+        double conflict_penalty = 0.001;
 
         TaskPlanningParams(
-            double alpha_distance = 1.0,
-            double beta_dimension = 0.01,
+            double w_distance = 0.4,
+            double w_orientation = 0.2,
+            double w_frontier_switch = 0.2,
+            double w_frontier_size = 0.2,
             double conflict_penalty = 0.001)
-            : alpha_distance(alpha_distance),
-              beta_dimension(beta_dimension),
-              conflict_penalty(conflict_penalty){}
+            : w_distance(w_distance),
+            w_orientation(w_orientation),
+            w_frontier_switch(w_frontier_switch),
+            w_frontier_size(w_frontier_size),
+            conflict_penalty(conflict_penalty) {}
     };
+
 
 
     class TaskPlanning

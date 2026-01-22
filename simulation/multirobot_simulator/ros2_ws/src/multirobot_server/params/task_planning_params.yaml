@@ -1,3 +1,4 @@
-alpha_distance: 1.0
-beta_dimension: 0.01
-conflict_penalty: 0.001
+w_distance: 0.4
+w_orientation: 0.3
+w_frontier_switch: 0.2
+w_frontier_size: 0.2
