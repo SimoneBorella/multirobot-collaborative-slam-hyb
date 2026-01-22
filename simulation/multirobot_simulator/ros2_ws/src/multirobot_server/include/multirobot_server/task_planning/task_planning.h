@@ -49,6 +49,8 @@ namespace multirobot_slam
             w_orientation(w_orientation),
             w_frontier_switch(w_frontier_switch),
             w_frontier_size(w_frontier_size),
+            w_coverage(w_coverage),
+            coverage_scale(coverage_scale),
             conflict_penalty(conflict_penalty) {}
     };
 
