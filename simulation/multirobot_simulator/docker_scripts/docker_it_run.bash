@@ -44,15 +44,14 @@ done
 # DOCKERFILE_PATH="${DOCKERFILE_PATH%/*}/."
 
 
-# xhost local:docker
+xhost local:docker
 
-# XAUTH=/tmp/.docker.xauth
+XAUTH=/tmp/.docker.xauth
 
 
 docker run -it \
     --rm \
     --privileged \
-    --volume $DOCKERFILE_PATH/ros2_ws:/ros2_ws \
     --volume /dev/bus/usb:/dev/bus/usb \
     --net host \
     --ipc=host \
@@ -61,6 +60,7 @@ docker run -it \
     --volume /tmp/.X11-unix:/tmp/.X11-unix:rw \
     --env XAUTHORITY=$XAUTH \
     --env VNC_PASSWORD="vncpswd#" \
+    --volume $DOCKERFILE_PATH/ros2_ws:/ros2_ws \
     --name $IMAGE \
     --hostname $IMAGE \
     $IMAGE:$TAG \

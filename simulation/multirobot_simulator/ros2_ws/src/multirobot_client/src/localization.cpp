@@ -92,10 +92,10 @@ namespace multirobot_slam
                 p.sigma_gyroscope_noise_density = val;
             }
 
-            if (config["sigma_landmark_noise"])
+            if (config["sigma_keypoint_noise"])
             {
-                double val = config["sigma_landmark_noise"].as<double>();
-                p.sigma_landmark_noise = val;
+                double val = config["sigma_keypoint_noise"].as<double>();
+                p.sigma_keypoint_noise = val;
             }
 
             if (config["data_association_distance"])
@@ -182,14 +182,14 @@ namespace multirobot_slam
 
     }
 
-    void Localization::add_landmarks_measurement(LandmarksData &landmarks_data)
+    void Localization::add_keypoints_measurement(KeypointsData &keypoints_data)
     {
         std::lock_guard<std::mutex> lock(buffer_mutex_);
 
-        if (landmarks_data.points.size() == 0)
+        if (keypoints_data.keypoints.size() == 0)
             return;
 
-        landmarks_buffer_.push_back(landmarks_data);
+        keypoints_buffer_.push_back(keypoints_data);
     }
 
     State Localization::get_state()
@@ -344,7 +344,7 @@ namespace multirobot_slam
         // auto start = std::chrono::high_resolution_clock::now();
 
         std::deque<OdomData> odom_buffer;
-        std::deque<LandmarksData> landmarks_buffer;
+        std::deque<KeypointsData> keypoints_buffer;
 
         {
             std::lock_guard<std::mutex> lock(buffer_mutex_);
@@ -353,10 +353,10 @@ namespace multirobot_slam
                 return;
 
             odom_buffer = odom_buffer_;
-            landmarks_buffer = landmarks_buffer_;
+            keypoints_buffer = keypoints_buffer_;
 
             odom_buffer_.clear();
-            landmarks_buffer_.clear();
+            keypoints_buffer_.clear();
         }
 
         NonlinearFactorGraph new_factors;
@@ -405,50 +405,49 @@ namespace multirobot_slam
         // Marginals marginals = Marginals(isam_.getFactorsUnsafe(), estimates);
         Marginals marginals;
 
-        auto landmark_noise = noiseModel::Diagonal::Sigmas(
-            Vector3(params_.sigma_landmark_noise,
-                    params_.sigma_landmark_noise,
-                    params_.sigma_landmark_noise));
+        auto keypoint_noise = noiseModel::Diagonal::Sigmas(
+            Vector3(params_.sigma_keypoint_noise,
+                    params_.sigma_keypoint_noise,
+                    params_.sigma_keypoint_noise));
 
-        if (!landmarks_buffer.empty())
+        if (!keypoints_buffer.empty())
         {
-            LandmarksData landmarks = landmarks_buffer.back();
+            KeypointsData keypoints_data = keypoints_buffer.back();
 
-            double landmark_ts = landmarks.timestamp;
+            double keypoints_ts = keypoints_data.timestamp;
 
             Symbol prev_sym, next_sym;
             double prev_ts, next_ts;
-            if (!find_bounding_poses(landmark_ts, prev_sym, next_sym, prev_ts, next_ts))
+            if (!find_bounding_poses(keypoints_ts, prev_sym, next_sym, prev_ts, next_ts))
                 return;
 
             Pose3 prev_pose = isam_.calculateEstimate<Pose3>(prev_sym);
 
-            Pose3 landamrks_pose(
-                Rot3::Quaternion(landmarks.pose.orientation.w(), landmarks.pose.orientation.x(), landmarks.pose.orientation.y(), landmarks.pose.orientation.z()),
-                Point3(landmarks.pose.position.x(), landmarks.pose.position.y(), landmarks.pose.position.z()));
+            Pose3 keypoints_pose(
+                Rot3::Quaternion(keypoints_data.pose.orientation.w(), keypoints_data.pose.orientation.x(), keypoints_data.pose.orientation.y(), keypoints_data.pose.orientation.z()),
+                Point3(keypoints_data.pose.position.x(), keypoints_data.pose.position.y(), keypoints_data.pose.position.z()));
 
             Symbol k_curr('k', t_);
 
-            Pose3 delta_pose = prev_pose.between(landamrks_pose);
+            Pose3 delta_pose = prev_pose.between(keypoints_pose);
             auto strong_noise = noiseModel::Diagonal::Sigmas((Vector6() << 1e-4, 1e-4, 1e-4, 1e-6, 1e-6, 1e-6).finished());
 
             new_factors.add(BetweenFactor<Pose3>(prev_sym, k_curr, delta_pose, strong_noise));
-            new_estimates.insert(k_curr, landamrks_pose);
+            new_estimates.insert(k_curr, keypoints_pose);
 
-            for (const Eigen::Vector3d &point : landmarks.points)
+            for (const Keypoint &keypoint : keypoints_data.keypoints)
             {
-                Eigen::Vector3d point_map = landmarks.pose.orientation * point + landmarks.pose.position;
+                Eigen::Vector3d point_map = keypoints_data.pose.orientation * keypoint.point + keypoints_data.pose.position;
 
-                Point3 landmark_measurement(point.x(), point.y(), point.z());
-                Unit3 bearing(landmark_measurement);
-                double range = landmark_measurement.norm();
+                Point3 keypoint_measurement(keypoint.point.x(), keypoint.point.y(), keypoint.point.z());
+                Unit3 bearing(keypoint_measurement);
+                double range = keypoint_measurement.norm();
 
-                Point3 landmark_observation(point_map.x(), point_map.y(), point_map.z());
+                Point3 keypoint_observation(point_map.x(), point_map.y(), point_map.z());
 
                 // Data association
-                auto associations = probabilistic_data_association(landmark_observation, estimates, marginals);
-                // auto associations = nearest_neighbor_data_association(landmark_observation, estimates);
-
+                auto associations = probabilistic_data_association(keypoint_observation, estimates, marginals);
+                // auto associations = nearest_neighbor_data_association(keypoint_observation, estimates);
                 if (!associations.empty())
                 {
                     for (const auto &[associated_l, probability] : associations)
@@ -458,7 +457,7 @@ namespace multirobot_slam
                         auto scaled_noise = noiseModel::Robust::Create(
                             noiseModel::mEstimator::Huber::Create(1.345),
                             noiseModel::Diagonal::Sigmas(
-                                landmark_noise->sigmas() / std::sqrt(probability)));
+                                keypoint_noise->sigmas() / std::sqrt(probability)));
 
                         new_factors.add(BearingRangeFactor<Pose3, Point3>(k_curr, associated_l, bearing, range, scaled_noise));
                     }
@@ -466,12 +465,12 @@ namespace multirobot_slam
                 else
                 {
                     Symbol l('l', landmark_id_++);
-                    new_estimates.insert(l, landmark_observation);
+                    new_estimates.insert(l, keypoint_observation);
                     landmark_symbols_.push_back(l);
 
                     auto huber_noise = noiseModel::Robust::Create(
                         noiseModel::mEstimator::Huber::Create(1.345),
-                        landmark_noise);
+                        keypoint_noise);
 
                     new_factors.add(BearingRangeFactor<Pose3, Point3>(k_curr, l, bearing, range, huber_noise));
                 }

@@ -41,7 +41,7 @@ namespace multirobot_slam
         double sigma_odom_orientation_noise;
         double sigma_accelerometer_noise_density;  // (m/s^2)/sqrt(s)
         double sigma_gyroscope_noise_density;      // (rad/s)/sqrt(s)
-        double sigma_landmark_noise;
+        double sigma_keypoint_noise;
         double data_association_distance;
 
         LocalizationParams(
@@ -54,7 +54,7 @@ namespace multirobot_slam
             double sigma_odom_orientation_noise = 0.01,
             double sigma_accelerometer_noise_density = 1e-3,
             double sigma_gyroscope_noise_density = 1e-3,
-            double sigma_landmark_noise = 0.1,
+            double sigma_keypoint_noise = 0.1,
             double data_association_distance = 0.2)
             : localization_rate(localization_rate),
               init_position(init_position),
@@ -65,7 +65,7 @@ namespace multirobot_slam
               sigma_odom_orientation_noise(sigma_odom_orientation_noise),
               sigma_accelerometer_noise_density(sigma_accelerometer_noise_density),
               sigma_gyroscope_noise_density(sigma_gyroscope_noise_density),
-              sigma_landmark_noise(sigma_landmark_noise),
+              sigma_keypoint_noise(sigma_keypoint_noise),
               data_association_distance(data_association_distance) {}
     };
 
@@ -82,7 +82,7 @@ namespace multirobot_slam
         void start();
         void add_odom_measurement(OdomData &odom_data);
         void add_imu_measurement(ImuData &imu_data);
-        void add_landmarks_measurement(LandmarksData &landmarks_data);
+        void add_keypoints_measurement(KeypointsData &keypoints_data);
         State get_state();
         std::optional<State> get_state_if_updated();
         
@@ -100,7 +100,7 @@ namespace multirobot_slam
 
         std::deque<OdomData> odom_buffer_;
         std::deque<ImuData> imu_buffer_;
-        std::deque<LandmarksData> landmarks_buffer_;
+        std::deque<KeypointsData> keypoints_buffer_;
         std::mutex buffer_mutex_;
 
         bool odom_first_;

@@ -411,28 +411,27 @@ private:
 
     void keypoints_callback(const interfaces::msg::KeyPointArray::ConstSharedPtr msg)
     {
-        LandmarksData landmarks_data;
+        KeypointsData keypoints_data;
         
-        landmarks_data.timestamp = msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
+        keypoints_data.timestamp = msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
 
-        const rclcpp::Time landmarks_time = msg->header.stamp;
+        const rclcpp::Time keypoints_time = msg->header.stamp;
 
-        geometry_msgs::msg::TransformStamped base_to_landmarks =
+        geometry_msgs::msg::TransformStamped base_to_keypoints =
             tf_buffer_->lookupTransform(
                 base_frame_,
                 msg->header.frame_id,
-                landmarks_time
+                keypoints_time
             );
 
-        tf2::Transform T_base_to_landmarks;
-        tf2::fromMsg(base_to_landmarks.transform, T_base_to_landmarks);
-
+        tf2::Transform T_base_to_keypoints;
+        tf2::fromMsg(base_to_keypoints.transform, T_base_to_keypoints);
         for (const auto &p : msg->keypoints)
         {
             tf2::Vector3 p_landmark(p.point.x, p.point.y, p.point.z);
-            tf2::Vector3 p_base = T_base_to_landmarks * p_landmark;
+            tf2::Vector3 p_base = T_base_to_keypoints * p_landmark;
 
-            landmarks_data.points.emplace_back(p_base.x(), p_base.y(), p_base.z());
+            keypoints_data.keypoints.emplace_back(Eigen::Vector3d(p_base.x(), p_base.y(), p_base.z()), p.descriptor);
         }
 
 
@@ -441,21 +440,21 @@ private:
             tf_buffer_->lookupTransform(
                 map_frame_,
                 base_frame_,
-                landmarks_time
+                keypoints_time
             );
         
-        landmarks_data.pose.position = Eigen::Vector3d(
+        keypoints_data.pose.position = Eigen::Vector3d(
             map_to_base.transform.translation.x,
             map_to_base.transform.translation.y,
             map_to_base.transform.translation.z);
 
-        landmarks_data.pose.orientation = Eigen::Quaterniond(
+        keypoints_data.pose.orientation = Eigen::Quaterniond(
             map_to_base.transform.rotation.w,
             map_to_base.transform.rotation.x,
             map_to_base.transform.rotation.y,
             map_to_base.transform.rotation.z);
 
-        localization_.add_landmarks_measurement(landmarks_data);
+        localization_.add_keypoints_measurement(keypoints_data);
     }
 
     

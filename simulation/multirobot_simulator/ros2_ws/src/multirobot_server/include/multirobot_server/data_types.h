@@ -96,28 +96,45 @@ namespace multirobot_slam
               orientation(orientation) {}
     };
 
-    struct LandmarksData
+    struct Keypoint
+    {
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+        Eigen::Vector3d point;
+        std::array<uint8_t, 32> descriptor;
+
+        Keypoint()
+            : point(Eigen::Vector3d::Zero()),
+              descriptor(std::array<uint8_t, 32>()) {}
+        Keypoint(const Eigen::Vector3d &point,
+                 const std::array<uint8_t, 32> &descriptor)
+            : point(point),
+              descriptor(descriptor) {}
+    };
+
+    struct KeypointsData
     {
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
         double timestamp;
         std::vector<
-            Eigen::Vector3d,
-            Eigen::aligned_allocator<Eigen::Vector3d>>
-            points;
+            Keypoint,
+            Eigen::aligned_allocator<Keypoint>>
+            keypoints;
         Pose pose;
 
-        LandmarksData()
+        KeypointsData()
             : timestamp(0.0),
-              points() {}
+              keypoints(),
+              pose() {}
 
-        LandmarksData(double timestamp,
+        KeypointsData(double timestamp,
                       const std::vector<
-                          Eigen::Vector3d,
-                          Eigen::aligned_allocator<Eigen::Vector3d>> &points,
-                      Pose pose)
+                          Keypoint,
+                          Eigen::aligned_allocator<Keypoint>> &keypoints,
+                      const Pose &pose)
             : timestamp(timestamp),
-              points(points),
+              keypoints(keypoints),
               pose(pose) {}
     };
 
