@@ -29,7 +29,7 @@
 #include "interfaces/msg/frontier.hpp"
 #include "interfaces/msg/frontier_array.hpp"
 
-#include "localization.h"
+#include "slam.h"
 #include "mapping.h"
 
 
@@ -146,19 +146,19 @@ public:
     {
         std::string package_dir = ament_index_cpp::get_package_share_directory("multirobot_client");
 
-        std::string localization_params_path = package_dir + "/params/localization_params.yaml";
-        LocalizationParams localization_params = Localization::params_from_yaml(localization_params_path);
+        std::string slam_params_path = package_dir + "/params/slam_params.yaml";
+        SLAMParams slam_params = SLAM::params_from_yaml(slam_params_path);
 
         std::string mapping_params_path = package_dir + "/params/mapping_params.yaml";
         MappingParams mapping_params = Mapping::params_from_yaml(mapping_params_path);
 
-        localization_.init(localization_params);
-        std::cout << "[Client " << ns_ << "]: " << "Localization initialized." << std::endl;
+        slam_.init(slam_params);
+        std::cout << "[Client " << ns_ << "]: " << "SLAM initialized." << std::endl;
         mapping_.init(mapping_params);
         std::cout << "[Client " << ns_ << "]: " << "Mapping initialized." << std::endl;
 
-        localization_.start();
-        std::cout << "[Client " << ns_ << "]: " << "Localization started." << std::endl;
+        slam_.start();
+        std::cout << "[Client " << ns_ << "]: " << "SLAM started." << std::endl;
         mapping_.start();
         std::cout << "[Client " << ns_ << "]: " << "Mapping started." << std::endl;
     }
@@ -389,7 +389,7 @@ private:
 
         // std::cout << "[Client " << ns_ << "] IMU Linear acceleration: (x: " << msg->linear_acceleration.x << ", y: " << msg->linear_acceleration.y << ", z: " << msg->linear_acceleration.z << ")" << std::endl;
         // std::cout << "[Client " << ns_ << "] IMU Angular velocity: (x: " << msg->angular_velocity.x << ", y: " << msg->angular_velocity.y << ", z: " << msg->angular_velocity.z << ")" << std::endl;
-        localization_.add_imu_measurement(imu_data);
+        slam_.add_imu(imu_data);
     }
 
     void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
@@ -406,7 +406,7 @@ private:
             msg->pose.pose.orientation.y,
             msg->pose.pose.orientation.z);
 
-        localization_.add_odom_measurement(odom_data);
+        slam_.add_odom(odom_data);
     }
 
     void keypoints_callback(const interfaces::msg::KeyPointArray::ConstSharedPtr msg)
@@ -454,7 +454,7 @@ private:
             map_to_base.transform.rotation.y,
             map_to_base.transform.rotation.z);
 
-        localization_.add_keypoints_measurement(keypoints_data);
+        slam_.add_keypoints(keypoints_data);
     }
 
     
@@ -499,7 +499,7 @@ private:
 
     void timer_callback()
     {
-        const State &state = localization_.get_state();
+        const State &state = slam_.get_state();
         publish_map_to_odom(state);        
 
         const std::optional<MapLogOddsUpdate> &map_log_odds_update = mapping_.get_map_log_odds_update();
@@ -536,7 +536,7 @@ private:
     std::string odom_frame_;
     std::string base_frame_;
 
-    Localization localization_;
+    SLAM slam_;
     Mapping mapping_;
 
     rclcpp::TimerBase::SharedPtr timer_;

@@ -32,52 +32,54 @@ RUN mkdir build \
     && make install -j$(nproc)\
     && ldconfig
 
-
-
+# OpenCV dependencies
+RUN apt -y update && \
+    apt install -y --no-install-recommends \
+        libgtk2.0-dev \
+        pkg-config \
+        libavcodec-dev \
+        libavformat-dev \
+        libswscale-dev \
+        libtbbmalloc2 libtbb-dev \
+        libjpeg-dev \
+        libpng-dev \
+        libtiff-dev && \
+    rm -rf /var/lib/apt/lists/*
 
 # OpenCV
-# RUN apt -y update \
-#     && apt install -y libgtk2.0-dev \
-#     && apt install -y pkg-config \
-#     && apt install -y libavcodec-dev \
-#     && apt install -y libavformat-dev \
-#     && apt install -y libswscale-dev \
-#     && apt install -y libtbb2 libtbb-dev \
-#     && apt install -y libjpeg-dev \
-#     && apt install -y libpng-dev \
-#     && apt install -y libtiff-dev
+COPY dep/opencv /dep/opencv
+COPY dep/opencv_contrib /dep/opencv_contrib
 
-# COPY dep/opencv /dep/opencv
-# COPY dep/opencv_contrib /dep/opencv_contrib
-
-# WORKDIR /dep/opencv
-# RUN mkdir build \
-#     && cd build \
-#     && cmake -D CMAKE_BUILD_TYPE=RELEASE \
-#     -D CMAKE_INSTALL_PREFIX=/usr/local/opencv3 \
-#     -D INSTALL_C_EXAMPLES=OFF \
-#     -D INSTALL_PYTHON_EXAMPLES=OFF \
-#     -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules \
-#     -D BUILD_EXAMPLES=OFF .. \
-#     && make install -j$(nproc) \
-#     && ldconfig
-
-
-
-# FLANN library
-COPY dep/flann /dep/flann
-WORKDIR /dep/flann
+WORKDIR /dep/opencv
 RUN mkdir build \
     && cd build \
-    && cmake .. \
+    && cmake -D CMAKE_BUILD_TYPE=RELEASE \
+    -D CMAKE_INSTALL_PREFIX=/usr/local/opencv3 \
+    -D INSTALL_C_EXAMPLES=OFF \
+    -D INSTALL_PYTHON_EXAMPLES=OFF \
+    -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules \
+    -D BUILD_EXAMPLES=OFF .. \
     && make install -j$(nproc) \
     && ldconfig
 
+# DBoW3
+COPY dep/DBoW3 /dep/DBoW3
 
-# RUN apt -y update \
-#     && apt install -y libunwind-dev \
-#     && apt install -y libgoogle-glog-dev
+WORKDIR /dep/DBoW3
+RUN mkdir build \
+    && cd build \
+    && cmake .. \
+       -DCMAKE_BUILD_TYPE=Release \
+       -DBUILD_SHARED_LIBS=ON \
+       -DBUILD_UTILS=OFF \
+       -DBUILD_TESTS=OFF \
+    && make -j$(nproc) \
+    && make install \
+    && ldconfig
 
+
+RUN mkdir -p /opt/vocabularies \
+    && cp /dep/DBoW3/orbvoc.dbow3 /opt/vocabularies/orbvoc.dbow3
 
 
 # Python
@@ -86,9 +88,6 @@ RUN apt -y update \
 
 # Python packages
 # RUN pip install <package> --break-system-packages
-
-
-
 
 
 # Remote desktop lite vnc novnc
@@ -114,15 +113,15 @@ RUN ln -s /etc/profile.d/vte-2.91.sh /etc/profile.d/vte.sh && \
     sed -i 's|^session.styleFile:.*|session.styleFile: /usr/share/fluxbox/styles/ubuntu-dark|' /root/.fluxbox/init
 
 
-
-
-
 COPY ros2_ws /ros2_ws
 
 # Configuration .bashrc
 
 RUN echo "# Set alias to run script for remote desktop" >> /root/.bashrc \
     && echo "alias remote-desktop-lite='bash /usr/local/share/desktop-init.sh'" >> /root/.bashrc
+
+RUN echo "# Set OpenCV library path" >> /root/.bashrc \
+    && echo "export LD_LIBRARY_PATH=/usr/local/opencv3/lib:\$LD_LIBRARY_PATH" >> /root/.bashrc
 
 RUN echo "# Set default XDG_RUNTIME_DIR" >> /root/.bashrc \
     && echo "export XDG_RUNTIME_DIR=/tmp/runtime-root" >> /root/.bashrc

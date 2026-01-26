@@ -10,3 +10,9 @@
 [submodule "simulation/multirobot_simulator/dep/flann"]
 	path = simulation/multirobot_simulator/dep/flann
 	url = git@github.com:flann-lib/flann.git
+[submodule "simulation/multirobot_simulator/dep/DBoW2"]
+	path = simulation/multirobot_simulator/dep/DBoW2
+	url = git@github.com:dorian3d/DBoW2.git
+[submodule "simulation/multirobot_simulator/dep/DBoW3"]
+	path = simulation/multirobot_simulator/dep/DBoW3
+	url = https://github.com/rmsalinas/DBow3.git

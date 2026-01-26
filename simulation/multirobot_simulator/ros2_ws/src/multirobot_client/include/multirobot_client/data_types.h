@@ -12,9 +12,12 @@ namespace multirobot_slam
         Eigen::Vector3d position;
         Eigen::Quaterniond orientation;
 
-        Pose()
-            : position(),
-              orientation() {}
+        Pose() = default;
+
+        Pose(Eigen::Vector3d position,
+             Eigen::Quaterniond orientation)
+            : position(position),
+              orientation(orientation) {}
     };
 
     struct ImuData
@@ -103,9 +106,8 @@ namespace multirobot_slam
         Eigen::Vector3d point;
         std::array<uint8_t, 32> descriptor;
 
-        Keypoint()
-            : point(Eigen::Vector3d::Zero()),
-              descriptor(std::array<uint8_t, 32>()) {}
+        Keypoint() = default;
+
         Keypoint(const Eigen::Vector3d &point,
                  const std::array<uint8_t, 32> &descriptor)
             : point(point),
@@ -117,26 +119,52 @@ namespace multirobot_slam
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
         double timestamp;
-        std::vector<
-            Keypoint,
-            Eigen::aligned_allocator<Keypoint>>
-            keypoints;
+        std::vector<Keypoint, Eigen::aligned_allocator<Keypoint>> keypoints;
         Pose pose;
 
-        KeypointsData()
-            : timestamp(0.0),
-              keypoints(),
-              pose() {}
+        KeypointsData() = default;
 
         KeypointsData(double timestamp,
-                      const std::vector<
-                          Keypoint,
-                          Eigen::aligned_allocator<Keypoint>> &keypoints,
+                      const std::vector<Keypoint, Eigen::aligned_allocator<Keypoint>> &keypoints,
                       const Pose &pose)
             : timestamp(timestamp),
               keypoints(keypoints),
               pose(pose) {}
     };
+
+    struct KeyFrame
+    {
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+        double timestamp;
+        int keyframe_id;
+        std::pair<char, int> pose_symbol;
+        Pose pose;
+        std::vector<Keypoint, Eigen::aligned_allocator<Keypoint>> keypoints;
+        bool is_active = false;
+
+        KeyFrame(double timestamp = 0.0,
+                 int keyframe_id = -1,
+                 const std::pair<char, int> &pose_symbol = std::pair<char, int>('x', -1),
+                 const Pose &pose = Pose(),
+                 const std::vector<Keypoint, Eigen::aligned_allocator<Keypoint>> &keypoints = std::vector<Keypoint, Eigen::aligned_allocator<Keypoint>>(),
+                 bool is_active = false)
+            : timestamp(timestamp),
+              keyframe_id(keyframe_id),
+              pose_symbol(pose_symbol),
+              pose(pose),
+              keypoints(keypoints),
+              is_active(is_active) {}
+    };
+
+    struct LoopClosureConstraint
+    {
+        size_t keyframe_i;
+        size_t keyframe_j;
+        Pose transform_pose;
+        double score;
+    };
+
 
     struct State
     {

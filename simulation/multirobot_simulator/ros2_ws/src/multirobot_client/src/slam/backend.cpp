@@ -1,106 +1,110 @@
-#include "localization.h"
+#include "backend.h"
 
 namespace multirobot_slam
 {
-    Localization::Localization()
-        : t_(0), odom_first_(true), imu_timestamp_prev_(0.0), max_timestamped_pose_queue_duration_(5.0), landmark_id_(0), state_updated_(false), localization_thread_running_(false)
+    Backend::Backend()
+        : t_(0), odom_first_(true), imu_timestamp_prev_(0.0), max_timestamped_pose_queue_duration_(5.0), landmark_id_(0), state_updated_(false)
     {
     }
 
-    Localization::Localization(LocalizationParams &params)
-        : params_(params), t_(0), odom_first_(true), imu_timestamp_prev_(0.0), max_timestamped_pose_queue_duration_(5.0), landmark_id_(0), state_updated_(false), localization_thread_running_(false)
+    Backend::Backend(BackendParams &params)
+        : params_(params), t_(0), odom_first_(true), imu_timestamp_prev_(0.0), max_timestamped_pose_queue_duration_(5.0), landmark_id_(0), state_updated_(false)
     {
     }
 
-    Localization::~Localization()
+    BackendParams Backend::params_from_yaml(std::string &params_path)
     {
-        localization_thread_running_.store(false);
-        if (localization_thread_.joinable())
-        {
-            localization_thread_.join();
-        }
-    }
-
-    LocalizationParams Localization::params_from_yaml(std::string &params_path)
-    {
-        LocalizationParams p;
+        BackendParams p;
 
         try
         {
             YAML::Node config = YAML::LoadFile(params_path);
+            YAML::Node backend_config = config["backend"];
 
-            if (config["localization_rate"])
-                p.localization_rate = config["localization_rate"].as<double>();
+            if (backend_config["backend_rate"])
+                p.backend_rate = backend_config["backend_rate"].as<double>();
 
-            if (config["init_position"])
+            if (backend_config["init_position"])
             {
-                std::vector<double> vec = config["init_position"].as<std::vector<double>>();
+                std::vector<double> vec = backend_config["init_position"].as<std::vector<double>>();
                 if (vec.size() == 6)
                     p.init_position = Eigen::Map<Eigen::Matrix<double, 6, 1>>(vec.data());
                 else
                     std::cerr << "Param init_position must have 6 elements, ignoring.\n";
             }
 
-            if (config["init_velocity"])
+            if (backend_config["init_velocity"])
             {
-                std::vector<double> vec = config["init_velocity"].as<std::vector<double>>();
+                std::vector<double> vec = backend_config["init_velocity"].as<std::vector<double>>();
                 if (vec.size() == 3)
                     p.init_velocity = Eigen::Map<Eigen::Vector3d>(vec.data());
                 else
                     std::cerr << "Param init_velocity must have 3 elements, ignoring.\n";
             }
 
-            if (config["init_accelerometer_bias"])
+            if (backend_config["init_accelerometer_bias"])
             {
-                std::vector<double> vec = config["init_accelerometer_bias"].as<std::vector<double>>();
+                std::vector<double> vec = backend_config["init_accelerometer_bias"].as<std::vector<double>>();
                 if (vec.size() == 3)
                     p.init_accelerometer_bias = Eigen::Map<Eigen::Vector3d>(vec.data());
                 else
                     std::cerr << "Param init_accelerometer_bias must have 3 elements, ignoring.\n";
             }
 
-            if (config["init_gyroscope_bias"])
+            if (backend_config["init_gyroscope_bias"])
             {
-                std::vector<double> vec = config["init_gyroscope_bias"].as<std::vector<double>>();
+                std::vector<double> vec = backend_config["init_gyroscope_bias"].as<std::vector<double>>();
                 if (vec.size() == 3)
                     p.init_gyroscope_bias = Eigen::Map<Eigen::Vector3d>(vec.data());
                 else
                     std::cerr << "Param init_gyroscope_bias must have 3 elements, ignoring.\n";
             }
 
-            if (config["sigma_odom_position_noise"])
+            if (backend_config["sigma_odom_position_noise"])
             {
-                double val = config["sigma_odom_position_noise"].as<double>();
+                double val = backend_config["sigma_odom_position_noise"].as<double>();
                 p.sigma_odom_position_noise = val;
             }
 
-            if (config["sigma_odom_orientation_noise"])
+            if (backend_config["sigma_odom_orientation_noise"])
             {
-                double val = config["sigma_odom_orientation_noise"].as<double>();
+                double val = backend_config["sigma_odom_orientation_noise"].as<double>();
                 p.sigma_odom_orientation_noise = val;
             }
 
-            if (config["sigma_accelerometer_noise_density"])
+            if (backend_config["sigma_loop_closure_position_noise"])
             {
-                double val = config["sigma_accelerometer_noise_density"].as<double>();
+                double val = backend_config["sigma_loop_closure_position_noise"].as<double>();
+                p.sigma_loop_closure_position_noise = val;
+            }
+
+            if (backend_config["sigma_loop_closure_orientation_noise"])
+            {
+                double val = backend_config["sigma_loop_closure_orientation_noise"].as<double>();
+                p.sigma_loop_closure_orientation_noise = val;
+            }
+
+            if (backend_config["sigma_accelerometer_noise_density"])
+            {
+                double val = backend_config["sigma_accelerometer_noise_density"].as<double>();
                 p.sigma_accelerometer_noise_density = val;
             }
 
-            if (config["sigma_gyroscope_noise_density"])
+            if (backend_config["sigma_gyroscope_noise_density"])
             {
-                double val = config["sigma_gyroscope_noise_density"].as<double>();
+                double val = backend_config["sigma_gyroscope_noise_density"].as<double>();
                 p.sigma_gyroscope_noise_density = val;
             }
 
-            if (config["sigma_keypoint_noise"])
+            if (backend_config["sigma_keypoint_noise"])
             {
-                double val = config["sigma_keypoint_noise"].as<double>();
+                double val = backend_config["sigma_keypoint_noise"].as<double>();
                 p.sigma_keypoint_noise = val;
             }
 
-            if (config["data_association_distance"])
+            if (backend_config["data_association_distance"])
             {
-                double val = config["data_association_distance"].as<double>();
+                double val = backend_config["data_association_distance"].as<double>();
                 p.data_association_distance = val;
             }
         }
@@ -113,7 +117,7 @@ namespace multirobot_slam
         return p;
     }
 
-    void Localization::init(LocalizationParams &params)
+    void Backend::init(BackendParams &params)
     {
         params_ = params;
 
@@ -129,6 +133,23 @@ namespace multirobot_slam
         NonlinearFactorGraph new_factors;
         Values new_init_estimates;
 
+        // Noises
+        odom_noise_ = noiseModel::Diagonal::Sigmas(
+            (Vector6() << params_.sigma_odom_position_noise,
+                params_.sigma_odom_position_noise,
+                params_.sigma_odom_position_noise,
+                params_.sigma_odom_orientation_noise,
+                params_.sigma_odom_orientation_noise,
+                params_.sigma_odom_orientation_noise).finished());
+
+        loop_closure_noise_ = noiseModel::Diagonal::Sigmas(
+            (Vector6() << params_.sigma_loop_closure_position_noise,
+                params_.sigma_loop_closure_position_noise,
+                params_.sigma_loop_closure_position_noise,
+                params_.sigma_loop_closure_orientation_noise,
+                params_.sigma_loop_closure_orientation_noise,
+                params_.sigma_loop_closure_orientation_noise).finished());
+
         // Pose prior
         Symbol x0('x', 0);
         Pose3 init_pose(
@@ -140,7 +161,10 @@ namespace multirobot_slam
         new_init_estimates.insert(x0, init_pose);
 
         // Update new factors
-        isam_.update(new_factors, new_init_estimates);
+        {
+            std::lock_guard<std::mutex> lock(isam_mutex_);
+            isam_.update(new_factors, new_init_estimates);
+        }
 
         // Initial estimates
         pose_estimate_ = init_pose;
@@ -148,41 +172,18 @@ namespace multirobot_slam
         t_ = 1;
     }
 
-    void Localization::start()
-    {
-        if (localization_thread_running_)
-            return;
-
-        localization_thread_running_.store(true);
-
-        localization_thread_ = std::thread([this]()
-                                           {
-                auto period = std::chrono::milliseconds(
-                    static_cast<int>(1000.0 / params_.localization_rate));
-
-                auto next_time = std::chrono::steady_clock::now() + period;
-
-                while (localization_thread_running_.load())
-                {
-                    localization();
-
-                    std::this_thread::sleep_until(next_time);
-                    next_time += period;
-                } });
-    }
-
-    void Localization::add_odom_measurement(OdomData &odom_data)
+    void Backend::add_odom(OdomData &odom_data)
     {
         std::lock_guard<std::mutex> lock(buffer_mutex_);
         odom_buffer_.push_back(odom_data);
     }
 
-    void Localization::add_imu_measurement(ImuData &imu_data)
+    void Backend::add_imu(ImuData &imu_data)
     {
 
     }
 
-    void Localization::add_keypoints_measurement(KeypointsData &keypoints_data)
+    void Backend::add_keypoints(KeypointsData &keypoints_data)
     {
         std::lock_guard<std::mutex> lock(buffer_mutex_);
 
@@ -192,12 +193,12 @@ namespace multirobot_slam
         keypoints_buffer_.push_back(keypoints_data);
     }
 
-    State Localization::get_state()
+    State Backend::get_state()
     {
         return state_;
     }
 
-    std::optional<State> Localization::get_state_if_updated()
+    std::optional<State> Backend::get_state_if_updated()
     {
         if (state_updated_)
         {
@@ -210,7 +211,13 @@ namespace multirobot_slam
         }
     }
 
-    std::vector<std::pair<Symbol, double>> Localization::nearest_neighbor_data_association(const Point3 &observed_point, const Values &estimates)
+    std::vector<KeyFrame> Backend::get_keyframes()
+    {
+        std::lock_guard<std::mutex> lock(keyframes_mutex_);
+        return keyframes_;
+    }
+
+    std::vector<std::pair<Symbol, double>> Backend::nearest_neighbor_data_association(const Point3 &observed_point, const Values &estimates)
     {
         std::vector<std::pair<Symbol, double>> results;
 
@@ -240,7 +247,7 @@ namespace multirobot_slam
         return results;
     }
 
-    std::vector<std::pair<Symbol, double>> Localization::probabilistic_data_association(const Point3 &observed_point, const Values &estimates, const Marginals &marginals)
+    std::vector<std::pair<Symbol, double>> Backend::probabilistic_data_association(const Point3 &observed_point, const Values &estimates, const Marginals &marginals)
     {
         std::vector<std::pair<Symbol, double>> results;
 
@@ -313,7 +320,7 @@ namespace multirobot_slam
         return results;
     }
 
-    bool Localization::find_bounding_poses(double landmark_ts, Symbol &prev_sym, Symbol &next_sym, double &prev_ts, double &next_ts)
+    bool Backend::find_bounding_poses(double landmark_ts, Symbol &prev_sym, Symbol &next_sym, double &prev_ts, double &next_ts)
     {
         if (timestamped_pose_queue_.size() < 2)
             return false;
@@ -339,7 +346,7 @@ namespace multirobot_slam
         return true;
     }
 
-    void Localization::localization()
+    void Backend::optimize()
     {
         // auto start = std::chrono::high_resolution_clock::now();
 
@@ -381,16 +388,7 @@ namespace multirobot_slam
         else
         {
             Pose3 delta_odom = last_odom_pose_.between(odom_pose);
-            auto odom_noise = noiseModel::Diagonal::Sigmas(
-                (Vector6() << params_.sigma_odom_position_noise,
-                 params_.sigma_odom_position_noise,
-                 params_.sigma_odom_position_noise,
-                 params_.sigma_odom_orientation_noise,
-                 params_.sigma_odom_orientation_noise,
-                 params_.sigma_odom_orientation_noise)
-                    .finished());
-
-            new_factors.add(BetweenFactor<Pose3>(x_prev, x_curr, delta_odom, odom_noise));
+            new_factors.add(BetweenFactor<Pose3>(x_prev, x_curr, delta_odom, odom_noise_));
             new_estimates.insert(x_curr, pose_estimate_ * delta_odom);
             last_odom_pose_ = odom_pose;
         }
@@ -401,10 +399,15 @@ namespace multirobot_slam
 
 
         // Landmarks factors
-        Values estimates = isam_.calculateEstimate();
-        // Marginals marginals = Marginals(isam_.getFactorsUnsafe(), estimates);
+        Values estimates;
         Marginals marginals;
+        {
+            std::lock_guard<std::mutex> lock(isam_mutex_);
+            estimates = isam_.calculateEstimate();
+            // marginals = Marginals(isam_.getFactorsUnsafe(), estimates);
+        }
 
+        
         auto keypoint_noise = noiseModel::Diagonal::Sigmas(
             Vector3(params_.sigma_keypoint_noise,
                     params_.sigma_keypoint_noise,
@@ -421,25 +424,29 @@ namespace multirobot_slam
             if (!find_bounding_poses(keypoints_ts, prev_sym, next_sym, prev_ts, next_ts))
                 return;
 
-            Pose3 prev_pose = isam_.calculateEstimate<Pose3>(prev_sym);
+            Pose3 prev_pose = estimates.at<Pose3>(prev_sym);
 
             Pose3 keypoints_pose(
                 Rot3::Quaternion(keypoints_data.pose.orientation.w(), keypoints_data.pose.orientation.x(), keypoints_data.pose.orientation.y(), keypoints_data.pose.orientation.z()),
                 Point3(keypoints_data.pose.position.x(), keypoints_data.pose.position.y(), keypoints_data.pose.position.z()));
 
-            Symbol k_curr('k', t_);
-
             Pose3 delta_pose = prev_pose.between(keypoints_pose);
-            auto strong_noise = noiseModel::Diagonal::Sigmas((Vector6() << 1e-4, 1e-4, 1e-4, 1e-6, 1e-6, 1e-6).finished());
 
-            new_factors.add(BetweenFactor<Pose3>(prev_sym, k_curr, delta_pose, strong_noise));
-            new_estimates.insert(k_curr, keypoints_pose);
+            std::vector<Keypoint, Eigen::aligned_allocator<Keypoint>> transformed_keypoints;
 
             for (const Keypoint &keypoint : keypoints_data.keypoints)
             {
                 Eigen::Vector3d point_map = keypoints_data.pose.orientation * keypoint.point + keypoints_data.pose.position;
 
                 Point3 keypoint_measurement(keypoint.point.x(), keypoint.point.y(), keypoint.point.z());
+                keypoint_measurement = delta_pose.transformFrom(keypoint_measurement);
+
+                // Update transformed keypoints for keyframe storage
+                Keypoint kp = keypoint;
+                kp.point = keypoint_measurement;
+                transformed_keypoints.push_back(kp);
+
+
                 Unit3 bearing(keypoint_measurement);
                 double range = keypoint_measurement.norm();
 
@@ -459,7 +466,7 @@ namespace multirobot_slam
                             noiseModel::Diagonal::Sigmas(
                                 keypoint_noise->sigmas() / std::sqrt(probability)));
 
-                        new_factors.add(BearingRangeFactor<Pose3, Point3>(k_curr, associated_l, bearing, range, scaled_noise));
+                        new_factors.add(BearingRangeFactor<Pose3, Point3>(prev_sym, associated_l, bearing, range, scaled_noise));
                     }
                 }
                 else
@@ -472,7 +479,51 @@ namespace multirobot_slam
                         noiseModel::mEstimator::Huber::Create(1.345),
                         keypoint_noise);
 
-                    new_factors.add(BearingRangeFactor<Pose3, Point3>(k_curr, l, bearing, range, huber_noise));
+                    new_factors.add(BearingRangeFactor<Pose3, Point3>(prev_sym, l, bearing, range, huber_noise));
+                }
+            }
+
+
+
+            // Keyframes management
+            Symbol pose_symbol = prev_sym;
+            Eigen::Vector3d pose_position = Eigen::Vector3d(prev_pose.x(), prev_pose.y(), prev_pose.z());
+            Eigen::Quaterniond pose_orientation = Eigen::Quaterniond(
+                prev_pose.rotation().toQuaternion().w(),
+                prev_pose.rotation().toQuaternion().x(),
+                prev_pose.rotation().toQuaternion().y(),
+                prev_pose.rotation().toQuaternion().z());
+
+            {
+                std::lock_guard<std::mutex> lock(keyframes_mutex_);
+
+                if(keyframes_.empty())
+                {
+                    KeyFrame keyframe;
+                    keyframe.timestamp = ts;
+                    keyframe.keyframe_id = 0;
+                    keyframe.pose_symbol = std::make_pair(pose_symbol.chr(), pose_symbol.index());
+                    keyframe.pose = Pose(pose_position, pose_orientation);
+                    keyframe.keypoints = transformed_keypoints;
+                    keyframe.is_active = true;
+                    keyframes_.push_back(keyframe);
+                }
+    
+                KeyFrame &last_keyframe = keyframes_.back();
+                double dist_since_last_keyframe = (pose_position - last_keyframe.pose.position).norm();
+    
+                if (dist_since_last_keyframe > 0.5)
+                {
+                    KeyFrame keyframe;
+                    keyframe.timestamp = ts;
+                    keyframe.keyframe_id = last_keyframe.keyframe_id + 1;
+                    keyframe.pose_symbol = std::make_pair(pose_symbol.chr(), pose_symbol.index());
+                    keyframe.pose = Pose(pose_position, pose_orientation);
+                    keyframe.keypoints = transformed_keypoints;
+                    keyframe.is_active = true;
+                    keyframes_.push_back(keyframe);
+    
+                    last_keyframe.is_active = false;
                 }
             }
         }
@@ -492,25 +543,27 @@ namespace multirobot_slam
         }
 
         // Update ISAM2
-        isam_.update(new_factors, new_estimates);
+        {
+            std::lock_guard<std::mutex> lock(isam_mutex_);
+            isam_.update(new_factors, new_estimates);
+            pose_estimate_ = isam_.calculateEstimate<Pose3>(x_curr);
+        }
 
-        // Compute current estimate
-        pose_estimate_ = isam_.calculateEstimate<Pose3>(x_curr);
-
+        // Update current state estimate
         state_.timestamp = odom.timestamp;
         state_.position = pose_estimate_.translation();
         state_.attitude = Eigen::Quaterniond(pose_estimate_.rotation().matrix());
 
         state_updated_ = true;
+
         
         // Update discrete time
         t_++;
 
 
-
-
         // if (t_%100 == 0)
         // {
+        //     std::lock_guard<std::mutex> lock(isam_mutex_);
         //     Values isam_estimates = isam_.calculateEstimate();
         //     std::cout << "Saving ISAM2 graph " << t_ << std::endl;
         //     // Marginals isam_marginals(isam_.getFactorsUnsafe(), isam_estimates);
@@ -524,7 +577,41 @@ namespace multirobot_slam
         // std::cout << "Localization time: " << (duration.count() * 1000) << " ms (" << 1/duration.count() << " Hz)" << std::endl;
     }
 
-    void Localization::save_graph(NonlinearFactorGraph graph, Values estimates, std::optional<gtsam::Marginals> marginals, const std::string &filename)
+
+
+    void Backend::add_loop_closure(const LoopClosureConstraint& loop_closure)
+    {
+        Symbol xi, xj;
+        {
+            std::lock_guard<std::mutex> lock(keyframes_mutex_);
+            xi = Symbol(keyframes_[loop_closure.keyframe_i].pose_symbol.first, keyframes_[loop_closure.keyframe_i].pose_symbol.second);
+            xj = Symbol(keyframes_[loop_closure.keyframe_j].pose_symbol.first, keyframes_[loop_closure.keyframe_j].pose_symbol.second);
+        }
+
+        Pose3 loop_closure_transform(
+            Rot3::Quaternion(loop_closure.transform_pose.orientation.w(),
+                             loop_closure.transform_pose.orientation.x(),
+                             loop_closure.transform_pose.orientation.y(),
+                             loop_closure.transform_pose.orientation.z()),
+            Point3(loop_closure.transform_pose.position.x(),
+                   loop_closure.transform_pose.position.y(),
+                   loop_closure.transform_pose.position.z()));
+        
+        NonlinearFactorGraph new_factors;
+
+        new_factors.add(
+            BetweenFactor<Pose3>(xi, xj, loop_closure_transform, loop_closure_noise_)
+        );
+
+        {
+            std::lock_guard<std::mutex> lock(isam_mutex_);
+            isam_.update(new_factors);
+        }
+    }
+
+
+
+    void Backend::save_graph(NonlinearFactorGraph graph, Values estimates, std::optional<gtsam::Marginals> marginals, const std::string &filename)
     {
         std::ofstream graph_file(filename);
 
@@ -554,31 +641,6 @@ namespace multirobot_slam
                 if (marginals.has_value())
                 {
                     auto pose_covariance = marginals.value().marginalCovariance(x);
-
-                    for (int i = 0; i < 6; i++)
-                        for (int j = 0; j < 6; j++)
-                            graph_file << " " << pose_covariance(i, j);
-                }
-                graph_file << "\n";
-            }
-
-            Symbol k('k', t);
-
-            if (estimates.exists(k))
-            {
-                Pose3 pose_estimate = estimates.at<Pose3>(k);
-
-                Vector3 rpy = pose_estimate.rotation().rpy();
-
-                graph_file << "POSE3 " << k << " "
-                           << pose_estimate.x() << " "
-                           << pose_estimate.y() << " "
-                           << pose_estimate.z() << " "
-                           << rpy(0) << " " << rpy(1) << " " << rpy(2);
-
-                if (marginals.has_value())
-                {
-                    auto pose_covariance = marginals.value().marginalCovariance(k);
 
                     for (int i = 0; i < 6; i++)
                         for (int j = 0; j < 6; j++)
