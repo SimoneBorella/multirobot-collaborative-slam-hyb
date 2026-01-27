@@ -226,6 +226,24 @@ namespace multirobot_slam
               delta_log_odds() {}
     };
 
+    struct Submap
+    {
+        size_t keyframe_id;
+
+        float resolution;
+        int width;
+        int height;
+
+        Eigen::Vector3d origin_position;
+        Eigen::Quaterniond origin_orientation;
+
+        std::vector<float> log_odds;
+
+        double timestamp_start;
+        double timestamp_end;
+    };
+
+
     struct PosedScan
     {
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW

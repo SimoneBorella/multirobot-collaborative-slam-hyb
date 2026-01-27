@@ -46,6 +46,8 @@ namespace multirobot_slam
         double sigma_gyroscope_noise_density;      // (rad/s)/sqrt(s)
         double sigma_keypoint_noise;
         double data_association_distance;
+        double keyframe_distance;
+        double keyframe_angular_distance;
 
         BackendParams(
             double backend_rate = 10.0,
@@ -60,7 +62,9 @@ namespace multirobot_slam
             double sigma_accelerometer_noise_density = 1e-3,
             double sigma_gyroscope_noise_density = 1e-3,
             double sigma_keypoint_noise = 0.1,
-            double data_association_distance = 0.2)
+            double data_association_distance = 0.2,
+            double keyframe_distance = 0.5,
+            double keyframe_angular_distance = 0.524)
             : backend_rate(backend_rate),
               init_position(init_position),
               init_velocity(init_velocity),
@@ -73,7 +77,9 @@ namespace multirobot_slam
               sigma_accelerometer_noise_density(sigma_accelerometer_noise_density),
               sigma_gyroscope_noise_density(sigma_gyroscope_noise_density),
               sigma_keypoint_noise(sigma_keypoint_noise),
-              data_association_distance(data_association_distance) {}
+              data_association_distance(data_association_distance),
+              keyframe_distance(keyframe_distance),
+              keyframe_angular_distance(keyframe_angular_distance) {}
     };
 
     class Backend

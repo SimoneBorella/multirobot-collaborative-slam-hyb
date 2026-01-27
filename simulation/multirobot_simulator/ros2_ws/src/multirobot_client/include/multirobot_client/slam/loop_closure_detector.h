@@ -5,6 +5,8 @@
 #include <fstream>
 #include <iostream>
 #include <optional>
+#include <random>
+#include <Eigen/Dense>
 
 #include <DBoW3/DBoW3.h>
 #include <opencv2/core.hpp>
@@ -25,7 +27,10 @@ namespace multirobot_slam
         std::string vocabulary_path;
         double min_bow_score;
         size_t min_matches;
+        size_t ransac_iters;
+        double inlier_threshold;
         size_t min_inliers;
+        double min_total_score;
 
         LoopClosureDetectorParams(
             double loop_closure_detection_rate = 1.0,
@@ -33,15 +38,21 @@ namespace multirobot_slam
             double max_spatial_distance = 5.0,
             std::string vocabulary_path = "./vocabularies/ORBvoc.yml",
             double min_bow_score = 0.3,
-            size_t min_matches = 20,
-            size_t min_inliers = 15)
+            size_t min_matches = 25,
+            size_t ransac_iters = 100,
+            double inlier_threshold = 0.2,
+            size_t min_inliers = 15,
+            double min_total_score = 0.8)
             : loop_closure_detection_rate(loop_closure_detection_rate),
               min_time_separation(min_time_separation),
               max_spatial_distance(max_spatial_distance),
               vocabulary_path(vocabulary_path),
               min_bow_score(min_bow_score),
               min_matches(min_matches),
-              min_inliers(min_inliers) {}
+              ransac_iters(ransac_iters),
+              inlier_threshold(inlier_threshold),
+              min_inliers(min_inliers),
+              min_total_score(min_total_score) {}
     };
 
     class LoopClosureDetector
@@ -60,7 +71,7 @@ namespace multirobot_slam
         LoopClosureDetectorParams params_;
 
         Database orb_db_;
-        size_t last_keyframe_id_ = 0;
+        size_t curr_keyframe_id_ = 0;
         std::unordered_map<int, int> db_id_to_kf_id;
 
 

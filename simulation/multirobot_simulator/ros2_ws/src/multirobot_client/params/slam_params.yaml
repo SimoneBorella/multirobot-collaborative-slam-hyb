@@ -8,8 +8,8 @@ backend:
     sigma_odom_position_noise: 0.05
     sigma_odom_orientation_noise: 0.01
 
-    sigma_loop_closure_position_noise: 0.01
-    sigma_loop_closure_orientation_noise: 0.008
+    sigma_loop_closure_position_noise: 0.05
+    sigma_loop_closure_orientation_noise: 0.01
 
     # sigma_accelerometer_noise_density: 1e-3    # PSD_accelerometer (m/s^2)/sqrt(s)
     # sigma_gyroscope_noise_density: 1e-4        # PSD_gyroscope (rad/s)/sqrt(s) 
@@ -21,15 +21,24 @@ backend:
 
     data_association_distance: 0.2
 
+    keyframe_distance: 0.5
+    keyframe_angular_distance: 0.785
+
 loop_closure_detector:
-    loop_closure_detection_rate: 1.0
-    min_time_separation: 10.0
+    loop_closure_detection_rate: 0.2
+    min_time_separation: 12.0
     max_spatial_distance: 5.0
     vocabulary_path : "/dep/DBoW3/orbvoc.dbow3"
-    min_bow_score: 0.3
-    min_matches: 20
-    min_inliers: 15
-    max_inlier_rmse: 0.3
+    min_bow_score: 0.4
+    min_matches: 30
+    ransac_iters: 100
+    inlier_threshold: 0.2
+    min_inliers: 20
+    min_total_score: 0.85
 
 submap_manager:
     submap_mapping_rate: 1.0
+
+    submap_resolution: 0.05 
+    submap_width: 12.0
+    submap_height: 12.0

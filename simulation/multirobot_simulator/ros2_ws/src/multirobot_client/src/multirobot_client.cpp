@@ -19,6 +19,7 @@
 #include <tf2_ros/create_timer_ros.h>
 #include <message_filters/subscriber.h>
 
+#include <visualization_msgs/msg/marker_array.hpp>
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
 #include "nav_msgs/msg/odometry.hpp"
@@ -140,6 +141,10 @@ public:
 
         // std::string frontiers_marker_topic = "/" + ns_ + "/frontiers_marker";
         // frontiers_marker_publisher_ = this->create_publisher<visualization_msgs::msg::Marker>(frontiers_marker_topic, 10);
+
+        std::string keyframes_marker_topic = "/" + ns_ + "/keyframes_marker";
+        keyframes_marker_publisher_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(keyframes_marker_topic, 10);
+
     }
 
     void setup()
@@ -335,6 +340,55 @@ private:
     //     frontiers_marker_publisher_->publish(frontiers_marker);
     // }
 
+
+
+    void publish_keyframes(const std::vector<KeyFrame>& keyframes)
+    {
+        visualization_msgs::msg::MarkerArray marker_array;
+
+        for (const auto& kf : keyframes)
+        {
+            visualization_msgs::msg::Marker marker;
+            marker.header.frame_id = ns_ + "/" + map_frame_;
+            marker.header.stamp = this->now();
+            marker.ns = "keyframes";
+            marker.id = kf.keyframe_id;
+
+            marker.action = visualization_msgs::msg::Marker::ADD;
+
+            // Marker type
+            marker.type = visualization_msgs::msg::Marker::ARROW;
+
+            // Lifetime
+            marker.lifetime = rclcpp::Duration(0, 0);
+
+            // Pose
+            marker.pose.position.x = kf.pose.position.x();
+            marker.pose.position.y = kf.pose.position.y();
+            marker.pose.position.z = kf.pose.position.z();
+
+            marker.pose.orientation.x = kf.pose.orientation.x();
+            marker.pose.orientation.y = kf.pose.orientation.y();
+            marker.pose.orientation.z = kf.pose.orientation.z();
+            marker.pose.orientation.w = kf.pose.orientation.w();
+
+            // Scale
+            marker.scale.x = 0.25;
+            marker.scale.y = 0.05;
+            marker.scale.z = 0.05;
+
+            // Color
+            marker.color.r = 1.0f;
+            marker.color.g = 0.0f;
+            marker.color.b = 0.0f;
+            marker.color.a = 1.0f;
+
+            marker_array.markers.push_back(marker);
+        }
+
+        keyframes_marker_publisher_->publish(marker_array);
+    }
+
     void imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg)
     {
         Eigen::Matrix3d R_flip;
@@ -493,6 +547,7 @@ private:
         posed_scan.ranges = msg->ranges;
         posed_scan.intensities = msg->intensities;
 
+        slam_.add_posed_scan(posed_scan);
         mapping_.add_posed_scan(posed_scan);
     }
 
@@ -527,6 +582,9 @@ private:
             publish_frontiers(frontiers.value());
             // publish_frontiers_marker(frontiers.value());
         }
+
+        std::vector<KeyFrame> keyframes = slam_.get_keyframes();
+        publish_keyframes(keyframes);
     }
 
     std::string ns_;
@@ -561,6 +619,7 @@ private:
     // rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr frontier_map_publisher_;
     rclcpp::Publisher<interfaces::msg::FrontierArray>::SharedPtr frontiers_publisher_;
     // rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr frontiers_marker_publisher_;
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr keyframes_marker_publisher_;
 };
 
 int main(int argc, char *argv[])

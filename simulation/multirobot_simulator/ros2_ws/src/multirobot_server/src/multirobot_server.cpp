@@ -495,7 +495,7 @@ public:
     void local_planning_timer_callback()
     {
         std::map<std::string, VelCmd> vel_cmds = local_planning_.get_vel_cmds();
-        publish_vel_cmds(vel_cmds);
+        // publish_vel_cmds(vel_cmds);
     }
 
 

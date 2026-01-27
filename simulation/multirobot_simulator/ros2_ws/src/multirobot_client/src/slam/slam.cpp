@@ -117,6 +117,11 @@ namespace multirobot_slam
         backend_.add_keypoints(keypoints_data);
     }
 
+    void SLAM::add_posed_scan(PosedScan &posed_scan)
+    {
+        submap_manager_.add_posed_scan(posed_scan);
+    }
+
     State SLAM::get_state()
     {
         return backend_.get_state();
@@ -128,6 +133,10 @@ namespace multirobot_slam
     }
 
 
+    std::vector<KeyFrame> SLAM::get_keyframes()
+    {
+        return backend_.get_keyframes();
+    }
 
 
     void SLAM::backend_loop()
@@ -138,6 +147,10 @@ namespace multirobot_slam
     void SLAM::loop_closure_detection_loop()
     {
         std::vector<KeyFrame> keyframes = backend_.get_keyframes();
+
+        if(keyframes.empty())
+            return;
+            
         loop_closure_detector_.add_keyframes_to_db(keyframes);
 
         std::optional<LoopClosureConstraint> loop_closure_opt = loop_closure_detector_.detect(keyframes.back(), keyframes);
@@ -154,6 +167,10 @@ namespace multirobot_slam
 
     void SLAM::submap_mapping_loop()
     {
+        std::vector<KeyFrame> keyframes = backend_.get_keyframes();
+
+        submap_manager_.update_keyframes(keyframes);
+
 
     }
 

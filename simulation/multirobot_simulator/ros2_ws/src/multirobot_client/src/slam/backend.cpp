@@ -107,6 +107,12 @@ namespace multirobot_slam
                 double val = backend_config["data_association_distance"].as<double>();
                 p.data_association_distance = val;
             }
+
+            if (backend_config["keyframe_distance"])
+                p.keyframe_distance = backend_config["keyframe_distance"].as<double>();
+
+            if (backend_config["keyframe_angular_distance"])
+                p.keyframe_angular_distance = backend_config["keyframe_angular_distance"].as<double>();
         }
         catch (const std::exception &e)
         {
@@ -510,9 +516,10 @@ namespace multirobot_slam
                 }
     
                 KeyFrame &last_keyframe = keyframes_.back();
-                double dist_since_last_keyframe = (pose_position - last_keyframe.pose.position).norm();
-    
-                if (dist_since_last_keyframe > 0.5)
+                double delta_keyframe_distance = (pose_position - last_keyframe.pose.position).norm();
+                double delta_keyframe_angular_distance = pose_orientation.angularDistance(last_keyframe.pose.orientation);
+
+                if (delta_keyframe_distance > params_.keyframe_distance || delta_keyframe_angular_distance > params_.keyframe_angular_distance)
                 {
                     KeyFrame keyframe;
                     keyframe.timestamp = ts;

@@ -36,8 +36,10 @@ namespace multirobot_slam
         void add_odom(OdomData &odom_data);
         void add_imu(ImuData &imu_data);
         void add_keypoints(KeypointsData &keypoints_data);
+        void add_posed_scan(PosedScan &posed_scan);
         State get_state();
         std::optional<State> get_state_if_updated();
+        std::vector<KeyFrame> get_keyframes();
         
         
     private:

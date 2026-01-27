@@ -194,6 +194,9 @@ def main(args):
 
     for i in range(rows):
         for j in range(cols):
+            if((i == 0 and j == cols-1) or (i == rows-1 and j == 0)):
+                continue
+
             top = start_y + i * (room_size + hallway_length)
             left = start_x + j * (room_size + hallway_length)
             bottom = top + room_size
@@ -248,8 +251,8 @@ if __name__ == "__main__":
     parser.add_argument('--resolution', type=float, default=0.01, help='Map resolution (m)')
     parser.add_argument('--hallway_width', type=float, default=0.5, help='Hallway width (m)')
     parser.add_argument('--hallway_length', type=float, default=2.0, help='Hallway length (m)')
-    parser.add_argument('--rows', type=int, default=5, help='Number of rows of rooms')
-    parser.add_argument('--cols', type=int, default=5, help='Number of columns of rooms')
+    parser.add_argument('--rows', type=int, default=3, help='Number of rows of rooms')
+    parser.add_argument('--cols', type=int, default=3, help='Number of columns of rooms')
     parser.add_argument('--room_size', type=float, default=4.0, help='Room size (m, square rooms)')
     parser.add_argument('--show', action="store_true", help='Show plot')
     args = parser.parse_args()
