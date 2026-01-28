@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iostream>
 #include <optional>
+#include <mutex>
 
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/ISAM2.h>
@@ -96,6 +97,7 @@ namespace multirobot_slam
         void add_keypoints(KeypointsData &keypoints_data);
         State get_state();
         std::optional<State> get_state_if_updated();
+        void update_keyframe_poses();
         std::vector<KeyFrame> get_keyframes();
         
         void optimize();

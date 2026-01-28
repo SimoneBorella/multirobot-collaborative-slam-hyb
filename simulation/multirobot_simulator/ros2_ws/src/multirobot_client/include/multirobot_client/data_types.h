@@ -165,7 +165,6 @@ namespace multirobot_slam
         double score;
     };
 
-
     struct State
     {
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -188,6 +187,7 @@ namespace multirobot_slam
 
     struct Map
     {
+        size_t keyframe_id;
         float resolution;
         int width;
         int height;
@@ -229,11 +229,9 @@ namespace multirobot_slam
     struct Submap
     {
         size_t keyframe_id;
-
         float resolution;
         int width;
         int height;
-
         Eigen::Vector3d origin_position;
         Eigen::Quaterniond origin_orientation;
 
@@ -242,7 +240,6 @@ namespace multirobot_slam
         double timestamp_start;
         double timestamp_end;
     };
-
 
     struct PosedScan
     {

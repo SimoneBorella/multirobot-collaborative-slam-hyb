@@ -25,11 +25,11 @@ namespace multirobot_slam
         double map_height;
 
         double free_belief;
-        double occupied_belief;
+        double occ_belief;
         double distance_belief_factor;
 
-        double noise_model_radius;
-        double noise_model_std_dev;
+        double noise_radius;
+        double noise_std_dev;
         
         double log_odds_min;
         double log_odds_max;
@@ -50,10 +50,10 @@ namespace multirobot_slam
             double map_width = 40.0,
             double map_height = 40.0,
             double free_belief = 0.38,
-            double occupied_belief = 0.80,
+            double occ_belief = 0.80,
             double distance_belief_factor = 0.03,
-            double noise_model_radius = 0.07,
-            double noise_model_std_dev = 0.02,
+            double noise_radius = 0.07,
+            double noise_std_dev = 0.02,
             double log_odds_min = -10.0,
             double log_odds_max = 10.0,
             double obstacle_threshold = 0.7,
@@ -67,10 +67,10 @@ namespace multirobot_slam
               map_width(map_width),
               map_height(map_height),
               free_belief(free_belief),
-              occupied_belief(occupied_belief),
+              occ_belief(occ_belief),
               distance_belief_factor(distance_belief_factor),
-              noise_model_radius(noise_model_radius),
-              noise_model_std_dev(noise_model_std_dev),
+              noise_radius(noise_radius),
+              noise_std_dev(noise_std_dev),
               log_odds_min(log_odds_min),
               log_odds_max(log_odds_max),
               obstacle_threshold(obstacle_threshold),

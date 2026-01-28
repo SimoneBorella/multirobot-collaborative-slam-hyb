@@ -43,15 +43,15 @@ namespace multirobot_slam
 
             if (config["free_belief"])
                 p.free_belief = config["free_belief"].as<double>();
-            if (config["occupied_belief"])
-                p.occupied_belief = config["occupied_belief"].as<double>();
+            if (config["occ_belief"])
+                p.occ_belief = config["occ_belief"].as<double>();
             if (config["distance_belief_factor"])
                 p.distance_belief_factor = config["distance_belief_factor"].as<double>();
 
-            if (config["noise_model_radius"])
-                p.noise_model_radius = config["noise_model_radius"].as<double>();
-            if (config["noise_model_std_dev"])
-                p.noise_model_std_dev = config["noise_model_std_dev"].as<double>();
+            if (config["noise_radius"])
+                p.noise_radius = config["noise_radius"].as<double>();
+            if (config["noise_std_dev"])
+                p.noise_std_dev = config["noise_std_dev"].as<double>();
 
             if (config["log_odds_min"])
                 p.log_odds_min = config["log_odds_min"].as<double>();
@@ -88,7 +88,7 @@ namespace multirobot_slam
         params_ = params;
 
         free_belief_log_odds_ = std::log(params_.free_belief / (1.0 - params_.free_belief));
-        occupied_belief_log_odds_ = std::log(params_.occupied_belief / (1.0 - params_.occupied_belief));
+        occupied_belief_log_odds_ = std::log(params_.occ_belief / (1.0 - params_.occ_belief));
 
         // Initialize maps
         map_.resolution = static_cast<float>(params_.map_resolution);
@@ -287,14 +287,14 @@ namespace multirobot_slam
         if (!hit_point)
             return;
 
-        int radius = std::ceil(params_.noise_model_radius / map_.resolution);
-        float std_dev = params_.noise_model_std_dev / map_.resolution;
+        int radius = std::ceil(params_.noise_radius / map_.resolution);
+        float std_dev = params_.noise_std_dev / map_.resolution;
 
         for (int dy = -radius; dy <= radius; ++dy)
         {
             for (int dx = -radius; dx <= radius; ++dx)
             {
-                if ((dx * dx + dy * dy) * map_.resolution * map_.resolution > params_.noise_model_radius * params_.noise_model_radius)
+                if ((dx * dx + dy * dy) * map_.resolution * map_.resolution > params_.noise_radius * params_.noise_radius)
                     continue;
 
                 int nx = x1 + dx;
@@ -318,7 +318,7 @@ namespace multirobot_slam
                     double delta_log_odds = (occupied_belief_log_odds_ * weight) * (1.0 - params_.distance_belief_factor * cell_distance);
                     local_log_odds_delta_[idx] += delta_log_odds;
                     // map_log_odds_data_[idx] += delta_log_odds;
-
+                    
                     // map_log_odds_data_[idx] = std::clamp(map_log_odds_data_[idx] + delta_log_odds, params_.log_odds_min, params_.log_odds_max);
                     // map_.data[idx] = log_odds_to_probability(map_log_odds_data_[idx]);
                 }

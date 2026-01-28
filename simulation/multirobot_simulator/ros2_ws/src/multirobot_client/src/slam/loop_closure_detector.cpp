@@ -109,9 +109,12 @@ namespace multirobot_slam
 
         // For each result, find the keyframe and verify candidates
         // std::cout << "Loop closure candidates for keyframe " << active_keyframe.keyframe_id << ":" << std::endl;
+
+        std::cout << "Best candidate keyframe " << db_id_to_kf_id[ret[1].Id] << " with BoW score " << ret[1].Score << std::endl;
+
         for (const auto& r : ret)
         {
-            // std::cout << "  Candidate keyframe " << db_id_to_kf_id[r.Id] << " with BoW score " << r.Score << std::endl;
+            // std::cout << "Candidate keyframe " << db_id_to_kf_id[r.Id] << " with BoW score " << r.Score << std::endl;
 
             int kf_id = db_id_to_kf_id[r.Id];
             auto it = std::find_if(keyframes.begin(), keyframes.end(),
@@ -138,7 +141,7 @@ namespace multirobot_slam
 
             if (total_score < params_.min_total_score)
             {
-                std::cout << "Rejected: total score " << total_score << " below threshold." << std::endl;
+                std::cout << "Rejected loop closure: total score " << total_score << " below threshold." << std::endl;
                 continue;
             }
 
@@ -251,7 +254,7 @@ namespace multirobot_slam
         std::mt19937 rng(0);
         std::uniform_int_distribution<size_t> uni(0, pts_a.size() - 1);
 
-        for (int iter = 0; iter < params_.ransac_iters; iter++)
+        for (size_t iter = 0; iter < params_.ransac_iters; iter++)
         {
             // Sample 3 points
             std::vector<Eigen::Vector3d> sa, sb;

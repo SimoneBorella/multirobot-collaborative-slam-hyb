@@ -69,6 +69,14 @@ Visualization Manager:
           Value: true
         robot_0/odom:
           Value: true
+        robot_0/submap_0:
+          Value: true
+        robot_0/submap_1:
+          Value: true
+        robot_0/submap_2:
+          Value: true
+        robot_0/submap_3:
+          Value: true
         world:
           Value: true
       Marker Scale: 3
@@ -87,6 +95,14 @@ Visualization Manager:
                   {}
                 robot_0/lidar_link:
                   {}
+            robot_0/submap_0:
+              {}
+            robot_0/submap_1:
+              {}
+            robot_0/submap_2:
+              {}
+            robot_0/submap_3:
+              {}
       Update Interval: 0
       Value: true
     - Alpha: 0.699999988079071
@@ -365,6 +381,29 @@ Visualization Manager:
             Reliability Policy: Reliable
             Value: /robot_0/keyframes_marker
           Value: true
+        - Alpha: 0.699999988079071
+          Binary representation: false
+          Binary threshold: 100
+          Class: rviz_default_plugins/Map
+          Color Scheme: map
+          Draw Behind: false
+          Enabled: false
+          Name: Submap
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /robot_0/submap
+          Update Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /robot_0/submap_updates
+          Use Timestamp: false
+          Value: false
       Enabled: true
       Name: robot_0
     - Class: rviz_common/Group
@@ -915,7 +954,7 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 48.81660461425781
+      Scale: 40.03152084350586
       Target Frame: <Fixed Frame>
       Value: TopDownOrtho (rviz_default_plugins)
       X: 0

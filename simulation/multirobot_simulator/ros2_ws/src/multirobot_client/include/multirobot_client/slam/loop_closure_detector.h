@@ -7,6 +7,7 @@
 #include <optional>
 #include <random>
 #include <Eigen/Dense>
+#include <mutex>
 
 #include <DBoW3/DBoW3.h>
 #include <opencv2/core.hpp>

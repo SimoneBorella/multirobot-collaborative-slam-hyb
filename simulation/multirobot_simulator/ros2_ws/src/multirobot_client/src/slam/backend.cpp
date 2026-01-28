@@ -217,9 +217,27 @@ namespace multirobot_slam
         }
     }
 
+    void Backend::update_keyframe_poses()
+    {
+        Values estimates;
+        {
+            std::lock_guard<std::mutex> lock(isam_mutex_);
+            estimates = isam_.calculateEstimate();
+        }
+
+        std::lock_guard<std::mutex> lock(keyframes_mutex_);
+
+        for(KeyFrame& kf : keyframes_)
+        {
+            Pose3 kf_pose = isam_.calculateEstimate<Pose3>(Symbol(kf.pose_symbol.first, kf.pose_symbol.second));
+
+            kf.pose.position = kf_pose.translation();
+            kf.pose.orientation = Eigen::Quaterniond(kf_pose.rotation().matrix());
+        }
+    }
+
     std::vector<KeyFrame> Backend::get_keyframes()
     {
-        std::lock_guard<std::mutex> lock(keyframes_mutex_);
         return keyframes_;
     }
 

@@ -145,6 +145,8 @@ public:
         std::string keyframes_marker_topic = "/" + ns_ + "/keyframes_marker";
         keyframes_marker_publisher_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(keyframes_marker_topic, 10);
 
+        std::string submap_topic = "/" + ns_ + "/submap";
+        submap_publisher_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(submap_topic, map_qos_profile);
     }
 
     void setup()
@@ -389,6 +391,55 @@ private:
         keyframes_marker_publisher_->publish(marker_array);
     }
 
+
+    void publish_submaps(const std::vector<Map>& updated_submaps)
+    {
+        rclcpp::Time current_time = this->now();
+
+        for (const auto& map : updated_submaps)
+        {
+            // Publish tf
+            geometry_msgs::msg::TransformStamped tf_msg;
+            tf_msg.header.stamp = current_time;
+            tf_msg.header.frame_id = map_frame_;
+            tf_msg.child_frame_id = "submap_" + std::to_string(map.keyframe_id);
+
+            tf_msg.transform.translation.x = map.origin_position.x();
+            tf_msg.transform.translation.y = map.origin_position.y();
+            tf_msg.transform.translation.z = map.origin_position.z();
+
+            tf_msg.transform.rotation.x = map.origin_orientation.x();
+            tf_msg.transform.rotation.y = map.origin_orientation.y();
+            tf_msg.transform.rotation.z = map.origin_orientation.z();
+            tf_msg.transform.rotation.w = map.origin_orientation.w();
+
+            tf_broadcaster_->sendTransform(tf_msg);
+
+            // Publish occupancy grid map
+            nav_msgs::msg::OccupancyGrid grid_msg;
+            grid_msg.header.stamp = current_time;
+            grid_msg.header.frame_id = ns_ + "/submap_" + std::to_string(map.keyframe_id);
+
+            grid_msg.info.resolution = map.resolution;
+            grid_msg.info.width = map.width;
+            grid_msg.info.height = map.height;
+
+            grid_msg.info.origin.position.x = -(map.width*map.resolution)/2;
+            grid_msg.info.origin.position.y = -(map.height*map.resolution)/2;
+            grid_msg.info.origin.position.z = 0.0;
+            grid_msg.info.origin.orientation.x = 0.0;
+            grid_msg.info.origin.orientation.y = 0.0;
+            grid_msg.info.origin.orientation.z = 0.0;
+            grid_msg.info.origin.orientation.w = 1.0;
+
+            grid_msg.data = map.data;
+
+            submap_publisher_->publish(grid_msg);
+        }
+    }
+
+
+
     void imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg)
     {
         Eigen::Matrix3d R_flip;
@@ -585,6 +636,9 @@ private:
 
         std::vector<KeyFrame> keyframes = slam_.get_keyframes();
         publish_keyframes(keyframes);
+
+        std::vector<Map> updated_submaps = slam_.get_updated_submaps();
+        publish_submaps(updated_submaps);
     }
 
     std::string ns_;
@@ -620,6 +674,8 @@ private:
     rclcpp::Publisher<interfaces::msg::FrontierArray>::SharedPtr frontiers_publisher_;
     // rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr frontiers_marker_publisher_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr keyframes_marker_publisher_;
+    rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr submap_publisher_;
+    
 };
 
 int main(int argc, char *argv[])

@@ -66,7 +66,7 @@ bool Camera::bresenhamObstacleCheck(
 inline void Camera::addDescriptorNoise(std::array<uint8_t, 32>& descriptor)
 {
     // Assumes descriptor size is 32 bytes (256 bits)
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < 2; ++i)
     {
         const int byte = byte_dist_(generator);
         const int bit  = bit_dist_(generator);

@@ -4,6 +4,7 @@
 #include <yaml-cpp/yaml.h>
 #include <fstream>
 #include <iostream>
+#include <mutex>
 
 #include "data_types.h"
 
@@ -40,6 +41,7 @@ namespace multirobot_slam
         State get_state();
         std::optional<State> get_state_if_updated();
         std::vector<KeyFrame> get_keyframes();
+        std::vector<Map> get_updated_submaps();
         
         
     private:

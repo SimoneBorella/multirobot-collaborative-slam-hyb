@@ -31,6 +31,35 @@ namespace multirobot_slam
 
             if (submap_manager_config["submap_height"])
                 p.submap_height = submap_manager_config["submap_height"].as<double>();
+
+            if (submap_manager_config["free_belief"]) 
+                p.free_belief = submap_manager_config["free_belief"].as<double>();
+
+            if (submap_manager_config["occ_belief"]) 
+                p.occ_belief = submap_manager_config["occ_belief"].as<double>();
+
+            if (submap_manager_config["distance_belief_factor"]) 
+                p.distance_belief_factor = submap_manager_config["distance_belief_factor"].as<double>();
+
+            if (submap_manager_config["log_odds_min"]) 
+                p.log_odds_min = submap_manager_config["log_odds_min"].as<double>();
+
+            if (submap_manager_config["log_odds_max"]) 
+                p.log_odds_max = submap_manager_config["log_odds_max"].as<double>();
+
+            if (submap_manager_config["noise_radius"]) 
+                p.noise_radius = submap_manager_config["noise_radius"].as<double>();
+
+            if (submap_manager_config["noise_std_dev"]) 
+                p.noise_std_dev = submap_manager_config["noise_std_dev"].as<double>();
+
+            if (submap_manager_config["obstacle_threshold"]) 
+                p.obstacle_threshold = submap_manager_config["obstacle_threshold"].as<double>();
+
+            if (submap_manager_config["free_threshold"]) 
+                p.free_threshold = submap_manager_config["free_threshold"].as<double>();
+
+        
         }
         catch (const std::exception &e)
         {
@@ -38,13 +67,15 @@ namespace multirobot_slam
             std::cerr << "Using default parameters.\n";
         }
 
-
         return p;
     }
 
     void SubmapManager::init(SubmapManagerParams &params)
     {
         params_ = params;
+
+        free_belief_log_odds_ = std::log(params_.free_belief / (1.0 - params_.free_belief));
+        occupied_belief_log_odds_ = std::log(params_.occ_belief / (1.0 - params_.occ_belief));
     }
 
     void SubmapManager::update_keyframes(const std::vector<KeyFrame> &keyframes)
@@ -104,15 +135,7 @@ namespace multirobot_slam
         return prob;
     }
 
-    void SubmapManager::bresenham_raytrace_submap(
-        Submap& submap,
-        int x0, int y0, int x1, int y1,
-        bool hit_point,
-        float free_logodds,
-        float occ_logodds,
-        float distance_factor,
-        float noise_radius,
-        float noise_std_dev)
+    void SubmapManager::bresenham_raytrace_submap(Submap& submap, int x0, int y0, int x1, int y1, bool hit_point)
     {
         int robot_x = x0;
         int robot_y = y0;
@@ -131,9 +154,13 @@ namespace multirobot_slam
                 int id = idx(x0, y0, submap.width);
 
                 double cell_distance = std::hypot(x0 - robot_x, y0 - robot_y) * submap.resolution;
-                double delta_log_odds = free_logodds * (1.0 - distance_factor * cell_distance);
+                double delta_log_odds = free_belief_log_odds_ * (1.0 - params_.distance_belief_factor * cell_distance);
 
-                submap.log_odds[id] += delta_log_odds;
+                submap.log_odds[id] = std::clamp(
+                    submap.log_odds[id] + delta_log_odds,
+                    params_.log_odds_min,
+                    params_.log_odds_max
+                );
             }
 
             int e2 = 2 * err;
@@ -144,14 +171,14 @@ namespace multirobot_slam
         if (!hit_point)
             return;
 
-        int radius = std::ceil(noise_radius / submap.resolution);
-        float std_dev = noise_std_dev / submap.resolution;
+        int radius = std::ceil(params_.noise_radius / submap.resolution);
+        float std_dev = params_.noise_std_dev / submap.resolution;
 
         for (int dy = -radius; dy <= radius; ++dy)
         {
             for (int dx = -radius; dx <= radius; ++dx)
             {
-                if ((dx*dx + dy*dy) * submap.resolution * submap.resolution > noise_radius * noise_radius)
+                if ((dx*dx + dy*dy) * submap.resolution * submap.resolution > params_.noise_radius * params_.noise_radius)
                     continue;
 
                 int nx = x1 + dx;
@@ -165,8 +192,13 @@ namespace multirobot_slam
                     int id = idx(nx, ny, submap.width);
                     double cell_distance = std::hypot(nx - robot_x, ny - robot_y) * submap.resolution;
 
-                    double delta_log_odds = (occ_logodds * weight) * (1.0 - distance_factor * cell_distance);
-                    submap.log_odds[id] += delta_log_odds;
+                    double delta_log_odds = (occupied_belief_log_odds_ * weight) * (1.0 - params_.distance_belief_factor * cell_distance);
+
+                    submap.log_odds[id] = std::clamp(
+                        submap.log_odds[id] + delta_log_odds,
+                        params_.log_odds_min,
+                        params_.log_odds_max
+                    );
                 }
             }
         }
@@ -176,7 +208,7 @@ namespace multirobot_slam
 
     void SubmapManager::submaps_mapping()
     {
-        std::deque<PosedScan> posed_scan_buffer;
+        std::vector<PosedScan> posed_scan_buffer;
 
         {
             std::lock_guard<std::mutex> lock(buffer_mutex_);
@@ -203,17 +235,24 @@ namespace multirobot_slam
                         submaps_.back().timestamp_end = keyframe.timestamp;
 
                     submaps_.push_back(submap);
+                    submaps_updated_.push_back(true);
+                    submap_mutexes_.push_back(std::make_unique<std::mutex>());
                 }
             }
         }
 
-        for(PosedScan& posed_scan : posed_scan_buffer)
+        if(submaps_.empty())
+            return;
+
+
+        for (PosedScan& posed_scan : posed_scan_buffer)
         {
             size_t submap_id = submaps_.size();
 
-            for (size_t i = 0; i < submaps_.size(); i++)
+            for (int i = static_cast<int>(submaps_.size()) - 1; i >= 0; i--)
             {
-                if (posed_scan.timestamp >= submaps_[i].timestamp_start && posed_scan.timestamp <  submaps_[i].timestamp_end)
+                if (posed_scan.timestamp >= submaps_[i].timestamp_start &&
+                    posed_scan.timestamp <  submaps_[i].timestamp_end)
                 {
                     submap_id = i;
                     break;
@@ -223,34 +262,54 @@ namespace multirobot_slam
             if (submap_id == submaps_.size())
                 continue;
 
+            std::lock_guard<std::mutex> lock(*submap_mutexes_[submap_id]);
 
             Submap& submap = submaps_[submap_id];
 
-            // Transform robot pose in submap frame
-            Eigen::Vector3d p = posed_scan.position - submap.origin_position;
-            Eigen::Quaterniond q = submap.origin_orientation.inverse() * posed_scan.orientation;
-
-            // HERE HERE HERE HERE HERE HERE HERE HERE HERE HERE HERE HERE HERE HERE HERE
-            // Get robot position in submap map coordinates
-            int robot_x = static_cast<int>(((p.x() + submap.width/2) / submap.resolution));
-            int robot_y = static_cast<int>(((p.y() + submap.height/2) / submap.resolution));
-            
-            if (robot_x < 0 || robot_x >= submap.width || robot_y < 0 || robot_y >= submap.height)
-            continue;
-            
-            double yaw = std::atan2(
-                2.0 * (q.w() * q.z() + q.x() * q.y()),
-                1.0 - 2.0 * (q.y()*q.y() + q.z()*q.z())
+            double yaw_scan = std::atan2(
+                2.0 * (posed_scan.orientation.w() * posed_scan.orientation.z() +
+                    posed_scan.orientation.x() * posed_scan.orientation.y()),
+                1.0 - 2.0 * (posed_scan.orientation.y() * posed_scan.orientation.y() +
+                            posed_scan.orientation.z() * posed_scan.orientation.z())
             );
 
+            double yaw_submap = std::atan2(
+                2.0 * (submap.origin_orientation.w() * submap.origin_orientation.z() +
+                    submap.origin_orientation.x() * submap.origin_orientation.y()),
+                1.0 - 2.0 * (submap.origin_orientation.y() * submap.origin_orientation.y() +
+                            submap.origin_orientation.z() * submap.origin_orientation.z())
+            );
 
-            // Iterate laser scan
+            double yaw = yaw_scan - yaw_submap;
+
+            Eigen::Vector2d p_world(
+                posed_scan.position.x() - submap.origin_position.x(),
+                posed_scan.position.y() - submap.origin_position.y()
+            );
+
+            double c0 = std::cos(-yaw_submap);
+            double s0 = std::sin(-yaw_submap);
+
+            Eigen::Vector2d robot_submap;
+            robot_submap.x() = c0 * p_world.x() - s0 * p_world.y();
+            robot_submap.y() = s0 * p_world.x() + c0 * p_world.y();
+
+            int robot_x = static_cast<int>(robot_submap.x() / submap.resolution + submap.width  / 2);
+            int robot_y = static_cast<int>(robot_submap.y() / submap.resolution + submap.height / 2);
+
+            if (robot_x < 0 || robot_x >= submap.width ||
+                robot_y < 0 || robot_y >= submap.height)
+                continue;
+
             double angle = posed_scan.angle_min;
 
-            for (size_t i = 0; i < posed_scan.ranges.size(); ++i)
+            double cs = std::cos(yaw);
+            double sn = std::sin(yaw);
+
+            for (size_t k = 0; k < posed_scan.ranges.size(); ++k)
             {
                 bool hit_point = true;
-                double range = posed_scan.ranges[i];
+                double range = posed_scan.ranges[k];
 
                 if (range < posed_scan.range_min || std::isnan(range))
                 {
@@ -264,49 +323,85 @@ namespace multirobot_slam
                     hit_point = false;
                 }
 
-                // local laser point in submap frame
-                double laser_x = range * cos(angle);
-                double laser_y = range * sin(angle);
+                // punto laser nel frame robot
+                double lx = range * std::cos(angle);
+                double ly = range * std::sin(angle);
 
-                int laser_map_x = static_cast<int>((laser_x / submap.resolution) + submap.width / 2);
-                int laser_map_y = static_cast<int>((laser_y / submap.resolution) + submap.height / 2);
+                // robot → submap
+                Eigen::Vector2d laser_submap;
+                laser_submap.x() = robot_submap.x() + cs * lx - sn * ly;
+                laser_submap.y() = robot_submap.y() + sn * lx + cs * ly;
 
-                // Bresenham update
+                int laser_map_x = static_cast<int>(laser_submap.x() / submap.resolution + submap.width  / 2);
+                int laser_map_y = static_cast<int>(laser_submap.y() / submap.resolution + submap.height / 2);
+
                 bresenham_raytrace_submap(
                     submap,
-                    robot_x, robot_y,
-                    laser_map_x, laser_map_y,
-                    hit_point,
-                    /*free*/  -0.4f,
-                    /*occ*/   +0.85f,
-                    /*dist factor*/ 0.01f,
-                    /*noise radius*/ 0.05f,
-                    /*noise std*/    0.03f
+                    robot_x,
+                    robot_y,
+                    laser_map_x,
+                    laser_map_y,
+                    hit_point
                 );
 
                 angle += posed_scan.angle_increment;
             }
+
+            submaps_updated_[submap_id] = true;
         }
+
     }
 
-    Map SubmapManager::get_map()
+    std::vector<Map> SubmapManager::get_updated_submaps()
     {
-        Map map;
-        // map.resolution = resolution;
-        // map.width = width;
-        // map.height = height;
-        // map.origin_position = origin_position;
-        // map.origin_orientation = origin_orientation;
+        std::vector<Map> updated_maps;
 
-        // map.data.resize(width * height);
+        for(size_t i=0; i<submaps_updated_.size(); i++)
+        {
+            std::lock_guard<std::mutex> lock(*submap_mutexes_[i]);
 
-        // for (size_t i = 0; i < log_odds.size(); ++i)
-        // {
-        //     float p = 1.0f - 1.0f / (1.0f + std::exp(log_odds[i]));
-        //     map.data[i] = static_cast<int8_t>(std::round(p * 100.0f));
-        // }
+            if(submaps_updated_[i])
+            {
+                const Submap& submap = submaps_[i];
 
-        return map;
+                Map map;
+                map.keyframe_id = submap.keyframe_id;
+                map.resolution = submap.resolution;
+                map.width = submap.width;
+                map.height = submap.height;
+                map.origin_position = submap.origin_position;
+                map.origin_orientation = submap.origin_orientation;
+
+                map.data.resize(map.width * map.height);
+
+                for (size_t k = 0; k < submap.log_odds.size(); ++k)
+                {
+                    map.data[k] = log_odds_to_probability(submap.log_odds[k]);
+                }
+
+                // Create filtered map
+                for (size_t i = 0; i < map.data.size(); i++)
+                {
+                    if (map.data[i] == -1)
+                        continue;
+
+                    double val = map.data[i] / 100.0;
+                    if (val > params_.obstacle_threshold)
+                        map.data[i] = 100;
+                    else if (val < params_.free_threshold)
+                        map.data[i] = 0;
+                    else
+                        map.data[i] = -1;
+                }
+
+
+                updated_maps.push_back(std::move(map));
+
+                submaps_updated_[i] = false;
+            }
+        }
+
+        return updated_maps;
     }
 
 }
