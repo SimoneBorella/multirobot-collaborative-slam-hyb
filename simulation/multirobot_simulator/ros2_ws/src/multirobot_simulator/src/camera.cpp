@@ -129,7 +129,7 @@ std::vector<KeyPoint>& Camera::getKeyPoints()
         double ry = -dx * sin_t + dy * cos_t;
         
         // Keypoint generated with noise
-        KeyPoint kp(rx + noise_dist_(generator), ry + noise_dist_(generator));
+        KeyPoint kp(rx + noise_dist_(generator), ry + noise_dist_(generator), lm.point.z + noise_dist_(generator));
 
         // Descriptor generated with noise
         kp.descriptor = lm.descriptor;

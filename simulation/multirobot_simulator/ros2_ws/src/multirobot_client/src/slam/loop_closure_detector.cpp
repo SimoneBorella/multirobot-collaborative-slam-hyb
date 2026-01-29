@@ -3,12 +3,12 @@
 namespace multirobot_slam
 {
     LoopClosureDetector::LoopClosureDetector()
-    : curr_keyframe_id_(0)
+    : curr_keyframe_id_(0), last_query_kf_id_(std::numeric_limits<size_t>::max())
     {
     }
 
     LoopClosureDetector::LoopClosureDetector(LoopClosureDetectorParams &params)
-        : params_(params), curr_keyframe_id_(0)
+        : params_(params), curr_keyframe_id_(0), last_query_kf_id_(std::numeric_limits<size_t>::max())
     {
     }
 
@@ -23,6 +23,9 @@ namespace multirobot_slam
 
             if (loop_closure_detector_config["loop_closure_detection_rate"])
                 p.loop_closure_detection_rate = loop_closure_detector_config["loop_closure_detection_rate"].as<double>();
+
+            if (loop_closure_detector_config["temporal_hits_threshold"])
+                p.temporal_hits_threshold = loop_closure_detector_config["temporal_hits_threshold"].as<int>();
 
             if (loop_closure_detector_config["min_time_separation"])
                 p.min_time_separation = loop_closure_detector_config["min_time_separation"].as<double>();
@@ -42,11 +45,17 @@ namespace multirobot_slam
             if (loop_closure_detector_config["ransac_iters"])
                 p.ransac_iters = loop_closure_detector_config["ransac_iters"].as<size_t>();
 
+            if (loop_closure_detector_config["ransac_set_size"])
+                p.ransac_set_size = loop_closure_detector_config["ransac_set_size"].as<size_t>();
+
             if (loop_closure_detector_config["inlier_threshold"])
                 p.inlier_threshold = loop_closure_detector_config["inlier_threshold"].as<double>();
 
             if (loop_closure_detector_config["min_inliers"])
-                p.min_inliers = loop_closure_detector_config["min_inliers"].as<size_t>();    
+                p.min_inliers = loop_closure_detector_config["min_inliers"].as<size_t>();   
+                
+            if (loop_closure_detector_config["min_inliers_ratio"])
+                p.min_inliers_ratio = loop_closure_detector_config["min_inliers_ratio"].as<double>();    
             
             if (loop_closure_detector_config["min_total_score"])
                 p.min_total_score = loop_closure_detector_config["min_total_score"].as<double>();            
@@ -99,23 +108,30 @@ namespace multirobot_slam
         std::optional<LoopClosureConstraint> loop_closure_opt;
         double best_score = 0.0;
 
+        // Temporal consistency reset on new active keyframe
+        if (active_keyframe.keyframe_id != last_query_kf_id_)
+        {
+            candidate_hits_.clear();
+            last_query_kf_id_ = active_keyframe.keyframe_id;
+        }
+
+
         // Query DB with active keyframe
         cv::Mat descriptors(active_keyframe.keypoints.size(), 32, CV_8U);
         for (size_t j = 0; j < active_keyframe.keypoints.size(); j++)
             memcpy(descriptors.ptr(j), active_keyframe.keypoints[j].descriptor.data(), 32);
 
         QueryResults ret;
-        orb_db_.query(descriptors, ret, 10);
+        orb_db_.query(descriptors, ret, 5);
 
         // For each result, find the keyframe and verify candidates
         // std::cout << "Loop closure candidates for keyframe " << active_keyframe.keyframe_id << ":" << std::endl;
 
-        std::cout << "Best candidate keyframe " << db_id_to_kf_id[ret[1].Id] << " with BoW score " << ret[1].Score << std::endl;
+        // std::cout << "Best candidate keyframe " << db_id_to_kf_id[ret[1].Id] << " with BoW score " << ret[1].Score << std::endl;
 
+        // Candidate evaluation
         for (const auto& r : ret)
         {
-            // std::cout << "Candidate keyframe " << db_id_to_kf_id[r.Id] << " with BoW score " << r.Score << std::endl;
-
             int kf_id = db_id_to_kf_id[r.Id];
             auto it = std::find_if(keyframes.begin(), keyframes.end(),
                 [&](const KeyFrame& kf){ return kf.keyframe_id == kf_id; });
@@ -125,13 +141,21 @@ namespace multirobot_slam
 
             const KeyFrame& kf = *it;
             
+            // BoW score threshold check
             double bow_score = r.Score;
             if (bow_score < params_.min_bow_score)
                 continue;
 
+            // Spacial and temporal consistency check
             if (!is_candidate(active_keyframe, kf))
                 continue;
 
+            // Temporal consistency check
+            candidate_hits_[kf.keyframe_id]++;
+            if (candidate_hits_[kf.keyframe_id] < params_.temporal_hits_threshold)
+                continue;
+
+            // Geometric verification
             Pose T;
             double geom_score = 0.0;
             if (!estimate_relative_pose(active_keyframe, kf, T, geom_score))
@@ -141,7 +165,7 @@ namespace multirobot_slam
 
             if (total_score < params_.min_total_score)
             {
-                std::cout << "Rejected loop closure: total score " << total_score << " below threshold." << std::endl;
+                // std::cout << "Rejected loop closure: total score " << total_score << " below threshold." << std::endl;
                 continue;
             }
 
@@ -224,7 +248,7 @@ namespace multirobot_slam
         for (size_t i = 0; i < b.keypoints.size(); ++i)
             memcpy(desc_b.ptr(i), b.keypoints[i].descriptor.data(), 32);
 
-        // ORB matching (KNN + ratio test)
+        // ORB matching
         cv::BFMatcher matcher(cv::NORM_HAMMING);
         std::vector<std::vector<cv::DMatch>> knn_matches;
         matcher.knnMatch(desc_a, desc_b, knn_matches, 2);
@@ -248,7 +272,7 @@ namespace multirobot_slam
         }
 
         // RANSAC SE(3)
-        size_t best_inliers = 0;
+        double best_inlier_score = 0;
         Eigen::Matrix4d best_T = Eigen::Matrix4d::Identity();
 
         std::mt19937 rng(0);
@@ -256,51 +280,84 @@ namespace multirobot_slam
 
         for (size_t iter = 0; iter < params_.ransac_iters; iter++)
         {
-            // Sample 3 points
+            // Sample points
             std::vector<Eigen::Vector3d> sa, sb;
-            for (int k = 0; k < 3; k++)
+            std::unordered_set<size_t> used;
+            while (sa.size() < params_.ransac_set_size)
             {
                 size_t idx = uni(rng);
-                sa.push_back(pts_a[idx]);
-                sb.push_back(pts_b[idx]);
+                if (used.insert(idx).second)
+                {
+                    sa.push_back(pts_a[idx]);
+                    sb.push_back(pts_b[idx]);
+                }
             }
 
+
             // Estimate rigid transform (Umeyama)
-            Eigen::Matrix3Xd A(3, 3), B(3, 3);
-            for (int i = 0; i < 3; ++i)
+            Eigen::Matrix3Xd A(3, params_.ransac_set_size), B(3, params_.ransac_set_size);
+            for (size_t i = 0; i < params_.ransac_set_size; ++i)
             {
                 A.col(i) = sa[i];
                 B.col(i) = sb[i];
             }
 
             Eigen::Matrix4d T = Eigen::umeyama(A, B, false);
-            if (!T.allFinite())
+
+            Eigen::Matrix3d R = T.block<3,3>(0,0);
+            Eigen::Vector3d t = T.block<3,1>(0,3);
+
+            if (!R.allFinite())
                 continue;
 
+            // Force proper rotation
+            Eigen::JacobiSVD<Eigen::Matrix3d> svd(R, Eigen::ComputeFullU | Eigen::ComputeFullV);
+            R = svd.matrixU() * svd.matrixV().transpose();
+
+            // Correct reflection
+            if (R.determinant() < 0)
+                R = -R;
+            
+            // Rebuild T with corrected R
+            T.block<3,3>(0,0) = R;
+            T.block<3,1>(0,3) = t;
+
             // Count inliers
-            size_t inliers = 0;
+            // double mean_dist = 0;
+            // for(auto &p : pts_a)
+            //     mean_dist += p.norm();
+            // mean_dist /= pts_a.size();
+            // double inlier_threshold = std::max(params_.inlier_threshold, 0.05 * mean_dist);
+
+            double inlier_threshold = params_.inlier_threshold;
+
+            double inlier_score = 0;
             for (size_t i = 0; i < pts_a.size(); ++i)
             {
-                Eigen::Vector4d pa;
-                pa << pts_a[i], 1.0;
-                Eigen::Vector3d pb_est = (T * pa).head<3>();
+                Eigen::Vector3d pb_est = R * pts_a[i] + t;
 
-                if ((pb_est - pts_b[i]).norm() < params_.inlier_threshold)
-                    inliers++;
+                double dist2 = (pb_est - pts_b[i]).squaredNorm();
+
+                if (dist2 < inlier_threshold * inlier_threshold)
+                    // inlier_score += std::exp(-dist2/(2*inlier_threshold*inlier_threshold));
+                    inlier_score += 1.0;
             }
 
-            if (inliers > best_inliers)
+            if (inlier_score > best_inlier_score)
             {
-                best_inliers = inliers;
+                best_inlier_score = inlier_score;
                 best_T = T;
             }
         }
 
-        if (best_inliers < params_.min_inliers)
+        double inlier_ratio = best_inlier_score / pts_a.size();
+
+        if (best_inlier_score < params_.min_inliers || inlier_ratio < params_.min_inliers_ratio)
             return false;
 
+
         // Output
-        score = static_cast<double>(best_inliers)/static_cast<double>(pts_a.size());
+        score = inlier_ratio;
 
         Eigen::Vector3d t = best_T.block<3,1>(0,3);
         Eigen::Matrix3d R = best_T.block<3,3>(0,0);

@@ -95,11 +95,13 @@ public:
         std::mt19937 gen(rd());
         std::uniform_real_distribution<> dis_x(origin[0], origin[0] + width_dim);
         std::uniform_real_distribution<> dis_y(origin[1], origin[1] + height_dim);
+        std::uniform_real_distribution<> val_z(0.0, 2.5);
         std::uniform_int_distribution<uint8_t> descriptor_dist(0, 255);
 
         for (size_t i = 0; i < n_landmarks; ++i) {
             double x = dis_x(gen);
             double y = dis_y(gen);
+            double z = val_z(gen);
 
             size_t x_grid = std::clamp<size_t>(round((x - origin[0]) / resolution), 0, width - 1);
             size_t y_grid = std::clamp<size_t>(round((y - origin[1]) / resolution), 0, height - 1);
@@ -109,7 +111,7 @@ public:
                 KeyPoint landmark;
                 landmark.point.x = x;
                 landmark.point.y = y;
-                landmark.point.z = 0.0;
+                landmark.point.z = z;
 
                 // Generate random descriptor (32 bytes)
                 for (int b = 0; b < 32; ++b)

@@ -15,8 +15,8 @@ struct KeyPoint
     Point point;
     std::array<uint8_t, 32> descriptor;
 
-    KeyPoint(double x = 0.0, double y = 0.0)
-        : point(x, y, 0.0) {}
+    KeyPoint(double x = 0.0, double y = 0.0, double z = 0.0)
+        : point(x, y, z) {}
 };
 
 struct Position

@@ -24,30 +24,24 @@ backend:
     keyframe_distance: 0.5
     keyframe_angular_distance: 0.785
 
+
+
 loop_closure_detector:
-    loop_closure_detection_rate: 0.5
-    min_time_separation: 12.0
-    max_spatial_distance: 5.0
+    loop_closure_detection_rate: 1.0
+    temporal_hits_threshold: 3
+    min_time_separation: 15.0
+    max_spatial_distance: 1.0
     vocabulary_path : "/dep/DBoW3/orbvoc.dbow3"
-    min_bow_score: 0.20
-    min_matches: 20
-    ransac_iters: 100
-    inlier_threshold: 0.1
-    min_inliers: 15
-    min_total_score: 0.80
+    min_bow_score: 0.35
+    min_matches: 25
+    ransac_iters: 300
+    ransac_set_size: 10
+    inlier_threshold: 0.15
+    min_inliers: 20
+    min_inliers_ratio: 0.50
+    min_total_score: 0.40
 
 
-# loop_closure_detector:
-#     loop_closure_detection_rate: 0.2
-#     min_time_separation: 12.0
-#     max_spatial_distance: 5.0
-#     vocabulary_path : "/dep/DBoW3/orbvoc.dbow3"
-#     min_bow_score: 0.4
-#     min_matches: 30
-#     ransac_iters: 100
-#     inlier_threshold: 0.2
-#     min_inliers: 20
-#     min_total_score: 0.85
 
 submap_manager:
     submap_mapping_rate: 1.0
