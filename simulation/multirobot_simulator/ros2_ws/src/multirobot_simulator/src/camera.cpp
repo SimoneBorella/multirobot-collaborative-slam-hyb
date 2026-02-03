@@ -133,7 +133,7 @@ std::vector<KeyPoint>& Camera::getKeyPoints()
 
         // Descriptor generated with noise
         kp.descriptor = lm.descriptor;
-        // addDescriptorNoise(kp.descriptor);
+        addDescriptorNoise(kp.descriptor);
 
         keypoints_.push_back(kp);
     }

@@ -159,16 +159,15 @@ namespace multirobot_slam
             
         loop_closure_detector_.add_keyframes_to_db(keyframes);
 
-        std::optional<LoopClosureConstraint> loop_closure_opt = loop_closure_detector_.detect(keyframes.back(), keyframes);
+        std::optional<LoopClosureConstraint> loop_closure_opt = loop_closure_detector_.detect();
 
-        if (loop_closure_opt.has_value())
+        if(loop_closure_opt.has_value())
         {
-            backend_.add_loop_closure(loop_closure_opt.value());
-            std::cout << "Loop closure detected between keyframes "
-                      << loop_closure_opt->keyframe_i << " and "
-                      << loop_closure_opt->keyframe_j
-                      << " with score " << loop_closure_opt->score << std::endl;
+            LoopClosureConstraint loop_closure_constraint = loop_closure_opt.value();
+            backend_.add_loop_closure(loop_closure_constraint);
+            loop_closure_detector_.notify_loop_closure_updated();
         }
+
     }
 
     void SLAM::submap_mapping_loop()

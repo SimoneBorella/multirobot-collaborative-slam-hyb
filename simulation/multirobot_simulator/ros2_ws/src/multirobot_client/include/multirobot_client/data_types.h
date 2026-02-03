@@ -144,7 +144,7 @@ namespace multirobot_slam
         bool is_active = false;
 
         KeyFrame(double timestamp = 0.0,
-                 int keyframe_id = -1,
+                 int keyframe_id = 0,
                  const std::pair<char, int> &pose_symbol = std::pair<char, int>('x', -1),
                  const Pose &pose = Pose(),
                  const std::vector<Keypoint, Eigen::aligned_allocator<Keypoint>> &keypoints = std::vector<Keypoint, Eigen::aligned_allocator<Keypoint>>(),
@@ -159,8 +159,8 @@ namespace multirobot_slam
 
     struct LoopClosureConstraint
     {
-        size_t keyframe_i;
-        size_t keyframe_j;
+        int keyframe_i;
+        int keyframe_j;
         Pose transform_pose;
         double score;
     };
@@ -187,7 +187,7 @@ namespace multirobot_slam
 
     struct Map
     {
-        size_t keyframe_id;
+        int keyframe_id;
         float resolution;
         int width;
         int height;
@@ -228,7 +228,7 @@ namespace multirobot_slam
 
     struct Submap
     {
-        size_t keyframe_id;
+        int keyframe_id;
         float resolution;
         int width;
         int height;

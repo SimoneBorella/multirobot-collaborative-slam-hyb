@@ -28,18 +28,18 @@ backend:
 
 loop_closure_detector:
     loop_closure_detection_rate: 1.0
-    temporal_hits_threshold: 3
-    min_time_separation: 15.0
-    max_spatial_distance: 1.0
     vocabulary_path : "/dep/DBoW3/orbvoc.dbow3"
     min_bow_score: 0.35
+    min_time_separation: 15.0
+    max_spatial_distance: 1.0
+    covisibility_consistency_threshold: 3
     min_matches: 25
-    ransac_iters: 300
-    ransac_set_size: 10
-    inlier_threshold: 0.15
-    min_inliers: 20
-    min_inliers_ratio: 0.50
-    min_total_score: 0.40
+    ransac_iters: 200
+    ransac_set_size: 20
+    inlier_threshold: 0.05
+    min_inliers: 15
+    min_inliers_ratio: 0.80
+    min_geometric_score: 0.90
 
 
 

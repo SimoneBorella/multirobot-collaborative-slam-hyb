@@ -9,7 +9,6 @@
 #include <Eigen/Dense>
 #include <mutex>
 #include <unordered_set>
-#include <cmath>
 
 #include <DBoW3/DBoW3.h>
 #include <opencv2/core.hpp>
@@ -36,7 +35,7 @@ namespace multirobot_slam
         double inlier_threshold;
         size_t min_inliers;
         double min_inliers_ratio;
-        double min_geometric_score;
+        double min_total_score;
 
         LoopClosureDetectorParams(
             double loop_closure_detection_rate = 1.0,
@@ -51,7 +50,7 @@ namespace multirobot_slam
             double inlier_threshold = 0.2,
             size_t min_inliers = 15,
             double min_inliers_ratio = 0.25,
-            double min_geometric_score = 0.8)
+            double min_total_score = 0.8)
             : loop_closure_detection_rate(loop_closure_detection_rate),
               vocabulary_path(vocabulary_path),
               min_bow_score(min_bow_score),
@@ -64,7 +63,7 @@ namespace multirobot_slam
               inlier_threshold(inlier_threshold),
               min_inliers(min_inliers),
               min_inliers_ratio(min_inliers_ratio),
-              min_geometric_score(min_geometric_score) {}
+              min_total_score(min_total_score) {}
     };
 
     class LoopClosureDetector
@@ -77,9 +76,7 @@ namespace multirobot_slam
         void init(LoopClosureDetectorParams &params);
 
         void add_keyframes_to_db(const std::vector<KeyFrame>& keyframes);
-
-        void notify_loop_closure_updated();
-        std::optional<LoopClosureConstraint> detect();
+        std::vector<LoopClosureConstraint> detect();
         
     private:
         bool is_candidate(const KeyFrame& a, const KeyFrame& b);
@@ -90,25 +87,16 @@ namespace multirobot_slam
         LoopClosureDetectorParams params_;
 
         Database orb_db_;
-        
+
         std::vector<KeyFrame> keyframes_;
         std::mutex keyframes_mutex_;
-        
-        std::unordered_map<int, int> database_to_keyframe_id_;
 
         int last_added_keyframe_id_;
         int last_processed_keyframe_id_;
 
-
-        // Loop detector variables
-
-        int loop_num_coincidences_;
-        int loop_num_not_found_;
-        bool loop_detected_;
-
-        int current_keyframe_id_;
-        int last_current_keyframe_id_;
-        int matched_keyframe_id_;
+        std::unordered_map<int, int> database_to_keyframe_id_;
+        std::unordered_map<size_t, int> candidate_hits_;
+        int last_query_kf_id_;
     };
 }
 

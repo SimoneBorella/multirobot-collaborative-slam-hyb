@@ -3,12 +3,12 @@
 namespace multirobot_slam
 {
     LoopClosureDetector::LoopClosureDetector()
-    : last_added_keyframe_id_(0), last_processed_keyframe_id_(0), loop_num_coincidences_(0), loop_num_not_found_(0), loop_detected_(false), current_keyframe_id_(-1), last_current_keyframe_id_(-1), matched_keyframe_id_(-1)
+    : last_added_keyframe_id_(0), last_processed_keyframe_id_(0), last_query_kf_id_(std::numeric_limits<int>::max())
     {
     }
 
     LoopClosureDetector::LoopClosureDetector(LoopClosureDetectorParams &params)
-        : params_(params), last_added_keyframe_id_(0), last_processed_keyframe_id_(0), loop_num_coincidences_(0), loop_num_not_found_(0), loop_detected_(false), current_keyframe_id_(-1), last_current_keyframe_id_(-1), matched_keyframe_id_(-1)
+        : params_(params), last_added_keyframe_id_(0), last_processed_keyframe_id_(0), last_query_kf_id_(std::numeric_limits<int>::max())
     {
     }
 
@@ -57,8 +57,8 @@ namespace multirobot_slam
             if (loop_closure_detector_config["min_inliers_ratio"])
                 p.min_inliers_ratio = loop_closure_detector_config["min_inliers_ratio"].as<double>();    
             
-            if (loop_closure_detector_config["min_geometric_score"])
-                p.min_geometric_score = loop_closure_detector_config["min_geometric_score"].as<double>();            
+            if (loop_closure_detector_config["min_total_score"])
+                p.min_total_score = loop_closure_detector_config["min_total_score"].as<double>();            
         }
         catch (const std::exception &e)
         {
@@ -109,322 +109,105 @@ namespace multirobot_slam
     }
 
 
-
-
-
-
-    void LoopClosureDetector::notify_loop_closure_updated()
+    std::vector<LoopClosureConstraint> LoopClosureDetector::detect()
     {
-        loop_num_coincidences_ = 0;
-        loop_detected_ = false;
-        matched_keyframe_id_ = -1;
-        last_current_keyframe_id_ = -1;
-    }
+        std::vector<LoopClosureConstraint> loop_closure_constraints;
 
-
-
-
-
-
-
-
-
-
-
-
-    // std::optional<LoopClosureConstraint> LoopClosureDetector::detect()
-    // {
-    //     std::lock_guard<std::mutex> lock(keyframes_mutex_);
-
-    //     if(loop_detected_)
-    //         return std::nullopt;
-
-    //     std::optional<LoopClosureConstraint> loop_closure_opt;
-
-    //     for(size_t keyframe_id = last_processed_keyframe_id_+1; keyframe_id<keyframes_.size(); keyframe_id++)
-    //     {
-    //         current_keyframe_id_ = keyframe_id;
-    //         KeyFrame& current_keyframe = keyframes_[current_keyframe_id_];
-            
-    //         std::cout << "Processing keyframe " << current_keyframe_id_ << "..." << std::endl;
-            
-    //         if (loop_num_coincidences_ > 0)
-    //         {
-    //             const KeyFrame& current_kf = keyframes_[current_keyframe_id_];
-    //             const KeyFrame& last_kf    = keyframes_[last_current_keyframe_id_];
-    //             const KeyFrame& matched_kf = keyframes_[matched_keyframe_id_];
-
-    //             // Raffinamento geometrico tra current_kf e matched_kf
-    //             Pose T;
-    //             double geometric_score = 0.0;
-
-    //             bool success = estimate_relative_pose(
-    //                 current_kf,
-    //                 matched_kf,
-    //                 T,
-    //                 geometric_score
-    //             );
-
-    //             if (success)
-    //             {
-    //                 loop_num_coincidences_++;
-    //                 loop_num_not_found_ = 0;
-
-    //                 last_current_keyframe_id_ = current_keyframe_id_;
-
-    //                 std::cout << "Loop consistency " 
-    //                         << loop_num_coincidences_ << "/"
-    //                         << params_.covisibility_consistency_threshold
-    //                         << std::endl;
-
-    //                 if (loop_num_coincidences_ >= params_.covisibility_consistency_threshold)
-    //                 {
-    //                     loop_detected_ = true;
-
-    //                     // Aggiungi constraint
-    //                     loop_closure_opt = LoopClosureConstraint{
-    //                         current_kf.keyframe_id,
-    //                         matched_kf.keyframe_id,
-    //                         T,
-    //                         geometric_score
-    //                     };
-
-    //                     return loop_closure_opt;
-    //                 }
-    //             }
-    //             else
-    //             {
-    //                 loop_num_not_found_++;
-
-    //                 if (loop_num_not_found_ >= 2)
-    //                 {
-    //                     loop_num_coincidences_ = 0;
-    //                     loop_num_not_found_ = 0;
-    //                     matched_keyframe_id_ = -1;
-    //                     last_current_keyframe_id_ = -1;
-    //                 }
-    //             }
-
-    //             continue;
-    //         }
-
-
-
-    //         // Detect loop closure for the first time
-
-    //         // BoW candidate search
-    //         cv::Mat descriptors(current_keyframe.keypoints.size(), 32, CV_8U);
-    //         for (size_t i = 0; i < current_keyframe.keypoints.size(); i++)
-    //             memcpy(descriptors.ptr(i), current_keyframe.keypoints[i].descriptor.data(), 32);
-
-    //         QueryResults ret;
-    //         orb_db_.query(descriptors, ret, 3);
-
-    //         // Check candidates
-    //         double best_geom_score = 0.0;
-    //         int best_candidate_id = -1;
-    //         Pose best_T;
-
-    //         for (auto &r : ret)
-    //         {
-    //             // Check bow score
-    //             if (r.Score < params_.min_bow_score)
-    //                 continue;
-
-    //             int candidate_keyframe_id = database_to_keyframe_id_[r.Id];
-    //             const KeyFrame& candidate_keyframe = keyframes_[candidate_keyframe_id];
-
-    //             // Spacial and temporal consistency check
-    //             if (!is_candidate(current_keyframe, candidate_keyframe))
-    //                 continue;
-
-    //             // Find relative pose
-    //             Pose T;
-    //             double geometric_score = 0.0;
-
-    //             bool success = estimate_relative_pose(
-    //                 current_keyframe,
-    //                 candidate_keyframe,
-    //                 T,
-    //                 geometric_score
-    //             );
-
-    //             if (!success)
-    //                 continue;
-
-    //             if (geometric_score > best_geom_score)
-    //             {
-    //                 best_geom_score = geometric_score;
-    //                 best_candidate_id = candidate_keyframe_id;
-    //                 best_T = T;
-    //             }
-    //         }
-
-    //         if (best_candidate_id != -1)
-    //         {
-    //             matched_keyframe_id_ = best_candidate_id;
-    //             last_current_keyframe_id_ = current_keyframe_id_;
-    //             loop_num_coincidences_ = 1;
-    //             loop_num_not_found_ = 0;
-    //         }
-
-    //         last_processed_keyframe_id_ = current_keyframe_id_;
-    //     }
-        
-    //     return std::nullopt;
-    // }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    std::optional<LoopClosureConstraint> LoopClosureDetector::detect()
-    {
-        std::lock_guard<std::mutex> lock(keyframes_mutex_);
-
-        if(loop_detected_)
-            return std::nullopt;
-
-        std::optional<LoopClosureConstraint> loop_closure_opt;
-
-        for(size_t keyframe_id = last_processed_keyframe_id_ + 1; keyframe_id < keyframes_.size(); keyframe_id++)
+        for(size_t active_keyframe_id = last_processed_keyframe_id_+1; active_keyframe_id<keyframes_.size(); active_keyframe_id++)
         {
-            current_keyframe_id_ = keyframe_id;
-            KeyFrame& current_keyframe = keyframes_[current_keyframe_id_];
+            KeyFrame& active_keyframe = keyframes_[active_keyframe_id];
 
-            std::cout << "Processing keyframe " << current_keyframe_id_ << "..." << std::endl;
-
-            // BoW candidate search
-            cv::Mat descriptors(current_keyframe.keypoints.size(), 32, CV_8U);
-            for (size_t i = 0; i < current_keyframe.keypoints.size(); i++)
-                memcpy(descriptors.ptr(i), current_keyframe.keypoints[i].descriptor.data(), 32);
-
+            std::cout << "Processing keyframe " << active_keyframe_id << "..." << std::endl;
+            
+            // Temporal consistency reset on new active keyframe
+            if (active_keyframe.keyframe_id != last_query_kf_id_)
+            {
+                candidate_hits_.clear();
+                last_query_kf_id_ = active_keyframe.keyframe_id;
+            }
+            
+            
+            // Query DB with active keyframe
+            cv::Mat descriptors(active_keyframe.keypoints.size(), 32, CV_8U);
+            for (size_t j = 0; j < active_keyframe.keypoints.size(); j++)
+            memcpy(descriptors.ptr(j), active_keyframe.keypoints[j].descriptor.data(), 32);
+            
             QueryResults ret;
             orb_db_.query(descriptors, ret, 5);
-
-            double best_geom_score = 0.0;
-            int best_candidate_id = -1;
-            Pose best_T;
-
-            for (auto &r : ret)
+            
+            // For each result, find the keyframe and verify candidates
+            // std::cout << "Loop closure candidates for keyframe " << active_keyframe.keyframe_id << ":" << std::endl;
+            
+            // std::cout << "Best candidate keyframe " << database_to_keyframe_id_[ret[1].Id] << " with BoW score " << ret[1].Score << std::endl;
+            
+            // Candidate evaluation
+            double best_score = 0.0;
+            for (const auto& r : ret)
             {
-                if (r.Score < params_.min_bow_score)
-                    continue;
-
+                KeyFrame candidate_keyframe;
                 int candidate_keyframe_id = database_to_keyframe_id_[r.Id];
-                const KeyFrame& candidate_keyframe = keyframes_[candidate_keyframe_id];
+                
+                bool found = false;
+                {
+                    std::lock_guard<std::mutex> lock(keyframes_mutex_);
+                    auto it = std::find_if(keyframes_.begin(), keyframes_.end(),
+                        [&](const KeyFrame& kf){ return kf.keyframe_id == candidate_keyframe_id; });
 
-                // Temporal and spatial consistency
-                if (!is_candidate(current_keyframe, candidate_keyframe))
+                    if (it != keyframes_.end()) {
+                        candidate_keyframe = *it;
+                        found = true;
+                    }
+                }
+                if (!found)
                     continue;
-
+                
+                // BoW score threshold check
+                double bow_score = r.Score;
+                if (bow_score < params_.min_bow_score)
+                    continue;
+    
+                // Spacial and temporal consistency check
+                if (!is_candidate(active_keyframe, candidate_keyframe))
+                    continue;
+    
+                // Temporal consistency check
+                candidate_hits_[candidate_keyframe.keyframe_id]++;
+                if (candidate_hits_[candidate_keyframe.keyframe_id] < params_.covisibility_consistency_threshold)
+                    continue;
+    
                 // Geometric verification
                 Pose T;
-                double geometric_score = 0.0;
-                bool success = estimate_relative_pose(current_keyframe, candidate_keyframe, T, geometric_score);
-
-                if (!success)
+                double geom_score = 0.0;
+                if (!estimate_relative_pose(active_keyframe, candidate_keyframe, T, geom_score))
                     continue;
-
-                if (geometric_score > params_.min_geometric_score && geometric_score > best_geom_score)
+    
+                double total_score = bow_score * geom_score;
+    
+                if (total_score < params_.min_total_score)
                 {
-                    best_geom_score = geometric_score;
-                    best_candidate_id = candidate_keyframe_id;
-                    best_T = T;
+                    // std::cout << "Rejected loop closure: total score " << total_score << " below threshold." << std::endl;
+                    continue;
+                }
+    
+                if (total_score > best_score)
+                {
+                    best_score = total_score;
+                    loop_closure_constraints.push_back(
+                        LoopClosureConstraint{
+                            active_keyframe.keyframe_id,
+                            candidate_keyframe.keyframe_id,
+                            T,
+                            total_score
+                        }
+                    );
                 }
             }
-
-
-            if (best_candidate_id != -1)
-            {
-                last_processed_keyframe_id_ = current_keyframe_id_;
-
-                loop_detected_ = true;
-
-                loop_closure_opt = LoopClosureConstraint{
-                    current_keyframe_id_,
-                    best_candidate_id,
-                    best_T,
-                    best_geom_score
-                };
-
-                // std::cout << "Loop closure detected between keyframes "
-                //         << current_keyframe_id_ << " and "
-                //         << best_candidate_id
-                //         << " with score " << best_geom_score << std::endl;
-                
-                Eigen::Quaterniond q = best_T.orientation;
-
-                double yaw = std::atan2(
-                    2.0 * (q.w() * q.z() + q.x() * q.y()),
-                    1.0 - 2.0 * (q.y() * q.y() + q.z() * q.z())
-                );
-
-                std::cout << "Loop closure detected between keyframes "
-                        << current_keyframe_id_ << " and "
-                        << best_candidate_id
-                        << " with score " << best_geom_score
-                        << " | Pose: x=" << best_T.position.x()
-                        << ", y=" << best_T.position.y()
-                        << ", yaw=" << yaw
-                        << std::endl;
-
-                return loop_closure_opt;
-                
-            }
-            
-            last_processed_keyframe_id_ = current_keyframe_id_;
-        
         }
+        
+        last_processed_keyframe_id_ = keyframes_.size()-1;
 
-        return std::nullopt;
+        return loop_closure_constraints;
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
     double LoopClosureDetector::compute_bow_score(const KeyFrame& a, const KeyFrame& b)
@@ -514,7 +297,6 @@ namespace multirobot_slam
         }
 
         // RANSAC SE(3)
-        int best_inliers = 0;
         double best_inlier_score = 0;
         Eigen::Matrix4d best_T = Eigen::Matrix4d::Identity();
 
@@ -574,7 +356,6 @@ namespace multirobot_slam
 
             double inlier_threshold = params_.inlier_threshold;
 
-            int inliers = 0;
             double inlier_score = 0;
             for (size_t i = 0; i < pts_a.size(); ++i)
             {
@@ -583,28 +364,25 @@ namespace multirobot_slam
                 double dist2 = (pb_est - pts_b[i]).squaredNorm();
 
                 if (dist2 < inlier_threshold * inlier_threshold)
-                {
-                    inliers++;
-                    inlier_score += std::exp(-0.5 * dist2 / (inlier_threshold*inlier_threshold));
-                }
+                    // inlier_score += std::exp(-dist2/(2*inlier_threshold*inlier_threshold));
+                    inlier_score += 1.0;
             }
 
-            if (inliers > best_inliers)
+            if (inlier_score > best_inlier_score)
             {
-                best_inliers = inliers;
                 best_inlier_score = inlier_score;
                 best_T = T;
             }
         }
 
-        double inlier_ratio = double(best_inliers) / double(pts_a.size());
+        double inlier_ratio = best_inlier_score / pts_a.size();
 
-        if (best_inliers < params_.min_inliers || inlier_ratio < params_.min_inliers_ratio)
+        if (best_inlier_score < params_.min_inliers || inlier_ratio < params_.min_inliers_ratio)
             return false;
 
 
         // Output
-        score = best_inlier_score / double(pts_a.size());
+        score = inlier_ratio;
 
         Eigen::Vector3d t = best_T.block<3,1>(0,3);
         Eigen::Matrix3d R = best_T.block<3,3>(0,0);
