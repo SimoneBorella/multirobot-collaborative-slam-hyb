@@ -160,12 +160,21 @@ public:
         std::cout << "[Client " << ns_ << "]: " << "SLAM started." << std::endl;
         mapping_.start();
         std::cout << "[Client " << ns_ << "]: " << "Mapping started." << std::endl;
+
+        std::this_thread::sleep_for(std::chrono::seconds(2));
     }
 
 private:
 
     void publish_map_to_odom(const State& state)
     {
+        if (std::isnan(state.position.x()) || std::isnan(state.position.y()) || std::isnan(state.position.z()) ||
+            std::isnan(state.attitude.x()) || std::isnan(state.attitude.y()) || std::isnan(state.attitude.z()) || std::isnan(state.attitude.w()) ||
+            (state.attitude.x() == 0 && state.attitude.y() == 0 && state.attitude.z() == 0 && state.attitude.w() == 0))
+        {
+            return;
+        }
+
         const rclcpp::Time state_time(
             static_cast<int64_t>(state.timestamp * 1e9)
         );
@@ -174,7 +183,7 @@ private:
             odom_frame_,
             base_frame_,
             state_time,
-            rclcpp::Duration::from_seconds(0.1)))
+            rclcpp::Duration::from_seconds(0.5)))
         {
             // std::cout << "[Client " << ns_ << "] Could not read transform " << odom_frame_ << " -> " << base_frame_ << " at timestep " << state.timestamp << std::endl;
             return;
