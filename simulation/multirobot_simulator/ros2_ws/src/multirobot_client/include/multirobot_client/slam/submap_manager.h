@@ -12,6 +12,7 @@ namespace multirobot_slam
 {
     struct SubmapManagerParams
     {
+        bool run_submap_manager;
         double submap_mapping_rate;
         double submap_resolution;
         double submap_width;
@@ -29,6 +30,7 @@ namespace multirobot_slam
         double free_threshold;
 
         SubmapManagerParams(
+            bool run_submap_manager = true,
             double submap_mapping_rate = 1.0,
             double submap_resolution = 0.05,
             double submap_width = 12.0,
@@ -42,7 +44,8 @@ namespace multirobot_slam
             double noise_std_dev = 0.03,
             double obstacle_threshold = 0.70,
             double free_threshold = 0.30)
-            : submap_mapping_rate(submap_mapping_rate),
+            : run_submap_manager(run_submap_manager),
+              submap_mapping_rate(submap_mapping_rate),
               submap_resolution(submap_resolution),
               submap_width(submap_width),
               submap_height(submap_height),

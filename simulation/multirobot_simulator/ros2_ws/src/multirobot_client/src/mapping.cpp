@@ -4,12 +4,12 @@
 namespace multirobot_slam
 {
     Mapping::Mapping()
-        : map_updated_(true), ewfd_first_(true), frontier_map_updated_(true), frontiers_updated_(true), mapping_thread_running_(false)
+        : map_updated_(true), ewfd_first_(true), frontier_map_updated_(true), mapping_thread_running_(false)
     {
     }
 
     Mapping::Mapping(MappingParams &params)
-        : params_(params), map_updated_(true), ewfd_first_(true), frontier_map_updated_(true), frontiers_updated_(true), mapping_thread_running_(false)
+        : params_(params), map_updated_(true), ewfd_first_(true), frontier_map_updated_(true), mapping_thread_running_(false)
     {
     }
 
@@ -58,20 +58,12 @@ namespace multirobot_slam
             if (config["log_odds_max"])
                 p.log_odds_max = config["log_odds_max"].as<double>();
 
-
             if (config["obstacle_threshold"])
                 p.obstacle_threshold = config["obstacle_threshold"].as<double>();
             if (config["free_threshold"])
                 p.free_threshold = config["free_threshold"].as<double>();
             if (config["frontier_del_obstacles_radius"])
                 p.frontier_del_obstacles_radius = config["frontier_del_obstacles_radius"].as<double>();
-            if (config["epsilon"])
-                p.epsilon = config["epsilon"].as<double>();
-            if (config["min_points"])
-                p.min_points = config["min_points"].as<int>();
-            if (config["min_frontier_size"])
-                p.min_frontier_size = config["min_frontier_size"].as<double>();
-
         }
         catch (const std::exception &e)
         {
@@ -119,6 +111,12 @@ namespace multirobot_slam
         frontier_map_.origin_position = map_.origin_position;
         frontier_map_.origin_orientation = map_.origin_orientation;
         frontier_map_.data.resize(map_.width * map_.height, -1);
+
+        frontier_map_update_.resolution = map_.resolution;
+        frontier_map_update_.width = map_.width;
+        frontier_map_update_.height = map_.height;
+        frontier_map_update_.origin_position = map_.origin_position;
+        frontier_map_update_.origin_orientation = map_.origin_orientation;
 
         ewfd_visited_.assign(map_.width * map_.height, false);
 
@@ -193,34 +191,30 @@ namespace multirobot_slam
     {
         std::lock_guard<std::mutex> lock(map_log_odds_update_mutex_);
 
-        if(map_log_odds_update_.indicies.empty())
+        if(map_log_odds_update_.indices.empty())
             return std::nullopt;
 
         MapLogOddsUpdate map_log_odds_update_copy = map_log_odds_update_;
-        map_log_odds_update_.indicies.clear();
+        map_log_odds_update_.indices.clear();
         map_log_odds_update_.delta_log_odds.clear();
 
         return map_log_odds_update_copy;
     }
 
-    std::vector<Frontier> Mapping::get_frontiers()
-    {
-        return frontiers_;
-    }
 
-    std::optional<std::vector<Frontier>> Mapping::get_frontiers_if_updated()
+    std::optional<FrontierMapUpdate> Mapping::get_frontier_map_update()
     {
-        if (frontiers_updated_)
-        {
-            frontiers_updated_ = false;
-            return frontiers_;
-        }
-        else
-        {
+        std::lock_guard<std::mutex> lock(frontier_map_update_mutex_);
+
+        if(frontier_map_update_.frontier_indices.empty() && frontier_map_update_.explored_indices.empty())
             return std::nullopt;
-        }
-    }
 
+        FrontierMapUpdate frontier_map_update_copy = frontier_map_update_;
+        frontier_map_update_.frontier_indices.clear();
+        frontier_map_update_.explored_indices.clear();
+
+        return frontier_map_update_copy;
+    }
 
     double Mapping::probability_to_log_odds(int8_t prob)
     {    
@@ -413,156 +407,21 @@ namespace multirobot_slam
             }
 
             if (is_frontier)
-                frontier_map_.data[idx] = 100;
+            {
+                if (frontier_map_.data[idx] != 100) {
+                    frontier_map_.data[idx] = 100;
+                    frontier_map_update_.frontier_indices.push_back(idx);
+                }
+            }
             else
-                frontier_map_.data[idx] = 0;
-        }
-    }
-
-    std::vector<std::pair<int, int>> Mapping::get_neighbors(int x, int y)
-    {
-        std::vector<std::pair<int, int>> neighbors;
-
-        int epsilon_cells = std::ceil(params_.epsilon / frontier_map_.resolution);
-
-        for (int dx = -epsilon_cells; dx <= epsilon_cells; dx++)
-        {
-            for (int dy = -epsilon_cells; dy <= epsilon_cells; dy++)
             {
-                if (dx == 0 && dy == 0)
-                    continue;
-
-                if ((dx * dx + dy * dy) * frontier_map_.resolution * frontier_map_.resolution > params_.epsilon * params_.epsilon)
-                    continue;
-
-                int nx = x + dx;
-                int ny = y + dy;
-
-                int nidx = ny * frontier_map_.width + nx;
-
-                if (nx >= 0 && ny >= 0 && nx < frontier_map_.width && ny < frontier_map_.height && frontier_map_.data[nidx] == 100)
-                {
-                    neighbors.emplace_back(nx, ny);
+                if (frontier_map_.data[idx] != 0) {
+                    frontier_map_.data[idx] = 0;
+                    frontier_map_update_.explored_indices.push_back(idx);
                 }
             }
+
         }
-
-        return neighbors;
-    }
-
-    std::map<int, std::vector<std::pair<int, int>>> Mapping::dbscan_frontier_clusters_detection()
-    {
-        std::map<std::pair<int, int>, int> labels;
-        std::map<int, std::vector<std::pair<int, int>>> clusters;
-
-        int cluster_id = 0;
-
-        for (int y = 0; y < frontier_map_.height; y++) {
-            for (int x = 0; x < frontier_map_.width; x++) {
-                int idx = y * frontier_map_.width + x;
-        
-                if (frontier_map_.data[idx] != 100)
-                    continue;
-        
-                if (labels.find({x, y}) != labels.end())
-                    continue;
-        
-                std::vector<std::pair<int, int>> neighbors = get_neighbors(x, y);
-        
-                if (neighbors.size() < static_cast<size_t>(params_.min_points)) {
-                    labels[{x, y}] = -1;
-                    continue;
-                }
-        
-                labels[{x, y}] = cluster_id;
-                clusters[cluster_id].push_back({x, y});
-        
-                std::queue<std::pair<int, int>> queue;
-        
-                for (const auto& p : neighbors)
-                    queue.push(p);
-        
-                while (!queue.empty()) {
-                    auto p = queue.front(); queue.pop();
-        
-                    if (labels.find(p) != labels.end()) {
-                        if (labels[p] == -1) {
-                            labels[p] = cluster_id;
-                            clusters[cluster_id].push_back(p);
-                        }
-                        continue;
-                    }
-        
-                    labels[p] = cluster_id;
-                    clusters[cluster_id].push_back(p);
-        
-                    auto p_neighbors = get_neighbors(p.first, p.second);
-                    if (p_neighbors.size() >= static_cast<size_t>(params_.min_points)) {
-                        for (const auto& n : p_neighbors)
-                            queue.push(n);
-                    }
-                }
-        
-                cluster_id++;
-            }
-        }
-        
-        return clusters;
-    }
-
-
-    std::vector<Frontier> Mapping::frontier_centroids_detection(const std::map<int, std::vector<std::pair<int, int>>>& frontier_clusters)
-    {
-        std::vector<Frontier> frontiers;
-
-        for (const auto& [cluster_id, cluster] : frontier_clusters)
-        {
-            double cluster_size = cluster.size() * frontier_map_.resolution * frontier_map_.resolution;
-            if (cluster_size < params_.min_frontier_size)
-                continue;
-
-            double sum_x = 0.0;
-            double sum_y = 0.0;
-
-            for (const auto& point : cluster)
-            {
-                sum_x += point.first;
-                sum_y += point.second;
-            }
-
-            double centroid_x = sum_x / cluster.size();
-            double centroid_y = sum_y / cluster.size();
-
-
-            // Find the point in the cluster closest to the centroid
-            std::pair<int, int> closest_point;
-            double min_dist_sq = std::numeric_limits<double>::max();
-
-            for (const auto& point : cluster)
-            {
-                double dx = point.first - centroid_x;
-                double dy = point.second - centroid_y;
-                double dist_sq = dx * dx + dy * dy;
-
-                if (dist_sq < min_dist_sq)
-                {
-                    min_dist_sq = dist_sq;
-                    closest_point = point;
-                }
-            }
-
-            // Convert closest grid cell to world coordinates
-            double world_x = closest_point.first * frontier_map_.resolution + frontier_map_.origin_position.x() + frontier_map_.resolution / 2.0;
-            double world_y = closest_point.second * frontier_map_.resolution + frontier_map_.origin_position.y() + frontier_map_.resolution / 2.0;
-
-            Frontier frontier;
-            frontier.centroid = Eigen::Vector2d(world_x, world_y);
-            frontier.size = cluster_size;
-            
-            frontiers.push_back(frontier);
-        }
-
-        return frontiers;
     }
 
 
@@ -623,7 +482,7 @@ namespace multirobot_slam
                 double global_laser_x = posed_scan.position.x() + laser_x * cos(yaw) - laser_y * sin(yaw);
                 double global_laser_y = posed_scan.position.y() + laser_x * sin(yaw) + laser_y * cos(yaw);
 
-                // Map indicies of endpoint
+                // Map indices of endpoint
                 int global_laser_map_x = static_cast<int>((global_laser_x - map_.origin_position.x()) / map_.resolution);
                 int global_laser_map_y = static_cast<int>((global_laser_y - map_.origin_position.y()) / map_.resolution);
 
@@ -641,23 +500,25 @@ namespace multirobot_slam
                         params_.log_odds_min,
                         params_.log_odds_max);
 
-            map_.data[idx] =
-                log_odds_to_probability(map_log_odds_data_[idx]);
+            map_.data[idx] = log_odds_to_probability(map_log_odds_data_[idx]);
         }
 
+        // Set map updated flag
+        map_updated_ = true;
 
+
+        // Update map log odds update
         {
             std::lock_guard<std::mutex> lock(map_log_odds_update_mutex_);
 
             for (auto &[idx, delta] : local_log_odds_delta_) {
-                map_log_odds_update_.indicies.push_back(idx);
+                map_log_odds_update_.indices.push_back(idx);
                 map_log_odds_update_.delta_log_odds.push_back(delta);
             }
-
+    
             local_log_odds_delta_.clear();
         }
-
-        map_updated_ = true;
+    
 
 
         // Create filtered map
@@ -678,54 +539,57 @@ namespace multirobot_slam
 
         // Remove frontier cells around obstacles
 
-        int radius = static_cast<int>(std::ceil(params_.frontier_del_obstacles_radius / filtered_map_.resolution));
+        {
+            std::lock_guard<std::mutex> lock(frontier_map_update_mutex_);
 
-        for (size_t i = 0; i < filtered_map_.data.size(); i++) {
-            if (filtered_map_.data[i] == -1)
-                continue;
+            int radius = static_cast<int>(std::ceil(params_.frontier_del_obstacles_radius / filtered_map_.resolution));
 
-            if (filtered_map_.data[i] == 100) {
-                int x = i % filtered_map_.width;
-                int y = i / filtered_map_.width;
+            for (size_t i = 0; i < filtered_map_.data.size(); i++) {
+                if (filtered_map_.data[i] == -1)
+                    continue;
 
-                for (int dx = -radius; dx <= radius; dx++) {
-                    for (int dy = -radius; dy <= radius; dy++) {
-                        if ((dx * dx + dy * dy) * filtered_map_.resolution * filtered_map_.resolution > params_.frontier_del_obstacles_radius * params_.frontier_del_obstacles_radius)
-                            continue;
+                if (filtered_map_.data[i] == 100) {
+                    int x = i % filtered_map_.width;
+                    int y = i / filtered_map_.width;
 
-                        int nx = x + dx;
-                        int ny = y + dy;
-                        if (nx < 0 || ny < 0 || nx >= filtered_map_.width || ny >= filtered_map_.height)
-                            continue;
+                    for (int dx = -radius; dx <= radius; dx++) {
+                        for (int dy = -radius; dy <= radius; dy++) {
+                            if ((dx * dx + dy * dy) * filtered_map_.resolution * filtered_map_.resolution > params_.frontier_del_obstacles_radius * params_.frontier_del_obstacles_radius)
+                                continue;
 
-                        int idx = ny * filtered_map_.width + nx;
-                        frontier_map_.data[idx] = 0;
+                            int nx = x + dx;
+                            int ny = y + dy;
+                            if (nx < 0 || ny < 0 || nx >= filtered_map_.width || ny >= filtered_map_.height)
+                                continue;
+
+                            int idx = ny * filtered_map_.width + nx;
+
+                            if (frontier_map_.data[idx] != 0) {
+                                frontier_map_.data[idx] = 0;
+                                frontier_map_update_.explored_indices.push_back(idx);
+                            }
+                        }
                     }
                 }
             }
+
+            // Detect frontiers cells in the active area
+
+            PosedScan posed_scan_front = posed_scan_buffer.front();
+            PosedScan posed_scan_back = posed_scan_buffer.back();
+
+            double displacement = (posed_scan_back.position - posed_scan_front.position).norm();
+
+            int robot_map_x = static_cast<int>((posed_scan_back.position.x() - map_.origin_position.x()) / map_.resolution);
+            int robot_map_y = static_cast<int>((posed_scan_back.position.y() - map_.origin_position.y()) / map_.resolution);
+
+            double active_area_radius = posed_scan_back.range_max + displacement + 1.0;
+
+            expanding_wavefront_frontier_cells_detection(robot_map_x, robot_map_y, active_area_radius);
         }
 
-        // Detect frontiers cells in the active area
-
-        PosedScan posed_scan_front = posed_scan_buffer.front();
-        PosedScan posed_scan_back = posed_scan_buffer.back();
-
-        double displacement = (posed_scan_back.position - posed_scan_front.position).norm();
-
-        int robot_map_x = static_cast<int>((posed_scan_back.position.x() - map_.origin_position.x()) / map_.resolution);
-        int robot_map_y = static_cast<int>((posed_scan_back.position.y() - map_.origin_position.y()) / map_.resolution);
-
-        double active_area_radius = posed_scan_back.range_max + displacement + 1.0;
-        expanding_wavefront_frontier_cells_detection(robot_map_x, robot_map_y, active_area_radius);
-
+        // Set frontier map update flag
         frontier_map_updated_ = true;
-        
-        // Detect frontiers
-        std::map<int, std::vector<std::pair<int, int>>> frontier_clusters = dbscan_frontier_clusters_detection();
-        frontiers_ = frontier_centroids_detection(frontier_clusters);
 
-
-
-        frontiers_updated_ = true;
     }   
 }

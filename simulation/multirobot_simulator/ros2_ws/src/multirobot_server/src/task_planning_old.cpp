@@ -26,7 +26,6 @@ namespace multirobot_slam
             if (config["w_coverage"]) p.w_coverage = config["w_coverage"].as<double>();
             if (config["coverage_scale"]) p.coverage_scale = config["coverage_scale"].as<double>();
             if (config["conflict_penalty"]) p.conflict_penalty = config["conflict_penalty"].as<double>();
-            if (config["uncertainty_reduction_mode"]) p.uncertainty_reduction_mode = config["uncertainty_reduction_mode"].as<bool>();
         }
         catch (const std::exception &e)
         {
@@ -54,9 +53,9 @@ namespace multirobot_slam
 
 
 
-    std::map<std::string, Task> TaskPlanning::plan_tasks(std::map<std::string, Pose> robot_poses, std::vector<Frontier> frontiers)
+    std::map<std::string, Frontier> TaskPlanning::plan_tasks(std::map<std::string, Pose> robot_poses, std::vector<Frontier> frontiers)
     {
-        std::map<std::string, Task> tasks;
+        std::map<std::string, Frontier> tasks;
 
         DiscreteFactorGraph graph;
         
@@ -65,34 +64,16 @@ namespace multirobot_slam
 
         for(const auto& [robot, pose] : robot_poses)
         {
-            if(robot_initial_poses_.find(robot) == robot_initial_poses_.end())
-                robot_initial_poses_[robot] = pose;
-            
             robots.push_back(robot);
             poses.push_back(pose);
         }
 
-        if (poses.empty()) {
+        if (poses.empty() || frontiers.empty()) {
             return tasks;
         }
 
         size_t n_frontiers = frontiers.size();
         size_t n_robots = poses.size();
-
-        // Send to initial position if no frontiers detected
-        if(n_frontiers == 0)
-        {
-            for(const auto& [robot, pose] : robot_poses)
-            {
-                Task robot_task;
-                robot_task.pose = robot_initial_poses_[robot];
-                robot_task.oriented = true;
-
-                tasks[robot] = robot_task;
-            }
-
-            return tasks;
-        }
 
         // Create dynamic max distance & size
         double max_distance = 0.0;
@@ -152,8 +133,8 @@ namespace multirobot_slam
 
                 if (last_planned_tasks_.count(robots[i]))
                 {
-                    const Task& old_task = last_planned_tasks_[robots[i]];
-                    frontier_switch_dist = (frontier_centroid - Eigen::Vector2d(old_task.pose.position.x(), old_task.pose.position.y())).norm();
+                    const Frontier& old_frontier = last_planned_tasks_[robots[i]];
+                    frontier_switch_dist = (frontier_centroid - old_frontier.centroid).norm();
                 }
 
                 // Normalize each contribution [0,1]
@@ -227,13 +208,7 @@ namespace multirobot_slam
         {
             const std::string& robot = robots[i];
             size_t assignment = result[robot_keys[i].first];
-
-            Task robot_task;
-            robot_task.pose.position.x() = frontiers[assignment].centroid.x();
-            robot_task.pose.position.y() = frontiers[assignment].centroid.y();
-            robot_task.oriented = false;
-
-            tasks[robot] = robot_task;
+            tasks[robot] = frontiers[assignment];
         }
 
         last_planned_tasks_ = tasks;

@@ -39,11 +39,6 @@ namespace multirobot_slam
 
         double frontier_del_obstacles_radius;
 
-        double epsilon;
-        int min_points;
-
-        double min_frontier_size;
-
         MappingParams(
             double mapping_rate = 2.0,
             double map_resolution = 0.05,
@@ -58,10 +53,7 @@ namespace multirobot_slam
             double log_odds_max = 10.0,
             double obstacle_threshold = 0.7,
             double free_threshold = 0.3,
-            double frontier_del_obstacles_radius = 0.18,
-            double epsilon = 0.5,
-            int min_points = 3,
-            double min_frontier_size = 0.07)
+            double frontier_del_obstacles_radius = 0.18)
             : mapping_rate(mapping_rate),
               map_resolution(map_resolution),
               map_width(map_width),
@@ -75,10 +67,7 @@ namespace multirobot_slam
               log_odds_max(log_odds_max),
               obstacle_threshold(obstacle_threshold),
               free_threshold(free_threshold),
-              frontier_del_obstacles_radius(frontier_del_obstacles_radius),
-              epsilon(epsilon),
-              min_points(min_points),
-              min_frontier_size(min_frontier_size){}
+              frontier_del_obstacles_radius(frontier_del_obstacles_radius){}
     };
 
 
@@ -100,8 +89,7 @@ namespace multirobot_slam
         std::optional<Map> get_map_if_updated();
         Map get_frontier_map();
         std::optional<Map> get_frontier_map_if_updated();
-        std::vector<Frontier> get_frontiers();
-        std::optional<std::vector<Frontier>> get_frontiers_if_updated();
+        std::optional<FrontierMapUpdate> get_frontier_map_update();
 
     private:
         double probability_to_log_odds(int8_t prob);
@@ -109,9 +97,6 @@ namespace multirobot_slam
 
         void bresenham_raytrace(int x0, int y0, int x1, int y1, bool hit_point);
         void expanding_wavefront_frontier_cells_detection(int rx, int ry, double active_area_radius);
-        std::vector<std::pair<int, int>> get_neighbors(int x, int y);
-        std::map<int, std::vector<std::pair<int, int>>> dbscan_frontier_clusters_detection();
-        std::vector<Frontier> frontier_centroids_detection(const std::map<int, std::vector<std::pair<int, int>>>& frontier_clusters);
 
         void mapping();
 
@@ -131,18 +116,19 @@ namespace multirobot_slam
         std::vector<double> map_log_odds_data_;
         Map map_;
         Map filtered_map_;
-        Map frontier_map_;
-
+        
         bool map_updated_;
-
-        std::vector<Frontier> frontiers_;
-
+        
+        
         bool ewfd_first_;
         std::vector<bool> ewfd_visited_;
-
+        
+        Map frontier_map_;
         bool frontier_map_updated_;
-        bool frontiers_updated_;
 
+        FrontierMapUpdate frontier_map_update_;
+        std::mutex frontier_map_update_mutex_;
+        
         std::atomic<bool> mapping_thread_running_;
         std::thread mapping_thread_;
     };

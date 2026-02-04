@@ -24,6 +24,7 @@ namespace multirobot_slam
 {
     struct LoopClosureDetectorParams
     {
+        bool run_loop_closure_detection;
         double loop_closure_detection_rate;
         std::string vocabulary_path;
         double min_bow_score;
@@ -34,11 +35,12 @@ namespace multirobot_slam
         size_t ransac_iters;
         size_t ransac_set_size;
         double inlier_threshold;
-        size_t min_inliers;
+        int min_inliers;
         double min_inliers_ratio;
         double min_geometric_score;
 
         LoopClosureDetectorParams(
+            bool run_loop_closure_detection = true,
             double loop_closure_detection_rate = 1.0,
             std::string vocabulary_path = "./vocabularies/ORBvoc.yml",
             double min_bow_score = 0.3,
@@ -49,10 +51,11 @@ namespace multirobot_slam
             size_t ransac_iters = 100,
             size_t ransac_set_size = 8,
             double inlier_threshold = 0.2,
-            size_t min_inliers = 15,
+            int min_inliers = 15,
             double min_inliers_ratio = 0.25,
             double min_geometric_score = 0.8)
-            : loop_closure_detection_rate(loop_closure_detection_rate),
+            : run_loop_closure_detection(run_loop_closure_detection),
+              loop_closure_detection_rate(loop_closure_detection_rate),
               vocabulary_path(vocabulary_path),
               min_bow_score(min_bow_score),
               min_time_separation(min_time_separation),

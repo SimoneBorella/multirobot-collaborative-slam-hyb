@@ -9,8 +9,9 @@ max_vel_theta: 1.0
 lookahead_dist: 0.0
 start_prior_noise: [0.001, 0.001, 0.001, 0.001]
 goal_prior_noise: [0.02, 0.02, 0.02, 0.02]
-dynamic_noise: 0.2
+dynamic_noise: 0.4
 inter_robot_noise: 0.2
 obstacle_noise: 0.2
 robot_dist_threshold: 0.4
-obstacle_dist_threshold: 0.25
+obstacle_dist_threshold: 0.15
+obstacle_orientation_dist_threshold: 0.0872

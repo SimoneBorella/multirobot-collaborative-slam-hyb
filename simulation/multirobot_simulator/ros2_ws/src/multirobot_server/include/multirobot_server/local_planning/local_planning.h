@@ -49,39 +49,42 @@ namespace multirobot_slam
         double inter_robot_noise;
         double obstacle_noise;
         double robot_dist_threshold;
-        double obstacle_dist_threshold;
+        double obstacle_position_dist_threshold;
+        double obstacle_orientation_dist_threshold;
 
         LocalPlanningParams(
-            double local_planning_rate_ = 10.0,
-            double stop_dist_threshold_ = 0.1,
-            double dt_ = 0.1,
-            double predict_time_ = 1.5,
-            double max_vel_x_ = 0.22,
-            double min_vel_x_ = -0.0,
-            double max_vel_theta_ = 1.0,
-            double lookahead_dist_ = 0.0,
-            std::vector<double> start_prior_noise_ = std::vector<double>{0.001, 0.001, 0.001, 0.001},
-            std::vector<double> goal_prior_noise_ = std::vector<double>{0.02, 0.02, 0.02, 0.02},
-            double dynamic_noise_ = 0.2,
-            double inter_robot_noise_ = 0.2,
-            double obstacle_noise_ = 0.2,
-            double robot_dist_threshold_ = 0.4,
-            double obstacle_dist_threshold_ = 0.25)
-            : local_planning_rate(local_planning_rate_),
-              stop_dist_threshold(stop_dist_threshold_),
-              dt(dt_),
-              predict_time(predict_time_),
-              max_vel_x(max_vel_x_),
-              min_vel_x(min_vel_x_),
-              max_vel_theta(max_vel_theta_),
-              lookahead_dist(lookahead_dist_),
-              start_prior_noise(start_prior_noise_),
-              goal_prior_noise(goal_prior_noise_),
-              dynamic_noise(dynamic_noise_),
-              inter_robot_noise(inter_robot_noise_),
-              obstacle_noise(obstacle_noise_),
-              robot_dist_threshold(robot_dist_threshold_),
-              obstacle_dist_threshold(obstacle_dist_threshold_){}
+            double local_planning_rate = 10.0,
+            double stop_dist_threshold = 0.1,
+            double dt = 0.1,
+            double predict_time = 1.5,
+            double max_vel_x = 0.22,
+            double min_vel_x = -0.0,
+            double max_vel_theta = 1.0,
+            double lookahead_dist = 0.0,
+            std::vector<double> start_prior_noise = std::vector<double>{0.001, 0.001, 0.001, 0.001},
+            std::vector<double> goal_prior_noise = std::vector<double>{0.02, 0.02, 0.02, 0.02},
+            double dynamic_noise = 0.2,
+            double inter_robot_noise = 0.2,
+            double obstacle_noise = 0.2,
+            double robot_dist_threshold = 0.4,
+            double obstacle_position_dist_threshold = 0.25,
+            double obstacle_orientation_dist_threshold = 0.875)
+            : local_planning_rate(local_planning_rate),
+              stop_dist_threshold(stop_dist_threshold),
+              dt(dt),
+              predict_time(predict_time),
+              max_vel_x(max_vel_x),
+              min_vel_x(min_vel_x),
+              max_vel_theta(max_vel_theta),
+              lookahead_dist(lookahead_dist),
+              start_prior_noise(start_prior_noise),
+              goal_prior_noise(goal_prior_noise),
+              dynamic_noise(dynamic_noise),
+              inter_robot_noise(inter_robot_noise),
+              obstacle_noise(obstacle_noise),
+              robot_dist_threshold(robot_dist_threshold),
+              obstacle_position_dist_threshold(obstacle_position_dist_threshold),
+              obstacle_orientation_dist_threshold(obstacle_orientation_dist_threshold){}
     };
 
     class DynamicsFactor : public NoiseModelFactor2<Vector4, Vector4>
@@ -383,6 +386,7 @@ namespace multirobot_slam
         void start();
 
         void set_robot_pose_callback(std::function<std::map<std::string, Pose>()> callback);
+        void set_send_vel_cmds_callback(std::function<void(const std::map<std::string, VelCmd>&)> callback);
 
         void update_global_paths(std::map<std::string, Path> global_paths);
         void update_costmap(Map costmap);
@@ -397,6 +401,7 @@ namespace multirobot_slam
         LocalPlanningParams params_;
 
         std::function<std::map<std::string, Pose>()> get_robot_poses_callback_;
+        std::function<void(const std::map<std::string, VelCmd>&)> send_vel_cmds_callback_;
 
         int iter_count;
 

@@ -25,20 +25,19 @@ using namespace gtsam;
 
 namespace multirobot_slam
 {
-
     struct TaskPlanningParams
     {
-        double w_distance;
-        double w_orientation;
-        double w_frontier_switch;
-        double w_frontier_size;
+        double w_distance = 0.4;
+        double w_orientation = 0.3;
+        double w_frontier_switch = 0.2;
+        double w_frontier_size = 0.2;
 
-        double w_coverage;
-        double coverage_scale;
+        double w_coverage = 0.5;
+        double coverage_scale = 1.0;
 
-        double conflict_penalty;
+        double conflict_penalty = 0.001;
 
-        bool uncertainty_reduction_mode;
+        
 
         TaskPlanningParams(
             double w_distance = 0.4,
@@ -47,22 +46,17 @@ namespace multirobot_slam
             double w_frontier_size = 0.2,
             double w_coverage = 0.5,
             double coverage_scale = 1.0,
-            double conflict_penalty = 0.001,
-            bool uncertainty_reduction_mode = true)
+            double conflict_penalty = 0.001)
             : w_distance(w_distance),
               w_orientation(w_orientation),
               w_frontier_switch(w_frontier_switch),
               w_frontier_size(w_frontier_size),
               w_coverage(w_coverage),
               coverage_scale(coverage_scale),
-              conflict_penalty(conflict_penalty),
-              uncertainty_reduction_mode(uncertainty_reduction_mode) {}
+              conflict_penalty(conflict_penalty) {}
     };
 
-    enum class TaskMode {
-        EXPLORATION,
-        UNCERTAINTY_REDUCTION
-    };
+
 
     class TaskPlanning
     {
@@ -73,12 +67,12 @@ namespace multirobot_slam
         static TaskPlanningParams params_from_yaml(std::string &params_path);
         void init(TaskPlanningParams &params);
 
-        std::map<std::string, Task> plan_tasks(std::map<std::string, Pose> robot_poses, std::vector<Frontier> frontiers);
+        std::map<std::string, Frontier> plan_tasks(std::map<std::string, Pose> robot_poses, std::vector<Frontier> frontiers);
     private:
 
         TaskPlanningParams params_;
-        std::map<std::string, Pose> robot_initial_poses_;
-        std::map<std::string, Task> last_planned_tasks_;
+
+        std::map<std::string, Frontier> last_planned_tasks_;
     };
 }
 

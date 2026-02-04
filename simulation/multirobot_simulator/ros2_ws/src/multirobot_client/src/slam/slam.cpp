@@ -45,8 +45,10 @@ namespace multirobot_slam
         params_ = params;
 
         backend_.init(params_.backend_params);
-        loop_closure_detector_.init(params_.loop_closure_detector_params);
-        submap_manager_.init(params_.submap_manager_params);
+        if(params_.loop_closure_detector_params.run_loop_closure_detection)
+            loop_closure_detector_.init(params_.loop_closure_detector_params);
+        if(params_.submap_manager_params.run_submap_manager)
+            submap_manager_.init(params_.submap_manager_params);
     }
 
     void SLAM::start()
@@ -70,36 +72,42 @@ namespace multirobot_slam
                     std::this_thread::sleep_until(next_time);
                     next_time += period;
                 } });
+        
+        if(params_.loop_closure_detector_params.run_loop_closure_detection)
+        {
+            loop_closure_detection_thread_ = std::thread([this]()
+                                               {
+                    auto period = std::chrono::milliseconds(
+                        static_cast<int>(1000.0 / params_.loop_closure_detector_params.loop_closure_detection_rate));
+    
+                    auto next_time = std::chrono::steady_clock::now() + period;
+    
+                    while (slam_running_.load())
+                    {
+                        loop_closure_detection_loop();
+    
+                        std::this_thread::sleep_until(next_time);
+                        next_time += period;
+                    } });
+        }
 
-        loop_closure_detection_thread_ = std::thread([this]()
-                                           {
-                auto period = std::chrono::milliseconds(
-                    static_cast<int>(1000.0 / params_.loop_closure_detector_params.loop_closure_detection_rate));
-
-                auto next_time = std::chrono::steady_clock::now() + period;
-
-                while (slam_running_.load())
-                {
-                    loop_closure_detection_loop();
-
-                    std::this_thread::sleep_until(next_time);
-                    next_time += period;
-                } });
-
-        submap_mapping_thread_ = std::thread([this]()
-                                           {
-                auto period = std::chrono::milliseconds(
-                    static_cast<int>(1000.0 / params_.submap_manager_params.submap_mapping_rate));
-
-                auto next_time = std::chrono::steady_clock::now() + period;
-
-                while (slam_running_.load())
-                {
-                    submap_mapping_loop();
-
-                    std::this_thread::sleep_until(next_time);
-                    next_time += period;
-                } });
+        if(params_.submap_manager_params.run_submap_manager)
+        {
+            submap_mapping_thread_ = std::thread([this]()
+                                               {
+                    auto period = std::chrono::milliseconds(
+                        static_cast<int>(1000.0 / params_.submap_manager_params.submap_mapping_rate));
+    
+                    auto next_time = std::chrono::steady_clock::now() + period;
+    
+                    while (slam_running_.load())
+                    {
+                        submap_mapping_loop();
+    
+                        std::this_thread::sleep_until(next_time);
+                        next_time += period;
+                    } });
+        }
     }
 
     void SLAM::add_odom(OdomData &odom_data)
@@ -167,7 +175,6 @@ namespace multirobot_slam
             backend_.add_loop_closure(loop_closure_constraint);
             loop_closure_detector_.notify_loop_closure_updated();
         }
-
     }
 
     void SLAM::submap_mapping_loop()

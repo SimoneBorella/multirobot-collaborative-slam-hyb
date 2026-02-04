@@ -59,7 +59,7 @@ namespace multirobot_slam
         void init(GlobalPlanningParams &params);
 
         void update_costmap(Map costmap);
-        std::map<std::string, Path> plan_global_path(std::map<std::string, Pose> robot_poses, std::map<std::string, Frontier> tasks);
+        std::map<std::string, Path> plan_global_path(std::map<std::string, Pose> robot_poses, std::map<std::string, Task> tasks);
 
     private:
         double heuristic(int x1, int y1, int x2, int y2);

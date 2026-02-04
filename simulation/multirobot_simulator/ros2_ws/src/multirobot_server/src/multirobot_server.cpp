@@ -16,6 +16,7 @@
 #include "interfaces/msg/map_log_odds_update.hpp"
 #include "interfaces/msg/point_array.hpp"
 #include "nav_msgs/msg/occupancy_grid.hpp"
+#include "interfaces/msg/frontier_map_update.hpp"
 #include "interfaces/msg/frontier.hpp"
 #include "interfaces/msg/frontier_array.hpp"
 #include "visualization_msgs/msg/marker.hpp"
@@ -61,11 +62,6 @@ public:
             std::chrono::milliseconds(static_cast<int>(1000 / timer_rate)),
             std::bind(&MultirobotServer::timer_callback, this));
 
-        double local_planning_timer_rate = 20.0;
-        local_planning_timer_ = this->create_wall_timer(
-            std::chrono::milliseconds(static_cast<int>(1000 / local_planning_timer_rate)),
-            std::bind(&MultirobotServer::local_planning_timer_callback, this));
-
         tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
         tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
@@ -87,13 +83,13 @@ public:
                 }
             );
 
-            std::string robot_frontiers_topic = "/" + robot + "/frontiers";
+            std::string robot_frontier_map_update_topic = "/" + robot + "/frontier_map_update";
     
-            robot_frontiers_subscriptions_[robot] = this->create_subscription<interfaces::msg::FrontierArray>(
-                robot_frontiers_topic,
+            robot_frontier_map_update_subscriptions_[robot] = this->create_subscription<interfaces::msg::FrontierMapUpdate>(
+                robot_frontier_map_update_topic,
                 10, 
-                [this, robot](interfaces::msg::FrontierArray::SharedPtr msg) {
-                    frontiers_callback(msg, robot);
+                [this, robot](interfaces::msg::FrontierMapUpdate::SharedPtr msg) {
+                    frontier_map_update_callback(msg, robot);
                 }
             );
 
@@ -109,6 +105,9 @@ public:
 
         std::string costmap_topic = "/costmap";
         costmap_publisher_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(costmap_topic, map_qos_profile);
+
+        std::string frontier_map_topic = "/frontier_map";
+        frontier_map_publisher_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(frontier_map_topic, map_qos_profile);
 
         std::string frontiers_marker_topic = "/frontiers_marker";
         frontiers_marker_publisher_ = this->create_publisher<visualization_msgs::msg::Marker>(frontiers_marker_topic, 10);
@@ -182,29 +181,40 @@ public:
                 msg->origin.orientation.z
             );
 
-        map_log_odds_update.indicies = msg->indicies;
+        map_log_odds_update.indices = msg->indices;
         map_log_odds_update.delta_log_odds = msg->delta_log_odds;
 
         mapping_merge_.add_map_log_odds_update(map_log_odds_update, robot);
     }
 
 
-    void frontiers_callback(const interfaces::msg::FrontierArray::SharedPtr msg, const std::string &robot)
+    void frontier_map_update_callback(const interfaces::msg::FrontierMapUpdate::SharedPtr msg, const std::string &robot)
     {
-        std::vector<Frontier> frontiers;
+        FrontierMapUpdate frontier_map_update;
 
-        for(auto& f : msg->frontiers)
-        {
-            Frontier frontier;
-            frontier.centroid = Eigen::Vector2d(f.centroid.x, f.centroid.y);
-            frontier.size = f.size;
+        frontier_map_update.resolution = msg->resolution;
+        frontier_map_update.width = msg->width;
+        frontier_map_update.height = msg->height;
 
-            frontiers.push_back(frontier);
-        }
+        frontier_map_update.origin_position =
+            Eigen::Vector3d(
+                msg->origin.position.x,
+                msg->origin.position.y,
+                msg->origin.position.z
+            );
+        frontier_map_update.origin_orientation =
+            Eigen::Quaterniond(
+                msg->origin.orientation.w,
+                msg->origin.orientation.x,
+                msg->origin.orientation.y,
+                msg->origin.orientation.z
+            );
 
-        mapping_merge_.add_frontiers(frontiers, robot);
+        frontier_map_update.frontier_indices = msg->frontier_indices;
+        frontier_map_update.explored_indices = msg->explored_indices;
+
+        mapping_merge_.add_frontier_map_update(frontier_map_update, robot);
     }
-
 
 
     void setup()
@@ -276,6 +286,13 @@ public:
                     }
                 }
                 return robot_poses;
+            }
+        );
+
+        local_planning_.set_send_vel_cmds_callback(
+            [this](const std::map<std::string, VelCmd>& vel_cmds) -> void
+            {
+                publish_vel_cmds(vel_cmds);
             }
         );
 
@@ -360,6 +377,25 @@ public:
         costmap_msg.info.origin.orientation.z = costmap.origin_orientation.z();
         costmap_msg.data = costmap.data;
         costmap_publisher_->publish(costmap_msg);
+    }
+
+    void publish_frontier_map(const Map& frontier_map)
+    {
+        nav_msgs::msg::OccupancyGrid map_msg;
+        map_msg.header.stamp = this->now();
+        map_msg.header.frame_id = world_frame_;
+        map_msg.info.resolution = frontier_map.resolution;
+        map_msg.info.width = frontier_map.width;
+        map_msg.info.height = frontier_map.height;
+        map_msg.info.origin.position.x = frontier_map.origin_position.x();
+        map_msg.info.origin.position.y = frontier_map.origin_position.y();
+        map_msg.info.origin.position.z = frontier_map.origin_position.z();
+        map_msg.info.origin.orientation.w = frontier_map.origin_orientation.w();
+        map_msg.info.origin.orientation.x = frontier_map.origin_orientation.x();
+        map_msg.info.origin.orientation.y = frontier_map.origin_orientation.y();
+        map_msg.info.origin.orientation.z = frontier_map.origin_orientation.z();
+        map_msg.data = frontier_map.data;
+        frontier_map_publisher_->publish(map_msg);
     }
 
 
@@ -463,10 +499,19 @@ public:
             local_planning_.update_costmap(costmap.value());
         }
 
+        const std::optional<Map> &frontier_map = mapping_merge_.get_frontier_map_if_updated();
+
+        if (frontier_map.has_value())
+        {
+            publish_frontier_map(frontier_map.value());
+        }
+
         const std::optional<std::vector<Frontier>> &frontiers = mapping_merge_.get_frontiers_if_updated();
 
         if (frontiers.has_value())
         {
+            publish_frontiers_marker(frontiers.value());
+
             std::map<std::string, Pose> robot_poses;
 
             for (const auto& robot : robots_)
@@ -477,10 +522,8 @@ public:
                     robot_poses[robot] = pose;
                 }
             }
-            
-            publish_frontiers_marker(frontiers.value());
 
-            std::map<std::string, Frontier> tasks = task_planning_.plan_tasks(robot_poses, frontiers.value());
+            std::map<std::string, Task> tasks = task_planning_.plan_tasks(robot_poses, frontiers.value());
 
             std::map<std::string, Path> global_paths = global_planning_.plan_global_path(robot_poses, tasks);
 
@@ -488,14 +531,6 @@ public:
 
             local_planning_.update_global_paths(global_paths);
         }
-    }
-
-
-
-    void local_planning_timer_callback()
-    {
-        std::map<std::string, VelCmd> vel_cmds = local_planning_.get_vel_cmds();
-        // publish_vel_cmds(vel_cmds);
     }
 
 
@@ -513,7 +548,6 @@ public:
     LocalPlanning local_planning_;
 
     rclcpp::TimerBase::SharedPtr timer_;
-    rclcpp::TimerBase::SharedPtr local_planning_timer_;
 
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
@@ -521,10 +555,11 @@ public:
     std::shared_ptr<tf2_ros::StaticTransformBroadcaster> static_tf_broadcaster_;
 
     std::map<std::string, rclcpp::Subscription<interfaces::msg::MapLogOddsUpdate>::SharedPtr> robot_map_log_odds_update_subscriptions_;
-    std::map<std::string, rclcpp::Subscription<interfaces::msg::FrontierArray>::SharedPtr> robot_frontiers_subscriptions_;
+    std::map<std::string, rclcpp::Subscription<interfaces::msg::FrontierMapUpdate>::SharedPtr> robot_frontier_map_update_subscriptions_;
 
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr map_publisher_;
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr costmap_publisher_;
+    rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr frontier_map_publisher_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr frontiers_marker_publisher_;
     std::map<std::string, rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr> robot_global_path_publishers_;
     std::map<std::string, rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr> robot_cmd_vel_publishers_;

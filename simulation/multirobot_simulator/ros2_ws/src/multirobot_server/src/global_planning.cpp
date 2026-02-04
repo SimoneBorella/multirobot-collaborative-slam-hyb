@@ -151,7 +151,7 @@ namespace multirobot_slam
     }
     
     
-    std::map<std::string, Path> GlobalPlanning::plan_global_path(std::map<std::string, Pose> robot_poses, std::map<std::string, Frontier> tasks)
+    std::map<std::string, Path> GlobalPlanning::plan_global_path(std::map<std::string, Pose> robot_poses, std::map<std::string, Task> tasks)
     {
         // auto start = std::chrono::high_resolution_clock::now();
 
@@ -160,16 +160,21 @@ namespace multirobot_slam
         if(!costmap_received_)
             return global_paths;
         
-        for(const auto& [robot, frontier] : tasks)
+        for(const auto& [robot, task] : tasks)
         {
             Pose pose = robot_poses[robot];
 
             int sx = static_cast<int>((pose.position.x() - costmap_.origin_position.x()) / costmap_.resolution);
             int sy = static_cast<int>((pose.position.y() - costmap_.origin_position.y()) / costmap_.resolution);
-            int gx = static_cast<int>((frontier.centroid.x() - costmap_.origin_position.x()) / costmap_.resolution);
-            int gy = static_cast<int>((frontier.centroid.y() - costmap_.origin_position.y()) / costmap_.resolution);
+            int gx = static_cast<int>((task.pose.position.x() - costmap_.origin_position.x()) / costmap_.resolution);
+            int gy = static_cast<int>((task.pose.position.y() - costmap_.origin_position.y()) / costmap_.resolution);
 
             Path path = aStar(sx, sy, gx, gy);
+
+            if(task.oriented)
+                path.final_orientation = task.pose.orientation;
+            else
+                path.final_orientation = path.poses.back().orientation;
 
             if (!path.poses.empty())
                 global_paths[robot] = path;

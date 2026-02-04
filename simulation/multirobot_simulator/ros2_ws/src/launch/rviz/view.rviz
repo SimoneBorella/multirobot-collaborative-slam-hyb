@@ -5,8 +5,6 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
-        - /robot_11/Keypoints1
-        - /robot_11/Frontiers1
         - /robot_21/Keypoints1
         - /robot_31/Keypoints1
       Splitter Ratio: 0.5974576473236084
@@ -69,13 +67,17 @@ Visualization Manager:
           Value: true
         robot_0/odom:
           Value: true
-        robot_0/submap_0:
+        robot_1/base_footprint:
+          Value: false
+        robot_1/base_link:
           Value: true
-        robot_0/submap_1:
+        robot_1/camera_link:
+          Value: false
+        robot_1/lidar_link:
+          Value: false
+        robot_1/map:
           Value: true
-        robot_0/submap_2:
-          Value: true
-        robot_0/submap_3:
+        robot_1/odom:
           Value: true
         world:
           Value: true
@@ -95,14 +97,15 @@ Visualization Manager:
                   {}
                 robot_0/lidar_link:
                   {}
-            robot_0/submap_0:
-              {}
-            robot_0/submap_1:
-              {}
-            robot_0/submap_2:
-              {}
-            robot_0/submap_3:
-              {}
+          robot_1/map:
+            robot_1/odom:
+              robot_1/base_link:
+                robot_1/base_footprint:
+                  {}
+                robot_1/camera_link:
+                  {}
+                robot_1/lidar_link:
+                  {}
       Update Interval: 0
       Value: true
     - Alpha: 0.699999988079071
@@ -174,6 +177,29 @@ Visualization Manager:
         Value: /costmap_updates
       Use Timestamp: false
       Value: false
+    - Alpha: 0.699999988079071
+      Binary representation: false
+      Binary threshold: 100
+      Class: rviz_default_plugins/Map
+      Color Scheme: costmap
+      Draw Behind: false
+      Enabled: true
+      Name: Frontier Map
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /frontier_map
+      Update Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /frontier_map_updates
+      Use Timestamp: false
+      Value: true
     - Class: rviz_default_plugins/Marker
       Enabled: true
       Name: Frontiers
@@ -270,10 +296,10 @@ Visualization Manager:
             Value: /robot_0/footprint
           Value: false
         - Class: rviz_default_plugins/Marker
-          Enabled: true
+          Enabled: false
           Name: Keypoints
           Namespaces:
-            robot_0/camera: true
+            {}
           Topic:
             Depth: 5
             Durability Policy: Volatile
@@ -281,6 +307,18 @@ Visualization Manager:
             History Policy: Keep Last
             Reliability Policy: Reliable
             Value: /robot_0/keypoints/plot
+          Value: false
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: Keyframes
+          Namespaces:
+            keyframes: true
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /robot_0/keyframes_marker
           Value: true
         - Alpha: 1
           Buffer Length: 1
@@ -333,54 +371,6 @@ Visualization Manager:
             Value: /robot_0/map_updates
           Use Timestamp: false
           Value: false
-        - Alpha: 0.699999988079071
-          Binary representation: false
-          Binary threshold: 100
-          Class: rviz_default_plugins/Map
-          Color Scheme: costmap
-          Draw Behind: false
-          Enabled: false
-          Name: Frontier Map
-          Topic:
-            Depth: 5
-            Durability Policy: Volatile
-            Filter size: 10
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /robot_0/frontier_map
-          Update Topic:
-            Depth: 5
-            Durability Policy: Volatile
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /robot_0/frontier_map_updates
-          Use Timestamp: false
-          Value: false
-        - Class: rviz_default_plugins/Marker
-          Enabled: true
-          Name: Frontiers
-          Namespaces:
-            {}
-          Topic:
-            Depth: 5
-            Durability Policy: Volatile
-            Filter size: 10
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /robot_0/frontiers_marker
-          Value: true
-        - Class: rviz_default_plugins/MarkerArray
-          Enabled: true
-          Name: MarkerArray
-          Namespaces:
-            keyframes: true
-          Topic:
-            Depth: 5
-            Durability Policy: Volatile
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /robot_0/keyframes_marker
-          Value: true
         - Alpha: 0.699999988079071
           Binary representation: false
           Binary threshold: 100
@@ -489,7 +479,7 @@ Visualization Manager:
             Value: /robot_1/footprint
           Value: false
         - Class: rviz_default_plugins/Marker
-          Enabled: true
+          Enabled: false
           Name: Keypoints
           Namespaces:
             {}
@@ -500,6 +490,18 @@ Visualization Manager:
             History Policy: Keep Last
             Reliability Policy: Reliable
             Value: /robot_1/keypoints/plot
+          Value: false
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: Keyframes
+          Namespaces:
+            keyframes: true
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /robot_1/keyframes_marker
           Value: true
         - Alpha: 1
           Buffer Length: 1
@@ -556,38 +558,25 @@ Visualization Manager:
           Binary representation: false
           Binary threshold: 100
           Class: rviz_default_plugins/Map
-          Color Scheme: costmap
+          Color Scheme: map
           Draw Behind: false
           Enabled: false
-          Name: Frontier Map
+          Name: Submap
           Topic:
             Depth: 5
             Durability Policy: Volatile
             Filter size: 10
             History Policy: Keep Last
             Reliability Policy: Reliable
-            Value: /robot_1/frontier_map
+            Value: /robot_1/submap
           Update Topic:
             Depth: 5
             Durability Policy: Volatile
             History Policy: Keep Last
             Reliability Policy: Reliable
-            Value: /robot_1/frontier_map_updates
+            Value: /robot_1/submap_updates
           Use Timestamp: false
           Value: false
-        - Class: rviz_default_plugins/Marker
-          Enabled: true
-          Name: Frontiers
-          Namespaces:
-            {}
-          Topic:
-            Depth: 5
-            Durability Policy: Volatile
-            Filter size: 10
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /robot_1/frontiers_marker
-          Value: true
       Enabled: true
       Name: robot_1
     - Class: rviz_common/Group
@@ -736,7 +725,7 @@ Visualization Manager:
             Value: /robot_2/map_updates
           Use Timestamp: false
           Value: false
-      Enabled: true
+      Enabled: false
       Name: robot_2
     - Class: rviz_common/Group
       Displays:
@@ -887,7 +876,7 @@ Visualization Manager:
       Enabled: false
       Name: robot_3
     - Class: rviz_default_plugins/Marker
-      Enabled: true
+      Enabled: false
       Name: Landmarks
       Namespaces:
         {}
@@ -898,7 +887,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /landmarks/plot
-      Value: true
+      Value: false
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -954,7 +943,7 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 40.03152084350586
+      Scale: 50.120033264160156
       Target Frame: <Fixed Frame>
       Value: TopDownOrtho (rviz_default_plugins)
       X: 0

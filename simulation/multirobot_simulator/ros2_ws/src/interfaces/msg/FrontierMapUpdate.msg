@@ -4,5 +4,5 @@ uint32 width
 uint32 height
 geometry_msgs/Pose origin
 
-int32[] indices
-float32[] delta_log_odds
+int32[] frontier_indices
+int32[] explored_indices

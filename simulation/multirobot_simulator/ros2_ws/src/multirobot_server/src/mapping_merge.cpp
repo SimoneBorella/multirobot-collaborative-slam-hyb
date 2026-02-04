@@ -58,6 +58,10 @@ namespace multirobot_slam
 
             if (config["epsilon"])
                 p.epsilon = config["epsilon"].as<double>();
+            if (config["min_points"])
+                p.min_points = config["min_points"].as<int>();
+            if (config["min_frontier_size"])
+                p.min_frontier_size = config["min_frontier_size"].as<double>();
             
         }
         catch (const std::exception &e)
@@ -97,6 +101,13 @@ namespace multirobot_slam
         costmap_.origin_position = map_.origin_position;
         costmap_.origin_orientation = map_.origin_orientation;
         costmap_.data.resize(map_.width * map_.height, -1);
+
+        frontier_map_.resolution = map_.resolution;
+        frontier_map_.width = map_.width;
+        frontier_map_.height = map_.height;
+        frontier_map_.origin_position = map_.origin_position;
+        frontier_map_.origin_orientation = map_.origin_orientation;
+        frontier_map_.data.resize(map_.width * map_.height, -1);
     }
 
     void MappingMerge::set_initial_poses(std::map<std::string, Pose> initial_poses)
@@ -159,9 +170,9 @@ namespace multirobot_slam
 
         Eigen::Affine2d T_world_local = T_world_map * T_map_local;
 
-        for (size_t i = 0; i < map_log_odds_update.indicies.size(); ++i)
+        for (size_t i = 0; i < map_log_odds_update.indices.size(); ++i)
         {
-            int idx = map_log_odds_update.indicies[i];
+            int idx = map_log_odds_update.indices[i];
             int lx = idx % map_log_odds_update.width;
             int ly = idx / map_log_odds_update.width;
 
@@ -191,15 +202,88 @@ namespace multirobot_slam
         }
     }
 
-
-
-
-
-    void MappingMerge::add_frontiers(const std::vector<Frontier> &frontiers, const std::string& robot)
+    void MappingMerge::add_frontier_map_update(const FrontierMapUpdate &frontier_map_update, const std::string& robot)
     {
-        robot_frontiers_[robot] = frontiers;
-    }
+        std::lock_guard<std::mutex> lock(frontier_map_mutex_);
 
+        const Pose& map_pose = initial_poses_.at(robot);
+
+        double map_yaw = std::atan2(
+            2.0 * (map_pose.orientation.w() * map_pose.orientation.z() +
+                map_pose.orientation.x() * map_pose.orientation.y()),
+            1.0 - 2.0 * (map_pose.orientation.y() * map_pose.orientation.y() +
+                        map_pose.orientation.z() * map_pose.orientation.z())
+        );
+
+        Eigen::Affine2d T_world_map =
+            Eigen::Translation2d(
+                map_pose.position.x(),
+                map_pose.position.y()) *
+            Eigen::Rotation2Dd(map_yaw);
+
+        double local_yaw = frontier_map_update.origin_orientation.toRotationMatrix().eulerAngles(0,1,2)[2];
+
+        Eigen::Affine2d T_map_local =
+            Eigen::Translation2d(
+                frontier_map_update.origin_position.x(),
+                frontier_map_update.origin_position.y()) *
+            Eigen::Rotation2Dd(local_yaw);
+
+        Eigen::Affine2d T_world_local = T_world_map * T_map_local;
+
+        for (size_t i = 0; i < frontier_map_update.explored_indices.size(); ++i)
+        {
+            int idx = frontier_map_update.explored_indices[i];
+            int lx = idx % frontier_map_update.width;
+            int ly = idx / frontier_map_update.width;
+
+            Eigen::Vector2d p_local(
+                (lx + 0.5) * frontier_map_update.resolution,
+                (ly + 0.5) * frontier_map_update.resolution);
+
+            Eigen::Vector2d p_world = T_world_local * p_local;
+
+            int gx = static_cast<int>(
+                (p_world.x() - map_.origin_position.x()) / map_.resolution);
+            int gy = static_cast<int>(
+                (p_world.y() - map_.origin_position.y()) / map_.resolution);
+
+            if (gx < 0 || gy < 0 || gx >= map_.width || gy >= map_.height)
+                continue;
+
+            int gidx = gy * map_.width + gx;
+
+            frontier_map_.data[gidx] = 0;
+        }
+
+        for (size_t i = 0; i < frontier_map_update.frontier_indices.size(); ++i)
+        {
+            int idx = frontier_map_update.frontier_indices[i];
+            int lx = idx % frontier_map_update.width;
+            int ly = idx / frontier_map_update.width;
+
+            Eigen::Vector2d p_local(
+                (lx + 0.5) * frontier_map_update.resolution,
+                (ly + 0.5) * frontier_map_update.resolution);
+
+            Eigen::Vector2d p_world = T_world_local * p_local;
+
+            int gx = static_cast<int>(
+                (p_world.x() - map_.origin_position.x()) / map_.resolution);
+            int gy = static_cast<int>(
+                (p_world.y() - map_.origin_position.y()) / map_.resolution);
+
+            if (gx < 0 || gy < 0 || gx >= map_.width || gy >= map_.height)
+                continue;
+
+            int gidx = gy * map_.width + gx;
+
+            if(frontier_map_.data[gidx] != 0)
+            {
+                frontier_map_.data[gidx] = 100;
+            }
+        }
+    }
 
     Map MappingMerge::get_map()
     {
@@ -230,6 +314,24 @@ namespace multirobot_slam
         {
             costmap_updated_ = false;
             return costmap_;
+        }
+        else
+        {
+            return std::nullopt;
+        }
+    }
+
+    Map MappingMerge::get_frontier_map()
+    {
+        return frontier_map_;
+    }
+
+    std::optional<Map> MappingMerge::get_frontier_map_if_updated()
+    {
+        if (frontier_map_updated_)
+        {
+            frontier_map_updated_ = false;
+            return frontier_map_;
         }
         else
         {
@@ -278,81 +380,150 @@ namespace multirobot_slam
 
 
 
-    std::vector<Frontier> MappingMerge::merge_frontiers_dbscan(const std::vector<Frontier>& frontiers)
+    std::vector<std::pair<int, int>> MappingMerge::get_neighbors(int x, int y)
     {
-        std::vector<Frontier> merged_frontiers;
+        std::vector<std::pair<int, int>> neighbors;
 
-        if (frontiers.empty())
-            return merged_frontiers;
+        int epsilon_cells = std::ceil(params_.epsilon / frontier_map_.resolution);
 
-        const double eps_sq = params_.epsilon * params_.epsilon;
-
-        std::vector<int> labels(frontiers.size(), -1);
-        int cluster_id = 0;
-
-        for (size_t i = 0; i < frontiers.size(); ++i)
+        for (int dx = -epsilon_cells; dx <= epsilon_cells; dx++)
         {
-            if (labels[i] != -1)
-                continue;
-
-            std::vector<size_t> neighbors;
-            for (size_t j = 0; j < frontiers.size(); ++j)
+            for (int dy = -epsilon_cells; dy <= epsilon_cells; dy++)
             {
-                double dx = frontiers[j].centroid.x() - frontiers[i].centroid.x();
-                double dy = frontiers[j].centroid.y() - frontiers[i].centroid.y();
-                double dist_sq = dx * dx + dy * dy;
-                if (dist_sq <= eps_sq)
-                    neighbors.push_back(j);
-            }
-
-            if (neighbors.empty())
-                continue;
-
-            // Start cluster
-            std::queue<size_t> q;
-            for (auto n : neighbors)
-                q.push(n);
-
-            Frontier cluster_frontier;
-            Eigen::Vector2d sum_centroid(0, 0);
-            double total_size = 0;
-
-            while (!q.empty())
-            {
-                size_t idx = q.front();
-                q.pop();
-
-                if (labels[idx] != -1)
+                if (dx == 0 && dy == 0)
                     continue;
 
-                labels[idx] = cluster_id;
+                if ((dx * dx + dy * dy) * frontier_map_.resolution * frontier_map_.resolution > params_.epsilon * params_.epsilon)
+                    continue;
 
-                sum_centroid += frontiers[idx].centroid * frontiers[idx].size;
-                total_size += frontiers[idx].size;
+                int nx = x + dx;
+                int ny = y + dy;
 
-                for (size_t j = 0; j < frontiers.size(); ++j)
+                int nidx = ny * frontier_map_.width + nx;
+
+                if (nx >= 0 && ny >= 0 && nx < frontier_map_.width && ny < frontier_map_.height && frontier_map_.data[nidx] == 100)
                 {
-                    if (labels[j] != -1) continue;
+                    neighbors.emplace_back(nx, ny);
+                }
+            }
+        }
 
-                    double dx = frontiers[j].centroid.x() - frontiers[idx].centroid.x();
-                    double dy = frontiers[j].centroid.y() - frontiers[idx].centroid.y();
-                    double dist_sq = dx * dx + dy * dy;
-                    if (dist_sq <= eps_sq)
-                        q.push(j);
+        return neighbors;
+    }
+
+    std::map<int, std::vector<std::pair<int, int>>> MappingMerge::dbscan_frontier_clusters_detection()
+    {
+        std::map<std::pair<int, int>, int> labels;
+        std::map<int, std::vector<std::pair<int, int>>> clusters;
+
+        int cluster_id = 0;
+
+        for (int y = 0; y < frontier_map_.height; y++) {
+            for (int x = 0; x < frontier_map_.width; x++) {
+                int idx = y * frontier_map_.width + x;
+        
+                if (frontier_map_.data[idx] != 100)
+                    continue;
+        
+                if (labels.find({x, y}) != labels.end())
+                    continue;
+        
+                std::vector<std::pair<int, int>> neighbors = get_neighbors(x, y);
+        
+                if (neighbors.size() < static_cast<size_t>(params_.min_points)) {
+                    labels[{x, y}] = -1;
+                    continue;
+                }
+        
+                labels[{x, y}] = cluster_id;
+                clusters[cluster_id].push_back({x, y});
+        
+                std::queue<std::pair<int, int>> queue;
+        
+                for (const auto& p : neighbors)
+                    queue.push(p);
+        
+                while (!queue.empty()) {
+                    auto p = queue.front(); queue.pop();
+        
+                    if (labels.find(p) != labels.end()) {
+                        if (labels[p] == -1) {
+                            labels[p] = cluster_id;
+                            clusters[cluster_id].push_back(p);
+                        }
+                        continue;
+                    }
+        
+                    labels[p] = cluster_id;
+                    clusters[cluster_id].push_back(p);
+        
+                    auto p_neighbors = get_neighbors(p.first, p.second);
+                    if (p_neighbors.size() >= static_cast<size_t>(params_.min_points)) {
+                        for (const auto& n : p_neighbors)
+                            queue.push(n);
+                    }
+                }
+        
+                cluster_id++;
+            }
+        }
+        
+        return clusters;
+    }
+
+
+    std::vector<Frontier> MappingMerge::frontier_centroids_detection(const std::map<int, std::vector<std::pair<int, int>>>& frontier_clusters)
+    {
+        std::vector<Frontier> frontiers;
+
+        for (const auto& [cluster_id, cluster] : frontier_clusters)
+        {
+            double cluster_size = cluster.size() * frontier_map_.resolution * frontier_map_.resolution;
+            if (cluster_size < params_.min_frontier_size)
+                continue;
+
+            double sum_x = 0.0;
+            double sum_y = 0.0;
+
+            for (const auto& point : cluster)
+            {
+                sum_x += point.first;
+                sum_y += point.second;
+            }
+
+            double centroid_x = sum_x / cluster.size();
+            double centroid_y = sum_y / cluster.size();
+
+
+            // Find the point in the cluster closest to the centroid
+            std::pair<int, int> closest_point;
+            double min_dist_sq = std::numeric_limits<double>::max();
+
+            for (const auto& point : cluster)
+            {
+                double dx = point.first - centroid_x;
+                double dy = point.second - centroid_y;
+                double dist_sq = dx * dx + dy * dy;
+
+                if (dist_sq < min_dist_sq)
+                {
+                    min_dist_sq = dist_sq;
+                    closest_point = point;
                 }
             }
 
-            if (total_size > 0)
-            {
-                cluster_frontier.centroid = sum_centroid / total_size;
-                cluster_frontier.size = total_size;
-                merged_frontiers.push_back(cluster_frontier);
-            }
+            // Convert closest grid cell to world coordinates
+            double world_x = closest_point.first * frontier_map_.resolution + frontier_map_.origin_position.x() + frontier_map_.resolution / 2.0;
+            double world_y = closest_point.second * frontier_map_.resolution + frontier_map_.origin_position.y() + frontier_map_.resolution / 2.0;
 
-            cluster_id++;
+            Frontier frontier;
+            frontier.centroid = Eigen::Vector2d(world_x, world_y);
+            frontier.size = cluster_size;
+            
+            frontiers.push_back(frontier);
         }
 
-        return merged_frontiers;
+        return frontiers;
     }
 
 
@@ -420,67 +591,18 @@ namespace multirobot_slam
         
         costmap_updated_ = true;
 
-        // Merge frontiers
 
-        std::vector<Frontier> current_frontiers;
-
-        for (const auto& [robot_name, frontiers] : robot_frontiers_)
+        // Detect frontiers
         {
-            // Transform to world frame
-            const Pose& map_pose = initial_poses_.at(robot_name);
-
-            double map_yaw = std::atan2(
-                2.0 * (map_pose.orientation.w() * map_pose.orientation.z() +
-                    map_pose.orientation.x() * map_pose.orientation.y()),
-                1.0 - 2.0 * (map_pose.orientation.y() * map_pose.orientation.y() +
-                            map_pose.orientation.z() * map_pose.orientation.z())
-            );
-
-            Eigen::Affine2d T_world_map =
-                Eigen::Translation2d(map_pose.position.x(), map_pose.position.y()) *
-                Eigen::Rotation2Dd(map_yaw);
-
-            for (const auto& f : frontiers)
-            {
-                Frontier f_world = f;
-                f_world.centroid = T_world_map * f.centroid;
-
-                // Check if frontier has unknown space around it
-                bool has_unknown = false;
-
-                int gx_center = static_cast<int>((f_world.centroid.x() - map_.origin_position.x()) / map_.resolution);
-                int gy_center = static_cast<int>((f_world.centroid.y() - map_.origin_position.y()) / map_.resolution);
-
-                int radius = static_cast<int>(std::ceil(f_world.size / map_.resolution));
-
-                for (int dy = -radius; dy <= radius && !has_unknown; ++dy)
-                {
-                    for (int dx = -radius; dx <= radius; ++dx)
-                    {
-                        int gx = gx_center + dx;
-                        int gy = gy_center + dy;
-
-                        if (gx < 0 || gy < 0 || gx >= filtered_map_.width || gy >= filtered_map_.height)
-                            continue;
-
-                        int idx = gy * filtered_map_.width + gx;
-
-                        if (filtered_map_.data[idx] == -1)
-                        {
-                            has_unknown = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (has_unknown)
-                    current_frontiers.push_back(f_world);
-            }
+            std::lock_guard<std::mutex> lock(frontier_map_mutex_);
+            std::map<int, std::vector<std::pair<int, int>>> frontier_clusters = dbscan_frontier_clusters_detection();
+            frontiers_ = frontier_centroids_detection(frontier_clusters);
         }
-        
-        frontiers_ = merge_frontiers_dbscan(current_frontiers);
 
+        frontier_map_updated_ = true;
         frontiers_updated_ = true;
+
+
 
         // auto end = std::chrono::high_resolution_clock::now();
         // std::chrono::duration<double> duration = end - start;

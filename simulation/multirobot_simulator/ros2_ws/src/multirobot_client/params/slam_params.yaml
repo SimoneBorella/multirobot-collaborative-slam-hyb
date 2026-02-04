@@ -27,6 +27,7 @@ backend:
 
 
 loop_closure_detector:
+    run_loop_closure_detection: false
     loop_closure_detection_rate: 1.0
     vocabulary_path : "/dep/DBoW3/orbvoc.dbow3"
     min_bow_score: 0.35
@@ -44,6 +45,7 @@ loop_closure_detector:
 
 
 submap_manager:
+    run_submap_manager: false
     submap_mapping_rate: 1.0
 
     submap_resolution: 0.05 

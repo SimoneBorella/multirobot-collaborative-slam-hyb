@@ -16,9 +16,3 @@ obstacle_threshold: 0.70
 free_threshold: 0.30
 
 frontier_del_obstacles_radius: 0.18
-
-epsilon: 0.5
-min_points: 3
-
-min_frontier_size: 0.05 # Small Indoor
-# min_frontier_size: 0.04 # Large Indoor

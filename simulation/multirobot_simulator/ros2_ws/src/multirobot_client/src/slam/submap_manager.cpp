@@ -20,6 +20,9 @@ namespace multirobot_slam
             YAML::Node config = YAML::LoadFile(params_path);
             YAML::Node submap_manager_config = config["submap_manager"];
 
+            if (submap_manager_config["run_submap_manager"])
+                p.run_submap_manager = submap_manager_config["run_submap_manager"].as<bool>();
+
             if (submap_manager_config["submap_mapping_rate"])
                 p.submap_mapping_rate = submap_manager_config["submap_mapping_rate"].as<double>();
 

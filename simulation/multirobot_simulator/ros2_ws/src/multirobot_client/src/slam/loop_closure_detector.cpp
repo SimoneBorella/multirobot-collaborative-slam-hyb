@@ -21,6 +21,9 @@ namespace multirobot_slam
             YAML::Node config = YAML::LoadFile(params_path);
             YAML::Node loop_closure_detector_config = config["loop_closure_detector"];
 
+            if (loop_closure_detector_config["run_loop_closure_detection"])
+                p.run_loop_closure_detection = loop_closure_detector_config["run_loop_closure_detection"].as<bool>();
+                
             if (loop_closure_detector_config["loop_closure_detection_rate"])
                 p.loop_closure_detection_rate = loop_closure_detector_config["loop_closure_detection_rate"].as<double>();
 
@@ -52,7 +55,7 @@ namespace multirobot_slam
                 p.inlier_threshold = loop_closure_detector_config["inlier_threshold"].as<double>();
 
             if (loop_closure_detector_config["min_inliers"])
-                p.min_inliers = loop_closure_detector_config["min_inliers"].as<size_t>();   
+                p.min_inliers = loop_closure_detector_config["min_inliers"].as<int>();   
                 
             if (loop_closure_detector_config["min_inliers_ratio"])
                 p.min_inliers_ratio = loop_closure_detector_config["min_inliers_ratio"].as<double>();    
@@ -91,9 +94,7 @@ namespace multirobot_slam
         for(size_t i = last_added_keyframe_id_; i < keyframes_.size(); i++)
         {
             const KeyFrame& candidate_keyframe = keyframes_[i];
-            
-            // std::cout << "Adding keyframe " << candidate_keyframe.keyframe_id << std::endl;
-            
+                        
             cv::Mat descriptors(candidate_keyframe.keypoints.size(), 32, CV_8U);
             for (size_t j = 0; j < candidate_keyframe.keypoints.size(); j++)
                 memcpy(descriptors.ptr(j), candidate_keyframe.keypoints[j].descriptor.data(), 32);
@@ -102,7 +103,7 @@ namespace multirobot_slam
             int db_id = orb_db_.add(descriptors);
             database_to_keyframe_id_[db_id] = candidate_keyframe.keyframe_id;
 
-            std::cout << "Added keyframe " << candidate_keyframe.keyframe_id << std::endl;
+            // std::cout << "Added keyframe " << candidate_keyframe.keyframe_id << std::endl;
         }
 
         last_added_keyframe_id_ = keyframes_.size();
@@ -302,7 +303,7 @@ namespace multirobot_slam
             current_keyframe_id_ = keyframe_id;
             KeyFrame& current_keyframe = keyframes_[current_keyframe_id_];
 
-            std::cout << "Processing keyframe " << current_keyframe_id_ << "..." << std::endl;
+            // std::cout << "Processing keyframe " << current_keyframe_id_ << "..." << std::endl;
 
             // BoW candidate search
             cv::Mat descriptors(current_keyframe.keypoints.size(), 32, CV_8U);
@@ -358,26 +359,10 @@ namespace multirobot_slam
                     best_geom_score
                 };
 
-                // std::cout << "Loop closure detected between keyframes "
-                //         << current_keyframe_id_ << " and "
-                //         << best_candidate_id
-                //         << " with score " << best_geom_score << std::endl;
-                
-                Eigen::Quaterniond q = best_T.orientation;
-
-                double yaw = std::atan2(
-                    2.0 * (q.w() * q.z() + q.x() * q.y()),
-                    1.0 - 2.0 * (q.y() * q.y() + q.z() * q.z())
-                );
-
                 std::cout << "Loop closure detected between keyframes "
                         << current_keyframe_id_ << " and "
                         << best_candidate_id
-                        << " with score " << best_geom_score
-                        << " | Pose: x=" << best_T.position.x()
-                        << ", y=" << best_T.position.y()
-                        << ", yaw=" << yaw
-                        << std::endl;
+                        << " with score " << best_geom_score << std::endl;
 
                 return loop_closure_opt;
                 

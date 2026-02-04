@@ -7,3 +7,4 @@ w_coverage: 0.4
 coverage_scale: 1.0
 
 conflict_penalty: 0.001
+uncertainty_reduction_mode: true

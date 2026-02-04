@@ -194,7 +194,7 @@ def main(args):
 
     for i in range(rows):
         for j in range(cols):
-            if((i == 0 and j == cols-1) or (i == rows-1 and j == 0)):
+            if(i == 0 or j == 0):
                 continue
 
             top = start_y + i * (room_size + hallway_length)

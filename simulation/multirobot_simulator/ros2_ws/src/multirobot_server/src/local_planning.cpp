@@ -73,8 +73,11 @@ namespace multirobot_slam
             if (config["robot_dist_threshold"])
                 p.robot_dist_threshold = config["robot_dist_threshold"].as<double>();
 
-            if (config["obstacle_dist_threshold"])
-                p.obstacle_dist_threshold = config["obstacle_dist_threshold"].as<double>();
+            if (config["obstacle_position_dist_threshold"])
+                p.obstacle_position_dist_threshold = config["obstacle_position_dist_threshold"].as<double>();
+
+            if (config["obstacle_orientation_dist_threshold"])
+                p.obstacle_orientation_dist_threshold = config["obstacle_orientation_dist_threshold"].as<double>();
             
         }
         catch (const std::exception &e)
@@ -127,6 +130,11 @@ namespace multirobot_slam
     void LocalPlanning::set_robot_pose_callback(std::function<std::map<std::string, Pose>()> callback)
     {
         get_robot_poses_callback_ = std::move(callback);
+    }
+
+    void LocalPlanning::set_send_vel_cmds_callback(std::function<void(const std::map<std::string, VelCmd>&)> callback)
+    {
+        send_vel_cmds_callback_ = std::move(callback);
     }
 
     void LocalPlanning::update_global_paths(std::map<std::string, Path> global_paths)
@@ -215,22 +223,48 @@ namespace multirobot_slam
         for (std::string& robot : robots)
         {
             Eigen::Vector3d robot_position = robot_poses[robot].position;
+            Eigen::Quaterniond robot_orientation = robot_poses[robot].orientation;
+
             robot_position.z() = 0.0;
-            Eigen::Vector3d robot_goal = global_paths_[robot].poses.back().position;
+            Eigen::Vector3d robot_goal_position = global_paths_[robot].poses.back().position;
+            Eigen::Quaterniond robot_goal_orientation = global_paths_[robot].final_orientation;
 
-            double robot_goal_dist = (robot_goal - robot_position).norm();
+            double robot_goal_position_dist = (robot_goal_position - robot_position).norm();
 
-            if (robot_goal_dist < params_.stop_dist_threshold)
+            Eigen::Quaterniond q_err = robot_goal_orientation * robot_orientation.inverse();
+            double yaw_error = std::atan2(2*(q_err.w()*q_err.z() + q_err.x()*q_err.y()),
+                                                            1 - 2*(q_err.y()*q_err.y() + q_err.z()*q_err.z()));
+
+            if (robot_goal_position_dist < params_.stop_dist_threshold)
             {
                 VelCmd stop_cmd;
                 stop_cmd.linear.setZero();
-                stop_cmd.angular.setZero();
+
+                if(std::abs(yaw_error) < params_.obstacle_orientation_dist_threshold)
+                {
+                    stop_cmd.angular.setZero();
+                }
+                else
+                {
+                    double yaw_rate = 1.5 * yaw_error;
+
+                    yaw_rate = std::clamp(
+                        yaw_rate,
+                        -params_.max_vel_theta,
+                        params_.max_vel_theta
+                    );
+
+                    stop_cmd.angular.setZero();
+                    stop_cmd.angular.z() = yaw_rate;
+                }
 
                 vel_cmds_[robot] = stop_cmd;
                 last_vel_cmds_[robot] = stop_cmd;
             }
             else
+            {
                 current_robots.push_back(robot);
+            }
         }
 
 
@@ -366,7 +400,7 @@ namespace multirobot_slam
 
 
                 // Add obstacle factors
-                graph.add(boost::make_shared<ObstacleFactor>(second_x, costmap_, obstacle_noise_, params_.obstacle_dist_threshold));
+                graph.add(boost::make_shared<ObstacleFactor>(second_x, costmap_, obstacle_noise_, params_.obstacle_position_dist_threshold));
             }
 
             // Add inter robot factors
@@ -459,6 +493,8 @@ namespace multirobot_slam
             last_vel_cmds_[robot] = vel_cmd;
         }
 
+        send_vel_cmds_callback_(vel_cmds_);
+        
         iter_count++;
 
         // auto end = std::chrono::high_resolution_clock::now();

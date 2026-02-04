@@ -549,6 +549,9 @@ namespace multirobot_slam
                     keyframes_.push_back(keyframe);
     
                     last_keyframe.is_active = false;
+
+                    // Debug
+                    // save_keyframes(keyframes_, "./output/localization/keyframes.csv");
                 }
             }
         }
@@ -606,6 +609,9 @@ namespace multirobot_slam
 
     void Backend::add_loop_closure(const LoopClosureConstraint& loop_closure)
     {
+        // Debug
+        // save_loop_closure(loop_closure, "./output/localization/loop_closures.csv");
+
         Symbol xi, xj;
         {
             std::lock_guard<std::mutex> lock(keyframes_mutex_);
@@ -625,7 +631,7 @@ namespace multirobot_slam
         NonlinearFactorGraph new_factors;
 
         new_factors.add(
-            BetweenFactor<Pose3>(xi, xj, loop_closure_transform, loop_closure_noise_)
+            BetweenFactor<Pose3>(xj, xi, loop_closure_transform, loop_closure_noise_)
         );
 
         {
@@ -634,13 +640,71 @@ namespace multirobot_slam
         }
     }
 
+    void Backend::save_keyframes(std::vector<KeyFrame> keyframes, const std::string &filename)
+    {
+        std::ofstream file(filename);
 
+        file << "timestamp,keyframe_id,symbol,x,y,z,q_w,q_x,q_y,q_z" << "\n";
+
+        file << std::fixed << std::setprecision(3);
+
+        for(KeyFrame& kf : keyframes)
+        {
+            file << kf.timestamp << ","
+                << kf.keyframe_id << ","
+                << kf.pose_symbol.first << kf.pose_symbol.second << ","
+                << kf.pose.position.x() << ","
+                << kf.pose.position.y() << ","
+                << kf.pose.position.z() << ","
+                << kf.pose.orientation.w() << ","
+                << kf.pose.orientation.x() << ","
+                << kf.pose.orientation.y() << ","
+                << kf.pose.orientation.z() << "\n";
+        }
+    }
+
+
+    void Backend::save_loop_closure(const LoopClosureConstraint& loop_closure, const std::string &filename)
+    {
+        static bool first_call = true;
+
+        std::ofstream file;
+
+        if (first_call)
+        {
+            // truncate file
+            file.open(filename, std::ios::out);
+            file << "keyframe_i,keyframe_j,x,y,z,q_w,q_x,q_y,q_z,score\n";
+            first_call = false;
+        }
+        else
+        {
+            file.open(filename, std::ios::app);
+        }
+
+        if (!file.is_open())
+            return;
+
+        file << std::fixed << std::setprecision(3);
+
+        file << loop_closure.keyframe_i << ","
+            << loop_closure.keyframe_j << ","
+            << loop_closure.transform_pose.position.x() << ","
+            << loop_closure.transform_pose.position.y() << ","
+            << loop_closure.transform_pose.position.z() << ","
+            << loop_closure.transform_pose.orientation.w() << ","
+            << loop_closure.transform_pose.orientation.x() << ","
+            << loop_closure.transform_pose.orientation.y() << ","
+            << loop_closure.transform_pose.orientation.z() << ","
+            << loop_closure.score
+            << "\n";
+    }
 
     void Backend::save_graph(NonlinearFactorGraph graph, Values estimates, std::optional<gtsam::Marginals> marginals, const std::string &filename)
     {
-        std::ofstream graph_file(filename);
+        std::ofstream file(filename);
 
-        if (!graph_file.is_open())
+        if (!file.is_open())
         {
             std::cout << "Could not open file: " << filename << std::endl;
             return;
@@ -657,7 +721,7 @@ namespace multirobot_slam
 
                 Vector3 rpy = pose_estimate.rotation().rpy();
 
-                graph_file << "POSE3 " << x << " "
+                file << "POSE3 " << x << " "
                            << pose_estimate.x() << " "
                            << pose_estimate.y() << " "
                            << pose_estimate.z() << " "
@@ -669,9 +733,9 @@ namespace multirobot_slam
 
                     for (int i = 0; i < 6; i++)
                         for (int j = 0; j < 6; j++)
-                            graph_file << " " << pose_covariance(i, j);
+                            file << " " << pose_covariance(i, j);
                 }
-                graph_file << "\n";
+                file << "\n";
             }
         }
 
@@ -682,7 +746,7 @@ namespace multirobot_slam
             {
                 Point3 landmark_estimate = estimates.at<Point3>(l);
 
-                graph_file << "POINT3 " << l << " "
+                file << "POINT3 " << l << " "
                            << landmark_estimate.x() << " "
                            << landmark_estimate.y() << " "
                            << landmark_estimate.z();
@@ -692,9 +756,9 @@ namespace multirobot_slam
                     auto landmark_covariance = marginals.value().marginalCovariance(l);
                     for (int i = 0; i < 3; i++)
                         for (int j = 0; j < 3; j++)
-                            graph_file << " " << landmark_covariance(i, j);
+                            file << " " << landmark_covariance(i, j);
                 }
-                graph_file << "\n";
+                file << "\n";
             }
         }
 
@@ -709,14 +773,14 @@ namespace multirobot_slam
 
                 Vector3 rpy = prior.rotation().rpy();
 
-                graph_file << "PRIORPOSE3 " << key << " "
+                file << "PRIORPOSE3 " << key << " "
                            << prior.x() << " " << prior.y() << " " << prior.z() << " "
                            << rpy(0) << " " << rpy(1) << " " << rpy(2);
 
                 for (int i = 0; i < 6; i++)
                     for (int j = 0; j < 6; j++)
-                        graph_file << " " << covariance(i, j);
-                graph_file << "\n";
+                        file << " " << covariance(i, j);
+                file << "\n";
             }
 
             // PRIORPOINT3
@@ -726,13 +790,13 @@ namespace multirobot_slam
                 Point3 prior = priorPoint->prior();
                 Matrix3 covariance = boost::dynamic_pointer_cast<noiseModel::Gaussian>(priorPoint->noiseModel())->covariance();
 
-                graph_file << "PRIORPOINT3 " << key << " "
+                file << "PRIORPOINT3 " << key << " "
                            << prior.x() << " " << prior.y() << " " << prior.z();
 
                 for (int i = 0; i < 3; i++)
                     for (int j = 0; j < 3; j++)
-                        graph_file << " " << covariance(i, j);
-                graph_file << "\n";
+                        file << " " << covariance(i, j);
+                file << "\n";
             }
 
             // BETWEENFACTOR3
@@ -758,14 +822,14 @@ namespace multirobot_slam
 
                 Vector3 rpy = measurement.rotation().rpy();
 
-                graph_file << "BETWEENFACTOR3 " << pose_x1 << " " << pose_x2 << " "
+                file << "BETWEENFACTOR3 " << pose_x1 << " " << pose_x2 << " "
                            << measurement.x() << " " << measurement.y() << " " << measurement.z() << " "
                            << rpy(0) << " " << rpy(1) << " " << rpy(2);
 
                 for (int i = 0; i < 6; i++)
                     for (int j = 0; j < 6; j++)
-                        graph_file << " " << covariance(i, j);
-                graph_file << "\n";
+                        file << " " << covariance(i, j);
+                file << "\n";
             }
 
             // BEARINGRANGEFACTOR3
@@ -791,15 +855,15 @@ namespace multirobot_slam
 
                 Point3 b = bearing.unitVector();
 
-                graph_file << "BEARINGRANGEFACTOR3 " << pose_x << " " << landmark_l << " "
+                file << "BEARINGRANGEFACTOR3 " << pose_x << " " << landmark_l << " "
                            << b.x() << " " << b.y() << " " << b.z() << " "
                            << range;
 
                 for (int i = 0; i < 2; i++)
                     for (int j = 0; j < 2; j++)
-                        graph_file << " " << covariance(i, j);
+                        file << " " << covariance(i, j);
 
-                graph_file << "\n";
+                file << "\n";
             }
         }
     }

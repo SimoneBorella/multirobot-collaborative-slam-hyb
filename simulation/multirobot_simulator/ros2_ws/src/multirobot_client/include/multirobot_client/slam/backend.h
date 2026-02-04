@@ -4,6 +4,7 @@
 #include <yaml-cpp/yaml.h>
 #include <fstream>
 #include <iostream>
+#include <iomanip>
 #include <optional>
 #include <mutex>
 
@@ -109,6 +110,8 @@ namespace multirobot_slam
         std::vector<std::pair<Symbol, double>> nearest_neighbor_data_association(const Point3& observed_point, const Values& estimates);
         std::vector<std::pair<Symbol, double>> probabilistic_data_association(const Point3& observed_point, const Values& estimates, const Marginals& marginals);
         bool find_bounding_poses(double landmark_ts, Symbol &prev_sym, Symbol &next_sym, double &prev_ts, double &next_ts);
+        void save_keyframes(std::vector<KeyFrame> keyframes, const std::string &filename);
+        void save_loop_closure(const LoopClosureConstraint& loop_closure, const std::string &filename);
         void save_graph(NonlinearFactorGraph graph, Values estimates, std::optional<gtsam::Marginals> marginals, const std::string &filename);
 
         BackendParams params_;
