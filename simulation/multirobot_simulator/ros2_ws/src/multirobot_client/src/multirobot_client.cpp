@@ -312,23 +312,18 @@ private:
     {
         visualization_msgs::msg::MarkerArray marker_array;
 
-        for (auto &[id, kf] : keyframes)
+        for (const auto &[id, kf] : keyframes)
         {
+            // Keyframe pose marker
             visualization_msgs::msg::Marker marker;
             marker.header.frame_id = ns_ + "/" + map_frame_;
             marker.header.stamp = this->now();
             marker.ns = "keyframes";
             marker.id = kf.keyframe_id;
-
             marker.action = visualization_msgs::msg::Marker::ADD;
-
-            // Marker type
             marker.type = visualization_msgs::msg::Marker::ARROW;
-
-            // Lifetime
             marker.lifetime = rclcpp::Duration(0, 0);
 
-            // Pose
             marker.pose.position.x = kf.pose.position.x();
             marker.pose.position.y = kf.pose.position.y();
             marker.pose.position.z = kf.pose.position.z();
@@ -338,22 +333,70 @@ private:
             marker.pose.orientation.z = kf.pose.orientation.z();
             marker.pose.orientation.w = kf.pose.orientation.w();
 
-            // Scale
             marker.scale.x = 0.25;
             marker.scale.y = 0.05;
             marker.scale.z = 0.05;
 
-            // Color
             marker.color.r = 1.0f;
             marker.color.g = 0.0f;
             marker.color.b = 0.0f;
             marker.color.a = 1.0f;
 
             marker_array.markers.push_back(marker);
+
+            // Covariance ellipse marker
+            Eigen::Matrix2d cov_xy;
+            cov_xy << kf.covariance(0,0), kf.covariance(0,1),
+                    kf.covariance(1,0), kf.covariance(1,1);
+
+            Eigen::SelfAdjointEigenSolver<Eigen::Matrix2d> solver(cov_xy);
+            if (solver.info() != Eigen::Success)
+                continue;
+
+            Eigen::Vector2d eigenvalues = solver.eigenvalues();
+            Eigen::Matrix2d eigenvectors = solver.eigenvectors();
+
+            // 95% confidence interval (chi-square, 2 DoF)
+            constexpr double chi2_95 = 5.991;
+
+            double a = std::sqrt(std::max(eigenvalues(1), 0.0) * chi2_95); // major axis
+            double b = std::sqrt(std::max(eigenvalues(0), 0.0) * chi2_95); // minor axis
+
+            Eigen::Vector2d major_axis = eigenvectors.col(1);
+            double yaw = std::atan2(major_axis.y(), major_axis.x());
+
+            visualization_msgs::msg::Marker ellipse;
+            ellipse.header.frame_id = ns_ + "/" + map_frame_;
+            ellipse.header.stamp = this->now();
+            ellipse.ns = "keyframe_covariance";
+            ellipse.id = 100000 + kf.keyframe_id;
+            ellipse.action = visualization_msgs::msg::Marker::ADD;
+            ellipse.type = visualization_msgs::msg::Marker::CYLINDER;
+            ellipse.lifetime = rclcpp::Duration(0, 0);
+
+            ellipse.pose.position.x = kf.pose.position.x();
+            ellipse.pose.position.y = kf.pose.position.y();
+            ellipse.pose.position.z = kf.pose.position.z() - 0.01;
+
+            tf2::Quaternion q;
+            q.setRPY(0.0, 0.0, yaw);
+            ellipse.pose.orientation = tf2::toMsg(q);
+
+            ellipse.scale.x = 2.0 * a;   // diameter
+            ellipse.scale.y = 2.0 * b;
+            ellipse.scale.z = 0.01;
+
+            ellipse.color.r = 0.0f;
+            ellipse.color.g = 0.0f;
+            ellipse.color.b = 1.0f;
+            ellipse.color.a = 0.4f;
+
+            marker_array.markers.push_back(ellipse);
         }
 
         keyframes_marker_publisher_->publish(marker_array);
     }
+
 
     void publish_keyframes_updates(const std::map<int, KeyFrame> &keyframes_updates)
     {

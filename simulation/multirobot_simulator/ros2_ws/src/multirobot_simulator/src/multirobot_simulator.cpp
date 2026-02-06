@@ -37,6 +37,7 @@ public:
             shared_from_this(),
             ament_index_cpp::get_package_share_directory("multirobot_simulator") + "/maps/" + map_filename + ".yaml",
             ament_index_cpp::get_package_share_directory("multirobot_simulator") + "/maps/" + map_filename + ".pgm",
+            ament_index_cpp::get_package_share_directory("multirobot_simulator") + "/maps/blind_spots.yaml",
             landmarks_density
         );
         

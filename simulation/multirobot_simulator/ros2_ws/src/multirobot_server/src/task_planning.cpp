@@ -27,6 +27,10 @@ namespace multirobot_slam
             if (config["coverage_scale"]) p.coverage_scale = config["coverage_scale"].as<double>();
             if (config["conflict_penalty"]) p.conflict_penalty = config["conflict_penalty"].as<double>();
             if (config["uncertainty_reduction_mode"]) p.uncertainty_reduction_mode = config["uncertainty_reduction_mode"].as<bool>();
+            if (config["d_optimality_threshold"]) p.d_optimality_threshold = config["d_optimality_threshold"].as<double>();
+            if (config["w_mahalanobis"]) p.w_mahalanobis = config["w_mahalanobis"].as<double>();
+            if (config["w_cost_to_go"]) p.w_cost_to_go = config["w_cost_to_go"].as<double>();
+
         }
         catch (const std::exception &e)
         {
@@ -74,187 +78,297 @@ namespace multirobot_slam
     {
         std::map<std::string, Task> tasks;
 
-        DiscreteFactorGraph graph;
-        
-        std::vector<std::string> robots;
-        std::vector<Pose> poses;
+        if (robot_poses.empty())
+            return tasks;
 
-        for(const auto& [robot, pose] : robot_poses)
+        const size_t n_frontiers = frontiers.size();
+
+        // Store initial poses
+        for (const auto& [robot, pose] : robot_poses)
         {
-            if(robot_initial_poses_.find(robot) == robot_initial_poses_.end())
+            if (!robot_initial_poses_.count(robot))
                 robot_initial_poses_[robot] = pose;
-            
-            robots.push_back(robot);
-            poses.push_back(pose);
         }
 
-        if (poses.empty()) {
-            return tasks;
-        }
-
-        size_t n_frontiers = frontiers.size();
-        size_t n_robots = poses.size();
-
-        // Send to initial position if no frontiers detected
-        if(n_frontiers == 0)
+        // If no frontiers return to initial pose
+        if (n_frontiers == 0)
         {
-            for(const auto& [robot, pose] : robot_poses)
+            for (const auto& [robot, _] : robot_poses)
             {
-                Task robot_task;
-                robot_task.pose = robot_initial_poses_[robot];
-                robot_task.oriented = true;
-
-                tasks[robot] = robot_task;
+                Task t;
+                t.pose = robot_initial_poses_[robot];
+                t.oriented = true;
+                tasks[robot] = t;
             }
-
             return tasks;
         }
 
-        // Create dynamic max distance & size
+        // Compute max distance and size
         double max_distance = 0.0;
         double max_size = 0.0;
 
-        for (const auto& pose : poses) {
+        for (const auto& [_, pose] : robot_poses)
+        {
             Eigen::Vector2d robot_position(pose.position.x(), pose.position.y());
-            for (const auto& f : frontiers) {
-                double d = (f.centroid - robot_position).norm();
-                if (d > max_distance) max_distance = d;
-                if (f.size > max_size) max_size = f.size;
+            for (const auto& f : frontiers)
+            {
+                max_distance = std::max(max_distance, (f.centroid - robot_position).norm());
+                max_size = std::max(max_size, f.size);
             }
         }
 
-        // Avoid division by zero
         max_distance = std::max(max_distance, 1e-6);
         max_size = std::max(max_size, 1e-6);
 
-        // Create discrete keys for each robot
-        std::vector<DiscreteKey> robot_keys;
-        robot_keys.reserve(n_robots);
 
-        for(size_t i = 0; i < n_robots; i++)
+        // Define robots mode
+        std::vector<std::string> explorative_robots;
+        std::vector<std::string> uncertainty_reduction_robots;
+
+        for (const auto& [robot, pose] : robot_poses)
         {
-            const std::string& robot = robots[i];
-            std::string prefix = "robot_";
-            int robot_id = std::stoi(robot.substr(prefix.length()));
-            DiscreteKey robot_key(Symbol('x', robot_id), n_frontiers);
-            robot_keys.push_back(robot_key);
+            if(params_.uncertainty_reduction_mode)
+            {
+                Eigen::Matrix<double, 6, 6> cov = robot_state_[robot].covariance;
+                
+                double det = cov.determinant();
+                det = std::max(det, 1e-12);
+                double log_det = std::log(det);
+                
+                std::cout << "Log det:" << log_det << std::endl;
+
+                if(log_det > params_.d_optimality_threshold)
+                {
+                    uncertainty_reduction_robots.push_back(robot);
+                }
+                else
+                {
+                    explorative_robots.push_back(robot);
+                }
+            }
+            else
+            {
+                explorative_robots.push_back(robot);
+            }
         }
 
-        // Add unary factors for each robot
-        for (size_t i = 0; i < n_robots; i++)
-        {
-            Eigen::Vector2d robot_position(poses[i].position.x(), poses[i].position.y());
+        // Exploration tasks
 
+        // Build discrete factor graph
+        DiscreteFactorGraph graph;
+
+        // Build discrete keys
+        std::map<std::string, DiscreteKey> robot_keys;
+
+        for (const auto& robot : explorative_robots)
+        {
+            int robot_id = std::stoi(robot.substr(std::string("robot_").length()));
+            robot_keys[robot] = DiscreteKey(Symbol('x', robot_id), n_frontiers);
+        }
+
+        // Unary factors
+        for (const auto& robot : explorative_robots)
+        {
+            Pose pose = robot_poses[robot];
+
+            Eigen::Vector2d robot_pos(pose.position.x(), pose.position.y());
             std::vector<double> values(n_frontiers);
 
-            for (size_t j = 0; j < n_frontiers; j++)
+            double robot_yaw =
+                Eigen::AngleAxisd(pose.orientation).angle() *
+                Eigen::AngleAxisd(pose.orientation).axis().z();
+
+            for (size_t f = 0; f < n_frontiers; ++f)
             {
-                Eigen::Vector2d frontier_centroid = frontiers[j].centroid;
-                double size = frontiers[j].size;
+                const auto& frontier = frontiers[f];
+                Eigen::Vector2d delta = frontier.centroid - robot_pos;
 
-                Eigen::Vector2d delta_position = frontier_centroid - robot_position;
-
-                double euclidean_dist = delta_position.norm();
-
-                double robot_yaw = Eigen::AngleAxisd(poses[i].orientation).angle() * Eigen::AngleAxisd(poses[i].orientation).axis().z();
-                double frontier_bearing = std::atan2(delta_position.y(), delta_position.x());
+                double dist = delta.norm();
+                double bearing = std::atan2(delta.y(), delta.x());
 
                 double orientation_dist = std::abs(std::atan2(
-                    std::sin(frontier_bearing - robot_yaw),
-                    std::cos(frontier_bearing - robot_yaw)
-                ));
+                    std::sin(bearing - robot_yaw),
+                    std::cos(bearing - robot_yaw)));
 
-                double frontier_switch_dist = 0.0;
-
-                if (robot_last_planned_tasks_.count(robots[i]))
+                double switch_dist = 0.0;
+                if (robot_last_planned_tasks_.count(robot))
                 {
-                    const Task& old_task = robot_last_planned_tasks_[robots[i]];
-                    frontier_switch_dist = (frontier_centroid - Eigen::Vector2d(old_task.pose.position.x(), old_task.pose.position.y())).norm();
+                    const auto& old = robot_last_planned_tasks_[robot];
+                    switch_dist = (frontier.centroid - Eigen::Vector2d(old.pose.position.x(), old.pose.position.y())).norm();
                 }
 
-                // Normalize each contribution [0,1]
-                double distance_score = 1.0 - std::min(euclidean_dist / max_distance, 1.0);
-                double orientation_score = 1.0 - std::min(orientation_dist / M_PI, 1.0);
-                double frontier_switch_score = 1.0 - std::min(frontier_switch_dist / max_distance, 1.0);
-                double frontier_size_score = std::min(size / max_size, 1.0);
+                // Normalization
+                double score =
+                    params_.w_distance * (1.0 - std::min(dist / max_distance, 1.0)) +
+                    params_.w_orientation * (1.0 - std::min(orientation_dist / M_PI, 1.0)) +
+                    params_.w_frontier_switch * (1.0 - std::min(switch_dist / max_distance, 1.0)) +
+                    params_.w_frontier_size * std::min(frontier.size / max_size, 1.0);
 
                 // Weighted sum
-                double score =
-                    params_.w_distance * distance_score +
-                    params_.w_orientation * orientation_score +
-                    params_.w_frontier_switch * frontier_switch_score +
-                    params_.w_frontier_size * frontier_size_score;
+                double sumw =
+                    params_.w_distance +
+                    params_.w_orientation +
+                    params_.w_frontier_switch +
+                    params_.w_frontier_size;
 
-                // Normalize weights
-                double sumw = params_.w_distance + params_.w_orientation + params_.w_frontier_switch + params_.w_frontier_size;
-                if (sumw > 0)
+                if (sumw > 0.0)
                     score /= sumw;
 
-                values[j] = std::max(score, 1e-6);
+                values[f] = std::max(score, 1e-6);
             }
 
-            DecisionTreeFactor unary_factor(robot_keys[i], values);
-            graph.add(unary_factor);
+            graph.add(DecisionTreeFactor(robot_keys[robot], values));
         }
 
-        // Add pairwise factors between robots and frontiers
-        for (size_t i = 0; i < n_robots; i++)
+        // Pairwise factors
+        for (size_t i = 0; i < explorative_robots.size(); ++i)
         {
-            for (size_t j = i + 1; j < n_robots; j++)
+            for (size_t j = i + 1; j < explorative_robots.size(); ++j)
             {
+                const auto& r1 = explorative_robots[i];
+                const auto& r2 = explorative_robots[j];
+
                 // Conflict factor
-                {
-                    std::vector<double> table(n_frontiers * n_frontiers, 1.0);
-                    for (size_t f = 0; f < n_frontiers; f++)
-                    {
-                        table[f * n_frontiers + f] = params_.conflict_penalty; 
-                    }
-                    DecisionTreeFactor conflict_factor({robot_keys[i], robot_keys[j]}, table);
-                    graph.add(conflict_factor);
-                }
+                std::vector<double> conflict(n_frontiers * n_frontiers, 1.0);
+                for (size_t f = 0; f < n_frontiers; ++f)
+                    conflict[f * n_frontiers + f] = params_.conflict_penalty;
+
+                graph.add(DecisionTreeFactor(
+                    {robot_keys[r1], robot_keys[r2]}, conflict));
 
                 // Coverage factor
+                std::vector<double> coverage(n_frontiers * n_frontiers, 1.0);
+                for (size_t f1 = 0; f1 < n_frontiers; ++f1)
                 {
-                    std::vector<double> table(n_frontiers * n_frontiers, 1.0);
-
-                    for (size_t f1 = 0; f1 < n_frontiers; f1++)
+                    for (size_t f2 = 0; f2 < n_frontiers; ++f2)
                     {
-                        for (size_t f2 = 0; f2 < n_frontiers; f2++)
-                        {
-                            double dist = (frontiers[f1].centroid - frontiers[f2].centroid).norm();
+                        double d =
+                            (frontiers[f1].centroid -
+                            frontiers[f2].centroid).norm();
 
-                            double coverage_raw = 1.0 - std::exp(-dist / params_.coverage_scale);
-                            double coverage_score = (1.0 - params_.w_coverage) + params_.w_coverage * coverage_raw;
-
-                            table[f1 * n_frontiers + f2] = coverage_score;
-                        }
+                        double raw = 1.0 - std::exp(-d / params_.coverage_scale);
+                        coverage[f1 * n_frontiers + f2] =
+                            (1.0 - params_.w_coverage) +
+                            params_.w_coverage * raw;
                     }
-
-                    DecisionTreeFactor coverage_factor({robot_keys[i], robot_keys[j]}, table);
-                    graph.add(coverage_factor);
                 }
-                
+
+                graph.add(DecisionTreeFactor(
+                    {robot_keys[r1], robot_keys[r2]}, coverage));
             }
         }
 
+        // Optimize
         DiscreteValues result = graph.optimize();
 
-        for (size_t i = 0; i < poses.size(); i++)
+        // Decode solution
+        for (const auto& robot : explorative_robots)
         {
-            const std::string& robot = robots[i];
-            size_t assignment = result[robot_keys[i].first];
+            size_t assignment = result[robot_keys[robot].first];
 
-            Task robot_task;
-            robot_task.pose.position.x() = frontiers[assignment].centroid.x();
-            robot_task.pose.position.y() = frontiers[assignment].centroid.y();
-            robot_task.oriented = false;
+            Task t;
+            t.pose.position.x() = frontiers[assignment].centroid.x();
+            t.pose.position.y() = frontiers[assignment].centroid.y();
+            t.oriented = false;
 
-            tasks[robot] = robot_task;
+            tasks[robot] = t;
         }
+
+
+
+        // Uncertainty reduction tasks
+
+        for (const auto& robot : uncertainty_reduction_robots)
+        {
+            const Pose& pose = robot_poses[robot];
+            const Eigen::Matrix<double,6,6>& Sigma_i = robot_state_[robot].covariance;
+
+            Eigen::Vector2d robot_pos(
+                pose.position.x(),
+                pose.position.y()
+            );
+
+            // Discrete graph for robot
+            DiscreteFactorGraph graph;
+
+            const auto& keyframes = robot_keyframes_[robot];
+            if (keyframes.empty())
+                continue;
+
+            int robot_id = std::stoi(robot.substr(std::string("robot_").length()));
+            DiscreteKey robot_key(Symbol('u', robot_id), keyframes.size());
+
+            std::vector<double> values(keyframes.size(), std::numeric_limits<double>::infinity());
+
+            // Iteration in keyframe order
+            Eigen::Vector2d prev_kf_pos = robot_pos;
+            double accumulated_cost_to_go = 0.0;
+
+            size_t idx = 0;
+            for (const auto& [kf_id, kf] : keyframes)
+            {
+                Eigen::Vector2d kf_pos(
+                    kf.pose.position.x(),
+                    kf.pose.position.y()
+                );
+
+                // Mahalanobis distance
+                Eigen::Matrix<double,6,6> Sigma_j = kf.covariance;
+                Eigen::Matrix<double,6,6> Sigma_ij = Sigma_i + Sigma_j;
+
+                Eigen::Matrix<double,6,1> dx;
+                dx.setZero();
+                dx(0) = pose.position.x() - kf.pose.position.x();
+                dx(1) = pose.position.y() - kf.pose.position.y();
+
+                double mahalanobis = dx.transpose() * Sigma_ij.inverse() * dx;
+
+                // Chi-square gating (2 DoF approx)
+                // if (mahalanobis > params_.mahalanobis_chi2_gate)
+                // {
+                //     values[idx++] = 1e9;
+                //     continue;
+                // }
+
+                // Cost to go
+                double step_cost = (kf_pos - prev_kf_pos).norm();
+                accumulated_cost_to_go += step_cost;
+                prev_kf_pos = kf_pos;
+
+                // Score
+                double score =
+                    params_.w_mahalanobis * mahalanobis +
+                    params_.w_cost_to_go * accumulated_cost_to_go;
+
+                values[idx++] = std::max(score, 1e-6);
+            }
+
+            // Add unary factor
+            graph.add(DecisionTreeFactor(robot_key, values));
+
+            // Optimize
+            DiscreteValues result = graph.optimize();
+            size_t best_idx = result[robot_key.first];
+
+            // Retrieve selected keyframe
+            auto it = keyframes.begin();
+            std::advance(it, best_idx);
+
+            const KeyFrame& best_kf = it->second;
+
+            // Assign task
+            Task t;
+            t.pose = best_kf.pose;
+            t.oriented = true;
+
+            tasks[robot] = t;
+        }
+
 
         robot_last_planned_tasks_ = tasks;
         return tasks;
     }
+
 
 }
 

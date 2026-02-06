@@ -21,7 +21,7 @@ class Environment
 public:
     Environment() = default;
 
-    Environment(rclcpp::Node::SharedPtr node, const std::string& map_yaml_path, const std::string& map_pgm_path, double landmarks_density)
+    Environment(rclcpp::Node::SharedPtr node, const std::string& map_yaml_path, const std::string& map_pgm_path, const std::string& blind_spots_yaml_path, double landmarks_density)
     {
         this->node = node;
         map_subscription_count = 0;
@@ -35,7 +35,31 @@ public:
         loadMap(map_yaml_path, map_pgm_path);
         RCLCPP_INFO_STREAM(node->get_logger(), "Map loaded.");
 
-        generateLandmarks(landmarks_density);
+
+        YAML::Node blind_spots_config = YAML::LoadFile(blind_spots_yaml_path);
+
+        std::vector<BlindSpot> blind_spots;
+        try
+        {
+            YAML::Node blind_spots_config = YAML::LoadFile(blind_spots_yaml_path);
+            if (blind_spots_config["blind_spots"])
+            {
+                for (const auto& spot_node : blind_spots_config["blind_spots"])
+                {
+                    BlindSpot spot;
+                    spot.x = spot_node["x"].as<double>();
+                    spot.y = spot_node["y"].as<double>();
+                    spot.r = spot_node["r"].as<double>();
+                    blind_spots.push_back(spot);
+                }
+            }
+        }
+        catch (const std::exception& e)
+        {
+            RCLCPP_ERROR_STREAM(node->get_logger(), "Failed to load blind spots YAML: " << e.what());
+        }
+
+        generateLandmarks(landmarks_density, blind_spots);
         RCLCPP_INFO_STREAM(node->get_logger(), "Landmarks generated.");
 
         RCLCPP_INFO_STREAM(node->get_logger(), "Environment initialized.");
@@ -84,7 +108,7 @@ public:
         file.close();
     }
 
-    void generateLandmarks(double landmarks_density)
+    void generateLandmarks(double landmarks_density, std::vector<BlindSpot> blind_spots)
     {
         double width_dim = width * resolution;
         double height_dim = height * resolution;
@@ -102,6 +126,20 @@ public:
             double x = dis_x(gen);
             double y = dis_y(gen);
             double z = val_z(gen);
+
+            bool blind_spot_hit = false;
+            for(auto& blind_spot : blind_spots)
+            {
+                double blind_spot_dist_sq = (x - blind_spot.x)*(x - blind_spot.x) + (y - blind_spot.y)*(y - blind_spot.y);
+                if(blind_spot_dist_sq < blind_spot.r*blind_spot.r)
+                {
+                    blind_spot_hit = true;
+                    break;
+                }
+            }
+
+            if(blind_spot_hit)
+                continue;
 
             size_t x_grid = std::clamp<size_t>(round((x - origin[0]) / resolution), 0, width - 1);
             size_t y_grid = std::clamp<size_t>(round((y - origin[1]) / resolution), 0, height - 1);

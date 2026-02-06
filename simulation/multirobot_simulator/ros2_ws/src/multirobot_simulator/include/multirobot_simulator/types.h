@@ -42,4 +42,10 @@ struct Command
 };
 
 
+struct BlindSpot
+{
+    double x, y, r;
+};
+
+
 #endif // TYPES_H
