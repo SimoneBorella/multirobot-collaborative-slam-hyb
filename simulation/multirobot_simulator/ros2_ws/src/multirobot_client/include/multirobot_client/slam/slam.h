@@ -40,8 +40,9 @@ namespace multirobot_slam
         void add_posed_scan(PosedScan &posed_scan);
         State get_state();
         std::optional<State> get_state_if_updated();
-        std::vector<KeyFrame> get_keyframes();
-        std::vector<Map> get_updated_submaps();
+        std::map<int, KeyFrame> get_keyframes();
+        std::map<int, KeyFrame> get_keyframes_updates();
+        std::map<int, Map> get_updated_submaps();
         
         
     private:
@@ -60,6 +61,9 @@ namespace multirobot_slam
         std::thread backend_thread_;
         std::thread loop_closure_detection_thread_;
         std::thread submap_mapping_thread_;
+
+        int keyframe_update_counter_;
+        int keyframe_update_threshold_;
     };
 }
 

@@ -80,36 +80,32 @@ namespace multirobot_slam
         orb_db_ = Database(voc, false, 0);
     }
 
-    void LoopClosureDetector::add_keyframes_to_db(const std::vector<KeyFrame>& keyframes)
+
+    void LoopClosureDetector::add_keyframes_to_db(const std::map<int, KeyFrame>& keyframes)
     {
         {
             std::lock_guard<std::mutex> lock(keyframes_mutex_);
             keyframes_ = keyframes;
         }
 
-        if(last_added_keyframe_id_ >= int(keyframes_.size()))
-            return;
-
-            
-        for(size_t i = last_added_keyframe_id_; i < keyframes_.size(); i++)
+        while (true)
         {
-            const KeyFrame& candidate_keyframe = keyframes_[i];
-                        
+            auto it = keyframes.find(last_added_keyframe_id_+1);
+            if (it == keyframes.end())
+                break;
+
+            const KeyFrame& candidate_keyframe = it->second;
+
             cv::Mat descriptors(candidate_keyframe.keypoints.size(), 32, CV_8U);
             for (size_t j = 0; j < candidate_keyframe.keypoints.size(); j++)
                 memcpy(descriptors.ptr(j), candidate_keyframe.keypoints[j].descriptor.data(), 32);
-            
-            
+
             int db_id = orb_db_.add(descriptors);
             database_to_keyframe_id_[db_id] = candidate_keyframe.keyframe_id;
 
-            // std::cout << "Added keyframe " << candidate_keyframe.keyframe_id << std::endl;
+            last_added_keyframe_id_++;
         }
-
-        last_added_keyframe_id_ = keyframes_.size();
     }
-
-
 
 
 
@@ -124,171 +120,6 @@ namespace multirobot_slam
 
 
 
-
-
-
-
-
-
-
-
-
-    // std::optional<LoopClosureConstraint> LoopClosureDetector::detect()
-    // {
-    //     std::lock_guard<std::mutex> lock(keyframes_mutex_);
-
-    //     if(loop_detected_)
-    //         return std::nullopt;
-
-    //     std::optional<LoopClosureConstraint> loop_closure_opt;
-
-    //     for(size_t keyframe_id = last_processed_keyframe_id_+1; keyframe_id<keyframes_.size(); keyframe_id++)
-    //     {
-    //         current_keyframe_id_ = keyframe_id;
-    //         KeyFrame& current_keyframe = keyframes_[current_keyframe_id_];
-            
-    //         std::cout << "Processing keyframe " << current_keyframe_id_ << "..." << std::endl;
-            
-    //         if (loop_num_coincidences_ > 0)
-    //         {
-    //             const KeyFrame& current_kf = keyframes_[current_keyframe_id_];
-    //             const KeyFrame& last_kf    = keyframes_[last_current_keyframe_id_];
-    //             const KeyFrame& matched_kf = keyframes_[matched_keyframe_id_];
-
-    //             // Raffinamento geometrico tra current_kf e matched_kf
-    //             Pose T;
-    //             double geometric_score = 0.0;
-
-    //             bool success = estimate_relative_pose(
-    //                 current_kf,
-    //                 matched_kf,
-    //                 T,
-    //                 geometric_score
-    //             );
-
-    //             if (success)
-    //             {
-    //                 loop_num_coincidences_++;
-    //                 loop_num_not_found_ = 0;
-
-    //                 last_current_keyframe_id_ = current_keyframe_id_;
-
-    //                 std::cout << "Loop consistency " 
-    //                         << loop_num_coincidences_ << "/"
-    //                         << params_.covisibility_consistency_threshold
-    //                         << std::endl;
-
-    //                 if (loop_num_coincidences_ >= params_.covisibility_consistency_threshold)
-    //                 {
-    //                     loop_detected_ = true;
-
-    //                     // Aggiungi constraint
-    //                     loop_closure_opt = LoopClosureConstraint{
-    //                         current_kf.keyframe_id,
-    //                         matched_kf.keyframe_id,
-    //                         T,
-    //                         geometric_score
-    //                     };
-
-    //                     return loop_closure_opt;
-    //                 }
-    //             }
-    //             else
-    //             {
-    //                 loop_num_not_found_++;
-
-    //                 if (loop_num_not_found_ >= 2)
-    //                 {
-    //                     loop_num_coincidences_ = 0;
-    //                     loop_num_not_found_ = 0;
-    //                     matched_keyframe_id_ = -1;
-    //                     last_current_keyframe_id_ = -1;
-    //                 }
-    //             }
-
-    //             continue;
-    //         }
-
-
-
-    //         // Detect loop closure for the first time
-
-    //         // BoW candidate search
-    //         cv::Mat descriptors(current_keyframe.keypoints.size(), 32, CV_8U);
-    //         for (size_t i = 0; i < current_keyframe.keypoints.size(); i++)
-    //             memcpy(descriptors.ptr(i), current_keyframe.keypoints[i].descriptor.data(), 32);
-
-    //         QueryResults ret;
-    //         orb_db_.query(descriptors, ret, 3);
-
-    //         // Check candidates
-    //         double best_geom_score = 0.0;
-    //         int best_candidate_id = -1;
-    //         Pose best_T;
-
-    //         for (auto &r : ret)
-    //         {
-    //             // Check bow score
-    //             if (r.Score < params_.min_bow_score)
-    //                 continue;
-
-    //             int candidate_keyframe_id = database_to_keyframe_id_[r.Id];
-    //             const KeyFrame& candidate_keyframe = keyframes_[candidate_keyframe_id];
-
-    //             // Spacial and temporal consistency check
-    //             if (!is_candidate(current_keyframe, candidate_keyframe))
-    //                 continue;
-
-    //             // Find relative pose
-    //             Pose T;
-    //             double geometric_score = 0.0;
-
-    //             bool success = estimate_relative_pose(
-    //                 current_keyframe,
-    //                 candidate_keyframe,
-    //                 T,
-    //                 geometric_score
-    //             );
-
-    //             if (!success)
-    //                 continue;
-
-    //             if (geometric_score > best_geom_score)
-    //             {
-    //                 best_geom_score = geometric_score;
-    //                 best_candidate_id = candidate_keyframe_id;
-    //                 best_T = T;
-    //             }
-    //         }
-
-    //         if (best_candidate_id != -1)
-    //         {
-    //             matched_keyframe_id_ = best_candidate_id;
-    //             last_current_keyframe_id_ = current_keyframe_id_;
-    //             loop_num_coincidences_ = 1;
-    //             loop_num_not_found_ = 0;
-    //         }
-
-    //         last_processed_keyframe_id_ = current_keyframe_id_;
-    //     }
-        
-    //     return std::nullopt;
-    // }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     std::optional<LoopClosureConstraint> LoopClosureDetector::detect()
     {
         std::lock_guard<std::mutex> lock(keyframes_mutex_);
@@ -298,12 +129,16 @@ namespace multirobot_slam
 
         std::optional<LoopClosureConstraint> loop_closure_opt;
 
-        for(size_t keyframe_id = last_processed_keyframe_id_ + 1; keyframe_id < keyframes_.size(); keyframe_id++)
-        {
-            current_keyframe_id_ = keyframe_id;
-            KeyFrame& current_keyframe = keyframes_[current_keyframe_id_];
+        int next_id = last_processed_keyframe_id_ + 1;
 
-            // std::cout << "Processing keyframe " << current_keyframe_id_ << "..." << std::endl;
+        while (true)
+        {
+            auto it = keyframes_.find(next_id);
+            if (it == keyframes_.end())
+                break;
+            
+            current_keyframe_id_ = it->first;
+            KeyFrame& current_keyframe = it->second;
 
             // BoW candidate search
             cv::Mat descriptors(current_keyframe.keypoints.size(), 32, CV_8U);
@@ -323,7 +158,13 @@ namespace multirobot_slam
                     continue;
 
                 int candidate_keyframe_id = database_to_keyframe_id_[r.Id];
-                const KeyFrame& candidate_keyframe = keyframes_[candidate_keyframe_id];
+
+                // Check if candidate exists in map
+                auto cand_it = keyframes_.find(candidate_keyframe_id);
+                if (cand_it == keyframes_.end())
+                    continue;
+
+                const KeyFrame& candidate_keyframe = cand_it->second;
 
                 // Temporal and spatial consistency
                 if (!is_candidate(current_keyframe, candidate_keyframe))
@@ -345,11 +186,10 @@ namespace multirobot_slam
                 }
             }
 
+            last_processed_keyframe_id_ = current_keyframe_id_;
 
             if (best_candidate_id != -1)
             {
-                last_processed_keyframe_id_ = current_keyframe_id_;
-
                 loop_detected_ = true;
 
                 loop_closure_opt = LoopClosureConstraint{
@@ -365,47 +205,13 @@ namespace multirobot_slam
                         << " with score " << best_geom_score << std::endl;
 
                 return loop_closure_opt;
-                
             }
-            
-            last_processed_keyframe_id_ = current_keyframe_id_;
-        
+
+            next_id++;
         }
 
         return std::nullopt;
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

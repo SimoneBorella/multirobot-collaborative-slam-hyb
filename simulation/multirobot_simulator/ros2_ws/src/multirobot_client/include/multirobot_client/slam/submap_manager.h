@@ -69,11 +69,11 @@ namespace multirobot_slam
         static SubmapManagerParams params_from_yaml(std::string &params_path);
         void init(SubmapManagerParams &params);
 
-        void update_keyframes(const std::vector<KeyFrame> &keyframes);
+        void update_keyframes(const std::map<int, KeyFrame> &keyframes);
         void add_posed_scan(const PosedScan &posed_scan);
         void submaps_mapping();
 
-        std::vector<Map> get_updated_submaps();
+        std::map<int, Map> get_updated_submaps();
 
     private:
         Submap create_submap_from_keyframe(const KeyFrame& keyframe);
@@ -88,15 +88,15 @@ namespace multirobot_slam
         double free_belief_log_odds_;
         double occupied_belief_log_odds_;
 
-        std::vector<KeyFrame> keyframes_;
+        std::map<int, KeyFrame> keyframes_;
         std::mutex keyframes_mutex_;
 
         std::vector<PosedScan> posed_scan_buffer_;
         std::mutex buffer_mutex_;
 
-        std::vector<Submap> submaps_;
-        std::vector<bool> submaps_updated_;
-        std::vector<std::unique_ptr<std::mutex>> submap_mutexes_;
+        std::map<int, Submap> submaps_;
+        std::map<int, bool> submaps_updated_;
+        std::map<int, std::unique_ptr<std::mutex>> submap_mutexes_;
     };
 }
 

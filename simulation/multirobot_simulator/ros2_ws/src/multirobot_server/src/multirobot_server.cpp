@@ -19,6 +19,8 @@
 #include "interfaces/msg/frontier_map_update.hpp"
 #include "interfaces/msg/frontier.hpp"
 #include "interfaces/msg/frontier_array.hpp"
+#include "interfaces/msg/state.hpp"
+#include "interfaces/msg/keyframe_update_array.hpp"
 #include "visualization_msgs/msg/marker.hpp"
 #include "nav_msgs/msg/path.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
@@ -90,6 +92,27 @@ public:
                 10, 
                 [this, robot](interfaces::msg::FrontierMapUpdate::SharedPtr msg) {
                     frontier_map_update_callback(msg, robot);
+                }
+            );
+
+
+            std::string robot_state_topic = "/" + robot + "/state";
+    
+            robot_state_subscriptions_[robot] = this->create_subscription<interfaces::msg::State>(
+                robot_state_topic,
+                10, 
+                [this, robot](interfaces::msg::State::SharedPtr msg) {
+                    state_callback(msg, robot);
+                }
+            );
+
+            std::string robot_keyframes_update_topic = "/" + robot + "/keyframes_update";
+    
+            robot_keyframes_update_subscriptions_[robot] = this->create_subscription<interfaces::msg::KeyframeUpdateArray>(
+                robot_keyframes_update_topic,
+                10, 
+                [this, robot](interfaces::msg::KeyframeUpdateArray::SharedPtr msg) {
+                    keyframes_update_callback(msg, robot);
                 }
             );
 
@@ -214,6 +237,79 @@ public:
         frontier_map_update.explored_indices = msg->explored_indices;
 
         mapping_merge_.add_frontier_map_update(frontier_map_update, robot);
+    }
+
+
+    void state_callback(const interfaces::msg::State::SharedPtr msg, const std::string &robot)
+    {
+        State state;
+
+        // Position
+        state.position = Eigen::Vector3d(
+            msg->pose.position.x,
+            msg->pose.position.y,
+            msg->pose.position.z
+        );
+
+        // Orientation
+        state.orientation = Eigen::Quaterniond(
+            msg->pose.orientation.w,
+            msg->pose.orientation.x,
+            msg->pose.orientation.y,
+            msg->pose.orientation.z
+        );
+
+        // Covariance
+        state.covariance.setZero();
+        for (int r = 0; r < 6; ++r)
+        {
+            for (int c = 0; c < 6; ++c)
+            {
+                state.covariance(r, c) = msg->covariance[r * 6 + c];
+            }
+        }
+
+        task_planning_.update_robot_state(state, robot);
+    }
+
+    void keyframes_update_callback(const interfaces::msg::KeyframeUpdateArray::SharedPtr msg, const std::string &robot)
+    {
+        std::map<int, KeyFrame> robot_keyframes_update;
+
+        for (const auto& kf_msg : msg->updates)
+        {
+            KeyFrame keyframe_update;
+            keyframe_update.keyframe_id = kf_msg.keyframe_id;
+
+            // Position
+            keyframe_update.pose.position = Eigen::Vector3d(
+                kf_msg.pose.position.x,
+                kf_msg.pose.position.y,
+                kf_msg.pose.position.z
+            );
+
+            // Orientation
+            keyframe_update.pose.orientation = Eigen::Quaterniond(
+                kf_msg.pose.orientation.w,
+                kf_msg.pose.orientation.x,
+                kf_msg.pose.orientation.y,
+                kf_msg.pose.orientation.z
+            );
+
+            // Covariance
+            keyframe_update.covariance.setZero();
+            for (int r = 0; r < 6; ++r)
+            {
+                for (int c = 0; c < 6; ++c)
+                {
+                    keyframe_update.covariance(r, c) = kf_msg.covariance[r * 6 + c];
+                }
+            }
+
+            robot_keyframes_update[keyframe_update.keyframe_id] = keyframe_update;
+        }
+
+        task_planning_.update_robot_keyframes(robot_keyframes_update, robot);
     }
 
 
@@ -559,6 +655,8 @@ public:
 
     std::map<std::string, rclcpp::Subscription<interfaces::msg::MapLogOddsUpdate>::SharedPtr> robot_map_log_odds_update_subscriptions_;
     std::map<std::string, rclcpp::Subscription<interfaces::msg::FrontierMapUpdate>::SharedPtr> robot_frontier_map_update_subscriptions_;
+    std::map<std::string, rclcpp::Subscription<interfaces::msg::State>::SharedPtr> robot_state_subscriptions_;
+    std::map<std::string, rclcpp::Subscription<interfaces::msg::KeyframeUpdateArray>::SharedPtr> robot_keyframes_update_subscriptions_;
 
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr map_publisher_;
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr costmap_publisher_;

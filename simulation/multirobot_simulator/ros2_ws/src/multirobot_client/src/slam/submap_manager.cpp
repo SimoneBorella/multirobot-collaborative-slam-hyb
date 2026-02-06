@@ -81,7 +81,7 @@ namespace multirobot_slam
         occupied_belief_log_odds_ = std::log(params_.occ_belief / (1.0 - params_.occ_belief));
     }
 
-    void SubmapManager::update_keyframes(const std::vector<KeyFrame> &keyframes)
+    void SubmapManager::update_keyframes(const std::map<int, KeyFrame> &keyframes)
     {
         std::lock_guard<std::mutex> lock(keyframes_mutex_);
         keyframes_ = keyframes;
@@ -227,20 +227,22 @@ namespace multirobot_slam
         {
             std::lock_guard<std::mutex> lock(keyframes_mutex_);
 
-            if (keyframes_.size() > submaps_.size())
+            for (const auto& [keyframe_id, keyframe] : keyframes_)
             {
-                for (size_t i = submaps_.size(); i < keyframes_.size(); i++)
+                if (submaps_.find(keyframe_id) != submaps_.end())
+                    continue;
+
+                Submap submap = create_submap_from_keyframe(keyframe);
+
+                if (!submaps_.empty())
                 {
-                    const KeyFrame& keyframe = keyframes_[i];
-                    Submap submap = create_submap_from_keyframe(keyframe);
-
-                    if(!submaps_.empty())
-                        submaps_.back().timestamp_end = keyframe.timestamp;
-
-                    submaps_.push_back(submap);
-                    submaps_updated_.push_back(true);
-                    submap_mutexes_.push_back(std::make_unique<std::mutex>());
+                    auto it_last = std::prev(submaps_.end());
+                    it_last->second.timestamp_end = keyframe.timestamp;
                 }
+
+                submaps_[keyframe_id] = submap;
+                submaps_updated_[keyframe_id] = true;
+                submap_mutexes_[keyframe_id] = std::make_unique<std::mutex>();
             }
         }
 
@@ -250,20 +252,22 @@ namespace multirobot_slam
 
         for (PosedScan& posed_scan : posed_scan_buffer)
         {
-            size_t submap_id = submaps_.size();
-
-            for (int i = static_cast<int>(submaps_.size()) - 1; i >= 0; i--)
+            // Starting from the bottom find the correct submap that matched the timestamp
+            int submap_id = -1;
+            for (auto it = submaps_.rbegin(); it != submaps_.rend(); ++it)
             {
-                if (posed_scan.timestamp >= submaps_[i].timestamp_start &&
-                    posed_scan.timestamp <  submaps_[i].timestamp_end)
+                const Submap& submap = it->second;
+                if (posed_scan.timestamp >= submap.timestamp_start &&
+                    posed_scan.timestamp < submap.timestamp_end)
                 {
-                    submap_id = i;
+                    submap_id = it->first;
                     break;
                 }
             }
 
-            if (submap_id == submaps_.size())
+            if (submap_id == -1)
                 continue;
+
 
             std::lock_guard<std::mutex> lock(*submap_mutexes_[submap_id]);
 
@@ -355,53 +359,48 @@ namespace multirobot_slam
 
     }
 
-    std::vector<Map> SubmapManager::get_updated_submaps()
+    std::map<int, Map> SubmapManager::get_updated_submaps()
     {
-        std::vector<Map> updated_maps;
+        std::map<int, Map> updated_maps;
 
-        for(size_t i=0; i<submaps_updated_.size(); i++)
+        for (auto& [id, updated] : submaps_updated_)
         {
-            std::lock_guard<std::mutex> lock(*submap_mutexes_[i]);
+            if (!updated)
+                continue;
 
-            if(submaps_updated_[i])
+            std::lock_guard<std::mutex> lock(*submap_mutexes_[id]);
+            Submap& submap = submaps_[id];
+
+            Map map;
+            map.keyframe_id = submap.keyframe_id;
+            map.resolution = submap.resolution;
+            map.width = submap.width;
+            map.height = submap.height;
+            map.origin_position = submap.origin_position;
+            map.origin_orientation = submap.origin_orientation;
+            map.data.resize(map.width * map.height);
+
+            for (size_t k = 0; k < submap.log_odds.size(); ++k)
             {
-                const Submap& submap = submaps_[i];
-
-                Map map;
-                map.keyframe_id = submap.keyframe_id;
-                map.resolution = submap.resolution;
-                map.width = submap.width;
-                map.height = submap.height;
-                map.origin_position = submap.origin_position;
-                map.origin_orientation = submap.origin_orientation;
-
-                map.data.resize(map.width * map.height);
-
-                for (size_t k = 0; k < submap.log_odds.size(); ++k)
-                {
-                    map.data[k] = log_odds_to_probability(submap.log_odds[k]);
-                }
-
-                // Create filtered map
-                for (size_t i = 0; i < map.data.size(); i++)
-                {
-                    if (map.data[i] == -1)
-                        continue;
-
-                    double val = map.data[i] / 100.0;
-                    if (val > params_.obstacle_threshold)
-                        map.data[i] = 100;
-                    else if (val < params_.free_threshold)
-                        map.data[i] = 0;
-                    else
-                        map.data[i] = -1;
-                }
-
-
-                updated_maps.push_back(std::move(map));
-
-                submaps_updated_[i] = false;
+                map.data[k] = log_odds_to_probability(submap.log_odds[k]);
             }
+
+            // Create filtered map
+            for (size_t k = 0; k < map.data.size(); ++k)
+            {
+                if (map.data[k] == -1) continue;
+
+                double val = map.data[k] / 100.0;
+                if (val > params_.obstacle_threshold)
+                    map.data[k] = 100;
+                else if (val < params_.free_threshold)
+                    map.data[k] = 0;
+                else
+                    map.data[k] = -1;
+            }
+
+            updated_maps[id] = std::move(map);
+            submaps_updated_[id] = false;
         }
 
         return updated_maps;

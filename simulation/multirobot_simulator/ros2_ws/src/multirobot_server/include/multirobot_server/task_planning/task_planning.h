@@ -73,12 +73,19 @@ namespace multirobot_slam
         static TaskPlanningParams params_from_yaml(std::string &params_path);
         void init(TaskPlanningParams &params);
 
+        void update_robot_state(State state, std::string robot);
+        void update_robot_keyframes(std::map<int, KeyFrame>& keyframes, std::string robot);
+
         std::map<std::string, Task> plan_tasks(std::map<std::string, Pose> robot_poses, std::vector<Frontier> frontiers);
     private:
 
         TaskPlanningParams params_;
         std::map<std::string, Pose> robot_initial_poses_;
-        std::map<std::string, Task> last_planned_tasks_;
+        std::map<std::string, Task> robot_last_planned_tasks_;
+
+        std::map<std::string, State> robot_state_;
+        std::map<std::string, std::map<int, KeyFrame>> robot_keyframes_;
+
     };
 }
 

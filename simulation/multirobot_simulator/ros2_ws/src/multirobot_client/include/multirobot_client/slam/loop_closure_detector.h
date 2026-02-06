@@ -79,7 +79,7 @@ namespace multirobot_slam
         static LoopClosureDetectorParams params_from_yaml(std::string &params_path);
         void init(LoopClosureDetectorParams &params);
 
-        void add_keyframes_to_db(const std::vector<KeyFrame>& keyframes);
+        void add_keyframes_to_db(const std::map<int, KeyFrame>& keyframes);
 
         void notify_loop_closure_updated();
         std::optional<LoopClosureConstraint> detect();
@@ -94,7 +94,7 @@ namespace multirobot_slam
 
         Database orb_db_;
         
-        std::vector<KeyFrame> keyframes_;
+        std::map<int, KeyFrame> keyframes_;
         std::mutex keyframes_mutex_;
         
         std::unordered_map<int, int> database_to_keyframe_id_;

@@ -36,6 +36,7 @@ namespace multirobot_slam
     struct BackendParams
     {
         double backend_rate;
+        double backend_keyframe_update_rate;
         Eigen::Matrix<double, 6, 1> init_position; // [x, y, z, roll, pitch, yaw]
         Eigen::Vector3d init_velocity;             // m/s
         Eigen::Vector3d init_accelerometer_bias;   // m/s^2 bias
@@ -50,9 +51,13 @@ namespace multirobot_slam
         double data_association_distance;
         double keyframe_distance;
         double keyframe_angular_distance;
+        double keyframe_update_position_threshold;
+        double keyframe_update_orientation_threshold;
+        double keyframe_update_cov_trace_threshold;
 
         BackendParams(
             double backend_rate = 10.0,
+            double backend_keyframe_update_rate = 0.5,
             Eigen::Matrix<double, 6, 1> init_position = Eigen::Matrix<double, 6, 1>::Zero(),
             Eigen::Vector3d init_velocity = Eigen::Vector3d::Zero(),
             Eigen::Vector3d init_accelerometer_bias = Eigen::Vector3d::Constant(1e-3),
@@ -66,8 +71,12 @@ namespace multirobot_slam
             double sigma_keypoint_noise = 0.1,
             double data_association_distance = 0.2,
             double keyframe_distance = 0.5,
-            double keyframe_angular_distance = 0.524)
+            double keyframe_angular_distance = 0.524,
+            double keyframe_update_position_threshold = 0.05,
+            double keyframe_update_orientation_threshold = 0.0174,
+            double keyframe_update_cov_trace_threshold = 1e-3)
             : backend_rate(backend_rate),
+              backend_keyframe_update_rate(backend_keyframe_update_rate),
               init_position(init_position),
               init_velocity(init_velocity),
               init_accelerometer_bias(init_accelerometer_bias),
@@ -81,7 +90,10 @@ namespace multirobot_slam
               sigma_keypoint_noise(sigma_keypoint_noise),
               data_association_distance(data_association_distance),
               keyframe_distance(keyframe_distance),
-              keyframe_angular_distance(keyframe_angular_distance) {}
+              keyframe_angular_distance(keyframe_angular_distance),
+              keyframe_update_position_threshold(keyframe_update_position_threshold),
+              keyframe_update_orientation_threshold(keyframe_update_orientation_threshold),
+              keyframe_update_cov_trace_threshold(keyframe_update_cov_trace_threshold) {}
     };
 
     class Backend
@@ -98,8 +110,9 @@ namespace multirobot_slam
         void add_keypoints(KeypointsData &keypoints_data);
         State get_state();
         std::optional<State> get_state_if_updated();
-        void update_keyframe_poses();
-        std::vector<KeyFrame> get_keyframes();
+        void update_keyframes(int update_window = -1);
+        std::map<int, KeyFrame> get_keyframes();
+        std::map<int, KeyFrame> get_keyframes_updates();
         
         void optimize();
 
@@ -110,7 +123,7 @@ namespace multirobot_slam
         std::vector<std::pair<Symbol, double>> nearest_neighbor_data_association(const Point3& observed_point, const Values& estimates);
         std::vector<std::pair<Symbol, double>> probabilistic_data_association(const Point3& observed_point, const Values& estimates, const Marginals& marginals);
         bool find_bounding_poses(double landmark_ts, Symbol &prev_sym, Symbol &next_sym, double &prev_ts, double &next_ts);
-        void save_keyframes(std::vector<KeyFrame> keyframes, const std::string &filename);
+        void save_keyframes(std::map<int, KeyFrame> keyframes, const std::string &filename);
         void save_loop_closure(const LoopClosureConstraint& loop_closure, const std::string &filename);
         void save_graph(NonlinearFactorGraph graph, Values estimates, std::optional<gtsam::Marginals> marginals, const std::string &filename);
 
@@ -145,8 +158,13 @@ namespace multirobot_slam
         Vector3 velocity_estimate_;
         imuBias::ConstantBias bias_estimate_;
 
-        std::vector<KeyFrame> keyframes_;
+        std::map<int, KeyFrame> keyframes_;
+        std::map<int, KeyFrame> keyframes_updates_;
+        std::map<int, KeyFrame> keyframes_threshold_reference_;
+        std::atomic<int> last_updated_keyframe_id_;
+
         std::mutex keyframes_mutex_;
+        std::mutex keyframes_updates_mutex_;
 
         noiseModel::Diagonal::shared_ptr odom_noise_;
         noiseModel::Diagonal::shared_ptr loop_closure_noise_;

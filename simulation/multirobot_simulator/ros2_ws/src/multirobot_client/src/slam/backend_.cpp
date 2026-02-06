@@ -583,7 +583,7 @@ namespace multirobot_slam
 
         state_.timestamp = odom.timestamp;
         state_.position = pose_estimate_.translation();
-        state_.attitude = Eigen::Quaterniond(pose_estimate_.rotation().matrix());
+        state_.orientation = Eigen::Quaterniond(pose_estimate_.rotation().matrix());
         state_.velocity = velocity_estimate_;
         state_.accelerometer_bias = bias_estimate_.accelerometer();
         state_.gyroscope_bias = bias_estimate_.gyroscope();

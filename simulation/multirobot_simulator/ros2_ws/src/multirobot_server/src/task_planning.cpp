@@ -53,6 +53,22 @@ namespace multirobot_slam
     }
 
 
+    void TaskPlanning::update_robot_state(State state, std::string robot)
+    {
+        robot_state_[robot] = state;
+    }
+
+    void TaskPlanning::update_robot_keyframes(std::map<int, KeyFrame>& keyframes, std::string robot)
+    {
+        std::map<int, KeyFrame>& robot_keyframes = robot_keyframes_[robot];
+
+        for(auto& [id, kf] : keyframes)
+        {
+            robot_keyframes[id] = kf;
+        }
+    }
+
+
 
     std::map<std::string, Task> TaskPlanning::plan_tasks(std::map<std::string, Pose> robot_poses, std::vector<Frontier> frontiers)
     {
@@ -150,9 +166,9 @@ namespace multirobot_slam
 
                 double frontier_switch_dist = 0.0;
 
-                if (last_planned_tasks_.count(robots[i]))
+                if (robot_last_planned_tasks_.count(robots[i]))
                 {
-                    const Task& old_task = last_planned_tasks_[robots[i]];
+                    const Task& old_task = robot_last_planned_tasks_[robots[i]];
                     frontier_switch_dist = (frontier_centroid - Eigen::Vector2d(old_task.pose.position.x(), old_task.pose.position.y())).norm();
                 }
 
@@ -236,7 +252,7 @@ namespace multirobot_slam
             tasks[robot] = robot_task;
         }
 
-        last_planned_tasks_ = tasks;
+        robot_last_planned_tasks_ = tasks;
         return tasks;
     }
 

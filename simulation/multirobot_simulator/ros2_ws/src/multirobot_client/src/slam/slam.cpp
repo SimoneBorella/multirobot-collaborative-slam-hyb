@@ -3,12 +3,12 @@
 namespace multirobot_slam
 {
     SLAM::SLAM()
-        : slam_running_(false)
+        : slam_running_(false), keyframe_update_counter_(0)
     {
     }
 
     SLAM::SLAM(SLAMParams &params)
-        : params_(params), slam_running_(false)
+        : params_(params), slam_running_(false), keyframe_update_counter_(0)
     {
     }
 
@@ -43,6 +43,8 @@ namespace multirobot_slam
     void SLAM::init(SLAMParams &params)
     {
         params_ = params;
+
+        keyframe_update_threshold_ = int(params_.backend_params.backend_rate / params_.backend_params.backend_keyframe_update_rate);
 
         backend_.init(params_.backend_params);
         if(params_.loop_closure_detector_params.run_loop_closure_detection)
@@ -141,12 +143,17 @@ namespace multirobot_slam
     }
 
 
-    std::vector<KeyFrame> SLAM::get_keyframes()
+    std::map<int, KeyFrame> SLAM::get_keyframes()
     {
         return backend_.get_keyframes();
     }
 
-    std::vector<Map> SLAM::get_updated_submaps()
+    std::map<int, KeyFrame> SLAM::get_keyframes_updates()
+    {
+        return backend_.get_keyframes_updates();
+    }
+
+    std::map<int, Map> SLAM::get_updated_submaps()
     {
         return submap_manager_.get_updated_submaps();
     }
@@ -154,13 +161,26 @@ namespace multirobot_slam
 
     void SLAM::backend_loop()
     {
+        // auto start = std::chrono::high_resolution_clock::now();
+
         backend_.optimize();
+
+        if (++keyframe_update_counter_ > keyframe_update_threshold_)
+        {
+            backend_.update_keyframes(4);
+            keyframe_update_counter_ = 0;
+        }
+
+
+        // auto end = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double> duration = end - start;
+
+        // std::cout << "Backend time: " << (duration.count() * 1000) << " ms (" << 1/duration.count() << " Hz)" << std::endl;
     }
 
     void SLAM::loop_closure_detection_loop()
     {
-        backend_.update_keyframe_poses();
-        std::vector<KeyFrame> keyframes = backend_.get_keyframes();
+        std::map<int, KeyFrame> keyframes = backend_.get_keyframes();
 
         if(keyframes.empty())
             return;
@@ -179,8 +199,7 @@ namespace multirobot_slam
 
     void SLAM::submap_mapping_loop()
     {
-        backend_.update_keyframe_poses();
-        std::vector<KeyFrame> keyframes = backend_.get_keyframes();
+        std::map<int, KeyFrame> keyframes = backend_.get_keyframes();
         submap_manager_.update_keyframes(keyframes);
         submap_manager_.submaps_mapping();
     }

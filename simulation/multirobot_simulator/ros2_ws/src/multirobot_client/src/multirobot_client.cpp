@@ -28,10 +28,12 @@
 #include "visualization_msgs/msg/marker.hpp"
 #include "interfaces/msg/map_log_odds_update.hpp"
 #include "interfaces/msg/frontier_map_update.hpp"
+#include "interfaces/msg/keyframe_update.hpp"
+#include "interfaces/msg/keyframe_update_array.hpp"
+#include "interfaces/msg/state.hpp"
 
 #include "slam.h"
 #include "mapping.h"
-
 
 using namespace multirobot_slam;
 
@@ -62,9 +64,6 @@ public:
             std::chrono::milliseconds(static_cast<int>(1000 / timer_rate)),
             std::bind(&MultirobotClient::timer_callback, this));
 
-
-            
-
         tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
 
         auto timer_interface =
@@ -76,21 +75,15 @@ public:
 
         tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
-
-
-
-
         tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
 
         std::string imu_topic = "/" + ns_ + "/imu";
         imu_subscription_ = this->create_subscription<sensor_msgs::msg::Imu>(
-            imu_topic, 10, std::bind(&MultirobotClient::imu_callback, this, std::placeholders::_1)
-        );
+            imu_topic, 10, std::bind(&MultirobotClient::imu_callback, this, std::placeholders::_1));
 
         std::string odom_topic = "/" + ns_ + "/odom";
         odom_subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
-            odom_topic, 10, std::bind(&MultirobotClient::odom_callback, this, std::placeholders::_1)
-        );
+            odom_topic, 10, std::bind(&MultirobotClient::odom_callback, this, std::placeholders::_1));
 
         std::string keypoints_topic = "/" + ns_ + "/keypoints";
         keypoints_subscription_.subscribe(this, keypoints_topic, rclcpp::SensorDataQoS().get_rmw_qos_profile());
@@ -102,7 +95,7 @@ public:
             10,
             this->get_node_logging_interface(),
             this->get_node_clock_interface());
-        
+
         keypoints_filter_->registerCallback(std::bind(&MultirobotClient::keypoints_callback, this, std::placeholders::_1));
 
         std::string scan_topic = "/" + ns_ + "/scan";
@@ -115,18 +108,18 @@ public:
             10,
             this->get_node_logging_interface(),
             this->get_node_clock_interface());
-        
+
         scan_filter_->registerCallback(std::bind(&MultirobotClient::scan_callback, this, std::placeholders::_1));
-
-
-
 
         rclcpp::QoS map_qos_profile(10);
         map_qos_profile.reliable();
         map_qos_profile.transient_local();
-        
+
         // std::string map_topic = "/" + ns_ + "/map";
         // map_publisher_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(map_topic, map_qos_profile);
+        
+        std::string state_topic = "/" + ns_ + "/state";
+        state_publisher_ = this->create_publisher<interfaces::msg::State>(state_topic, 10);
 
         std::string map_log_odds_update_topic = "/" + ns_ + "/map_log_odds_update";
         map_log_odds_update_publisher_ = this->create_publisher<interfaces::msg::MapLogOddsUpdate>(map_log_odds_update_topic, map_qos_profile);
@@ -136,6 +129,9 @@ public:
 
         std::string keyframes_marker_topic = "/" + ns_ + "/keyframes_marker";
         keyframes_marker_publisher_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(keyframes_marker_topic, 10);
+
+        std::string keyframes_update_topic = "/" + ns_ + "/keyframes_update";
+        keyframes_update_publisher_ = this->create_publisher<interfaces::msg::KeyframeUpdateArray>(keyframes_update_topic, 10);
 
         std::string submap_topic = "/" + ns_ + "/submap";
         submap_publisher_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(submap_topic, map_qos_profile);
@@ -165,25 +161,23 @@ public:
     }
 
 private:
-
-    void publish_map_to_odom(const State& state)
+    void publish_map_to_odom(const State &state)
     {
         if (std::isnan(state.position.x()) || std::isnan(state.position.y()) || std::isnan(state.position.z()) ||
-            std::isnan(state.attitude.x()) || std::isnan(state.attitude.y()) || std::isnan(state.attitude.z()) || std::isnan(state.attitude.w()) ||
-            (state.attitude.x() == 0 && state.attitude.y() == 0 && state.attitude.z() == 0 && state.attitude.w() == 0))
+            std::isnan(state.orientation.x()) || std::isnan(state.orientation.y()) || std::isnan(state.orientation.z()) || std::isnan(state.orientation.w()) ||
+            (state.orientation.x() == 0 && state.orientation.y() == 0 && state.orientation.z() == 0 && state.orientation.w() == 0))
         {
             return;
         }
 
         const rclcpp::Time state_time(
-            static_cast<int64_t>(state.timestamp * 1e9)
-        );
-        
+            static_cast<int64_t>(state.timestamp * 1e9));
+
         if (!tf_buffer_->canTransform(
-            odom_frame_,
-            base_frame_,
-            state_time,
-            rclcpp::Duration::from_seconds(0.5)))
+                odom_frame_,
+                base_frame_,
+                state_time,
+                rclcpp::Duration::from_seconds(0.5)))
         {
             // std::cout << "[Client " << ns_ << "] Could not read transform " << odom_frame_ << " -> " << base_frame_ << " at timestep " << state.timestamp << std::endl;
             return;
@@ -195,16 +189,15 @@ private:
                 base_frame_,
                 state_time);
 
-
         tf2::Transform T_odom_base;
         tf2::fromMsg(odom_to_base.transform, T_odom_base);
 
         tf2::Transform T_map_base;
         tf2::Quaternion q_map_base(
-            state.attitude.x(),
-            state.attitude.y(),
-            state.attitude.z(),
-            state.attitude.w());
+            state.orientation.x(),
+            state.orientation.y(),
+            state.orientation.z(),
+            state.orientation.w());
         tf2::Vector3 t_map_base(
             state.position.x(),
             state.position.y(),
@@ -224,7 +217,33 @@ private:
         tf_broadcaster_->sendTransform(map_to_odom);
     }
 
-    void publish_map_log_odds_update(const MapLogOddsUpdate& map_log_odds_update)
+    void publish_state(const State& state)
+    {
+        interfaces::msg::State state_msg;
+        state_msg.header.stamp = this->now();
+        
+        // Position
+        state_msg.pose.position.x = state.position.x();
+        state_msg.pose.position.y = state.position.y();
+        state_msg.pose.position.z = state.position.z();
+        // Orientation
+        state_msg.pose.orientation.x = state.orientation.x();
+        state_msg.pose.orientation.y = state.orientation.y();
+        state_msg.pose.orientation.z = state.orientation.z();
+        state_msg.pose.orientation.w = state.orientation.w();
+        // Covariance (6x6 row-major)
+        for (int row = 0; row < 6; ++row)
+        {
+            for (int col = 0; col < 6; ++col)
+            {
+                state_msg.covariance[row * 6 + col] = state.covariance(row, col);
+            }
+        }
+
+        state_publisher_->publish(state_msg);
+    }
+
+    void publish_map_log_odds_update(const MapLogOddsUpdate &map_log_odds_update)
     {
         interfaces::msg::MapLogOddsUpdate map_log_odds_update_msg;
 
@@ -266,8 +285,7 @@ private:
     //     map_publisher_->publish(map_msg);
     // }
 
-
-    void publish_frontier_map_update(const FrontierMapUpdate& frontier_map_update)
+    void publish_frontier_map_update(const FrontierMapUpdate &frontier_map_update)
     {
         interfaces::msg::FrontierMapUpdate frontier_map_update_msg;
 
@@ -290,13 +308,11 @@ private:
         frontier_map_update_publisher_->publish(frontier_map_update_msg);
     }
 
-
-
-    void publish_keyframes(const std::vector<KeyFrame>& keyframes)
+    void publish_keyframes(const std::map<int, KeyFrame> &keyframes)
     {
         visualization_msgs::msg::MarkerArray marker_array;
 
-        for (const auto& kf : keyframes)
+        for (auto &[id, kf] : keyframes)
         {
             visualization_msgs::msg::Marker marker;
             marker.header.frame_id = ns_ + "/" + map_frame_;
@@ -339,12 +355,45 @@ private:
         keyframes_marker_publisher_->publish(marker_array);
     }
 
+    void publish_keyframes_updates(const std::map<int, KeyFrame> &keyframes_updates)
+    {
+        interfaces::msg::KeyframeUpdateArray keyframes_update_array_msg;
+        keyframes_update_array_msg.header.stamp = this->now();
 
-    void publish_submaps(const std::vector<Map>& updated_submaps)
+        for (const auto &[id, kf] : keyframes_updates)
+        {
+            interfaces::msg::KeyframeUpdate keyframe_update_msg;
+            keyframe_update_msg.keyframe_id = id;
+
+            // Position
+            keyframe_update_msg.pose.position.x = kf.pose.position.x();
+            keyframe_update_msg.pose.position.y = kf.pose.position.y();
+            keyframe_update_msg.pose.position.z = kf.pose.position.z();
+            // Orientation
+            keyframe_update_msg.pose.orientation.x = kf.pose.orientation.x();
+            keyframe_update_msg.pose.orientation.y = kf.pose.orientation.y();
+            keyframe_update_msg.pose.orientation.z = kf.pose.orientation.z();
+            keyframe_update_msg.pose.orientation.w = kf.pose.orientation.w();
+            // Covariance (6x6 row-major)
+            for (int row = 0; row < 6; ++row)
+            {
+                for (int col = 0; col < 6; ++col)
+                {
+                    keyframe_update_msg.covariance[row * 6 + col] = kf.covariance(row, col);
+                }
+            }
+            keyframes_update_array_msg.updates.push_back(keyframe_update_msg);
+        }
+
+        keyframes_update_publisher_->publish(keyframes_update_array_msg);
+    }
+
+
+    void publish_submaps(const std::map<int, Map> &updated_submaps)
     {
         rclcpp::Time current_time = this->now();
 
-        for (const auto& map : updated_submaps)
+        for (const auto &[keyframe_id, map] : updated_submaps)
         {
             // Publish tf
             geometry_msgs::msg::TransformStamped tf_msg;
@@ -372,8 +421,8 @@ private:
             grid_msg.info.width = map.width;
             grid_msg.info.height = map.height;
 
-            grid_msg.info.origin.position.x = -(map.width*map.resolution)/2;
-            grid_msg.info.origin.position.y = -(map.height*map.resolution)/2;
+            grid_msg.info.origin.position.x = -(map.width * map.resolution) / 2;
+            grid_msg.info.origin.position.y = -(map.height * map.resolution) / 2;
             grid_msg.info.origin.position.z = 0.0;
             grid_msg.info.origin.orientation.x = 0.0;
             grid_msg.info.origin.orientation.y = 0.0;
@@ -385,8 +434,6 @@ private:
             submap_publisher_->publish(grid_msg);
         }
     }
-
-
 
     void imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg)
     {
@@ -465,7 +512,7 @@ private:
     void keypoints_callback(const interfaces::msg::KeyPointArray::ConstSharedPtr msg)
     {
         KeypointsData keypoints_data;
-        
+
         keypoints_data.timestamp = msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
 
         const rclcpp::Time keypoints_time = msg->header.stamp;
@@ -474,8 +521,7 @@ private:
             tf_buffer_->lookupTransform(
                 base_frame_,
                 msg->header.frame_id,
-                keypoints_time
-            );
+                keypoints_time);
 
         tf2::Transform T_base_to_keypoints;
         tf2::fromMsg(base_to_keypoints.transform, T_base_to_keypoints);
@@ -487,15 +533,12 @@ private:
             keypoints_data.keypoints.emplace_back(Eigen::Vector3d(p_base.x(), p_base.y(), p_base.z()), p.descriptor);
         }
 
-
-
         geometry_msgs::msg::TransformStamped map_to_base =
             tf_buffer_->lookupTransform(
                 map_frame_,
                 base_frame_,
-                keypoints_time
-            );
-        
+                keypoints_time);
+
         keypoints_data.pose.position = Eigen::Vector3d(
             map_to_base.transform.translation.x,
             map_to_base.transform.translation.y,
@@ -510,7 +553,6 @@ private:
         slam_.add_keypoints(keypoints_data);
     }
 
-    
     void scan_callback(const sensor_msgs::msg::LaserScan::ConstSharedPtr msg)
     {
         PosedScan posed_scan;
@@ -522,8 +564,7 @@ private:
             tf_buffer_->lookupTransform(
                 map_frame_,
                 msg->header.frame_id,
-                scan_time
-            );
+                scan_time);
 
         posed_scan.position = Eigen::Vector3d(
             map_to_scan.transform.translation.x,
@@ -550,11 +591,12 @@ private:
         mapping_.add_posed_scan(posed_scan);
     }
 
-
     void timer_callback()
     {
         const State &state = slam_.get_state();
-        publish_map_to_odom(state);        
+        publish_map_to_odom(state);
+        publish_state(state);
+
 
         const std::optional<MapLogOddsUpdate> &map_log_odds_update = mapping_.get_map_log_odds_update();
 
@@ -575,17 +617,19 @@ private:
         //     publish_frontier_map(frontier_map.value());
         // }
 
-
         const std::optional<FrontierMapUpdate> &frontier_map_update = mapping_.get_frontier_map_update();
         if (frontier_map_update.has_value())
         {
             publish_frontier_map_update(frontier_map_update.value());
         }
 
-        std::vector<KeyFrame> keyframes = slam_.get_keyframes();
+        std::map<int, KeyFrame> keyframes = slam_.get_keyframes();
         publish_keyframes(keyframes);
 
-        std::vector<Map> updated_submaps = slam_.get_updated_submaps();
+        std::map<int, KeyFrame> keyframes_updates = slam_.get_keyframes_updates();
+        publish_keyframes_updates(keyframes_updates);
+
+        std::map<int, Map> updated_submaps = slam_.get_updated_submaps();
         publish_submaps(updated_submaps);
     }
 
@@ -603,12 +647,12 @@ private:
 
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
-    
+
     std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
     bool imu_first_;
     Eigen::Quaterniond imu_initial_orientation_;
-    
+
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_subscription_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscription_;
     message_filters::Subscriber<interfaces::msg::KeyPointArray> keypoints_subscription_;
@@ -617,11 +661,13 @@ private:
     std::shared_ptr<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>> scan_filter_;
 
     // rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr map_publisher_;
+    
+    rclcpp::Publisher<interfaces::msg::State>::SharedPtr state_publisher_;
     rclcpp::Publisher<interfaces::msg::MapLogOddsUpdate>::SharedPtr map_log_odds_update_publisher_;
     rclcpp::Publisher<interfaces::msg::FrontierMapUpdate>::SharedPtr frontier_map_update_publisher_;
+    rclcpp::Publisher<interfaces::msg::KeyframeUpdateArray>::SharedPtr keyframes_update_publisher_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr keyframes_marker_publisher_;
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr submap_publisher_;
-    
 };
 
 int main(int argc, char *argv[])

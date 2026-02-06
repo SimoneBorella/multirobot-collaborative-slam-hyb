@@ -3,12 +3,12 @@
 namespace multirobot_slam
 {
     Backend::Backend()
-        : t_(0), odom_first_(true), imu_timestamp_prev_(0.0), max_timestamped_pose_queue_duration_(5.0), landmark_id_(0), state_updated_(false)
+        : t_(0), odom_first_(true), imu_timestamp_prev_(0.0), max_timestamped_pose_queue_duration_(5.0), landmark_id_(0), state_updated_(false), last_updated_keyframe_id_(-1)
     {
     }
 
     Backend::Backend(BackendParams &params)
-        : params_(params), t_(0), odom_first_(true), imu_timestamp_prev_(0.0), max_timestamped_pose_queue_duration_(5.0), landmark_id_(0), state_updated_(false)
+        : params_(params), t_(0), odom_first_(true), imu_timestamp_prev_(0.0), max_timestamped_pose_queue_duration_(5.0), landmark_id_(0), state_updated_(false), last_updated_keyframe_id_(-1)
     {
     }
 
@@ -24,6 +24,9 @@ namespace multirobot_slam
             if (backend_config["backend_rate"])
                 p.backend_rate = backend_config["backend_rate"].as<double>();
 
+            if (backend_config["backend_keyframe_update_rate"])
+                p.backend_keyframe_update_rate = backend_config["backend_keyframe_update_rate"].as<double>();
+                
             if (backend_config["init_position"])
             {
                 std::vector<double> vec = backend_config["init_position"].as<std::vector<double>>();
@@ -113,6 +116,18 @@ namespace multirobot_slam
 
             if (backend_config["keyframe_angular_distance"])
                 p.keyframe_angular_distance = backend_config["keyframe_angular_distance"].as<double>();
+
+
+            if (backend_config["keyframe_update_position_threshold"])
+                p.keyframe_update_position_threshold = backend_config["keyframe_update_position_threshold"].as<double>();
+
+            if (backend_config["keyframe_update_orientation_threshold"])
+                p.keyframe_update_orientation_threshold = backend_config["keyframe_update_orientation_threshold"].as<double>();
+
+            if (backend_config["keyframe_update_cov_trace_threshold"])
+                p.keyframe_update_cov_trace_threshold = backend_config["keyframe_update_cov_trace_threshold"].as<double>();
+
+        
         }
         catch (const std::exception &e)
         {
@@ -217,29 +232,136 @@ namespace multirobot_slam
         }
     }
 
-    void Backend::update_keyframe_poses()
+
+    void Backend::update_keyframes(int update_window)
     {
         Values estimates;
+        std::vector<std::pair<Symbol, int>> keys;
+
+        // Get keyframes symbols
+        {
+            std::lock_guard<std::mutex> lock(keyframes_mutex_);
+
+            if (keyframes_.empty())
+                return;
+
+            int start_kf_id = 0;
+
+            if (update_window > 0)
+            {
+                int newest_kf_id = keyframes_.rbegin()->first;
+                int window_start_id = newest_kf_id - update_window + 1;
+                start_kf_id = std::max(window_start_id, last_updated_keyframe_id_ + 1);
+            }
+
+            for (auto it = keyframes_.lower_bound(start_kf_id); it != keyframes_.end(); ++it)
+            {
+                const KeyFrame& kf = it->second;
+                keys.emplace_back(
+                    Symbol(kf.pose_symbol.first, kf.pose_symbol.second),
+                    kf.keyframe_id
+                );
+            }
+        }
+
+        // Read isam estimates and marginals
+        std::vector<Pose3> poses(keys.size());
+        std::vector<Eigen::Matrix<double,6,6>> covariances(keys.size());
+
         {
             std::lock_guard<std::mutex> lock(isam_mutex_);
             estimates = isam_.calculateEstimate();
+
+            for (size_t i = 0; i < keys.size(); ++i)
+            {
+                poses[i] = estimates.at<Pose3>(keys[i].first);
+                covariances[i] = isam_.marginalCovariance(keys[i].first);
+            }
         }
 
-        std::lock_guard<std::mutex> lock(keyframes_mutex_);
+        int max_updated_kf_id = last_updated_keyframe_id_;
 
-        for(KeyFrame& kf : keyframes_)
+        // Update keyframes
+        std::map<int, KeyFrame> keyframes_updates;
         {
-            Pose3 kf_pose = isam_.calculateEstimate<Pose3>(Symbol(kf.pose_symbol.first, kf.pose_symbol.second));
+            std::lock_guard<std::mutex> lock(keyframes_mutex_);
 
-            kf.pose.position = kf_pose.translation();
-            kf.pose.orientation = Eigen::Quaterniond(kf_pose.rotation().matrix());
+            for (size_t i = 0; i < keys.size(); ++i)
+            {
+                // New estimates
+                Eigen::Vector3d new_position = poses[i].translation();
+                Eigen::Quaterniond new_orientation = Eigen::Quaterniond(poses[i].rotation().matrix());
+                Eigen::Matrix<double, 6, 6> new_covariance = covariances[i];
+
+                // Update keyframes
+                KeyFrame& kf = keyframes_[keys[i].second];
+                kf.pose.position = new_position;
+                kf.pose.orientation = new_orientation;
+                kf.covariance = new_covariance;
+                                
+                // If keyframe added for the first time then append to keyframes updates
+                if (kf.keyframe_id > last_updated_keyframe_id_)
+                {   
+                    keyframes_updates[kf.keyframe_id] = kf;
+                    keyframes_threshold_reference_[kf.keyframe_id] = kf;
+
+                    max_updated_kf_id = std::max(max_updated_kf_id, kf.keyframe_id);
+                }
+                else
+                {
+                    // Check if thresholds exceed with respect to the reference
+                    KeyFrame& ref_kf = keyframes_threshold_reference_[kf.keyframe_id];
+                    double delta_position = (ref_kf.pose.position - new_position).norm();
+                    double delta_yaw = Eigen::AngleAxisd(ref_kf.pose.orientation.inverse() * new_orientation).angle();
+                    double delta_cov_trace = std::abs(ref_kf.covariance.trace() - new_covariance.trace());
+    
+                    bool threshold_exceeded =
+                        delta_position > params_.keyframe_update_position_threshold ||
+                        delta_yaw > params_.keyframe_update_orientation_threshold ||
+                        delta_cov_trace > params_.keyframe_update_cov_trace_threshold;
+
+                    if (threshold_exceeded)
+                    {
+                        ref_kf = kf;
+                        keyframes_updates[kf.keyframe_id] = kf;
+                    }
+                }
+            }
+            // Update last updated keyframe id
+            last_updated_keyframe_id_ = max_updated_kf_id;
+        }
+
+
+        {
+            std::lock_guard<std::mutex> lock(keyframes_updates_mutex_);
+
+            for (auto& [new_id, new_kf] : keyframes_updates)
+            {
+               keyframes_updates_[new_id] = new_kf;
+            }
         }
     }
 
-    std::vector<KeyFrame> Backend::get_keyframes()
+
+
+
+
+
+    std::map<int, KeyFrame> Backend::get_keyframes()
     {
+        std::lock_guard<std::mutex> lock(keyframes_mutex_);
         return keyframes_;
     }
+
+
+    std::map<int, KeyFrame> Backend::get_keyframes_updates()
+    {
+        std::lock_guard<std::mutex> lock(keyframes_updates_mutex_);
+        std::map<int, KeyFrame> keyframes_updates = std::move(keyframes_updates_);
+        keyframes_updates_.clear();
+        return keyframes_updates;
+    }
+
 
     std::vector<std::pair<Symbol, double>> Backend::nearest_neighbor_data_association(const Point3 &observed_point, const Values &estimates)
     {
@@ -530,29 +652,32 @@ namespace multirobot_slam
                     keyframe.pose = Pose(pose_position, pose_orientation);
                     keyframe.keypoints = transformed_keypoints;
                     keyframe.is_active = true;
-                    keyframes_.push_back(keyframe);
+                    keyframes_[keyframe.keyframe_id] = keyframe;
                 }
-    
-                KeyFrame &last_keyframe = keyframes_.back();
-                double delta_keyframe_distance = (pose_position - last_keyframe.pose.position).norm();
-                double delta_keyframe_angular_distance = pose_orientation.angularDistance(last_keyframe.pose.orientation);
-
-                if (delta_keyframe_distance > params_.keyframe_distance || delta_keyframe_angular_distance > params_.keyframe_angular_distance)
+                else
                 {
-                    KeyFrame keyframe;
-                    keyframe.timestamp = ts;
-                    keyframe.keyframe_id = last_keyframe.keyframe_id + 1;
-                    keyframe.pose_symbol = std::make_pair(pose_symbol.chr(), pose_symbol.index());
-                    keyframe.pose = Pose(pose_position, pose_orientation);
-                    keyframe.keypoints = transformed_keypoints;
-                    keyframe.is_active = true;
-                    keyframes_.push_back(keyframe);
+                    KeyFrame& last_keyframe = keyframes_.rbegin()->second;
+                    double delta_keyframe_distance = (pose_position - last_keyframe.pose.position).norm();
+                    double delta_keyframe_angular_distance = pose_orientation.angularDistance(last_keyframe.pose.orientation);
     
-                    last_keyframe.is_active = false;
-
-                    // Debug
-                    // save_keyframes(keyframes_, "./output/localization/keyframes.csv");
+                    if (delta_keyframe_distance > params_.keyframe_distance || delta_keyframe_angular_distance > params_.keyframe_angular_distance)
+                    {
+                        KeyFrame keyframe;
+                        keyframe.timestamp = ts;
+                        keyframe.keyframe_id = last_keyframe.keyframe_id + 1;
+                        keyframe.pose_symbol = std::make_pair(pose_symbol.chr(), pose_symbol.index());
+                        keyframe.pose = Pose(pose_position, pose_orientation);
+                        keyframe.keypoints = transformed_keypoints;
+                        keyframe.is_active = true;
+                        keyframes_[keyframe.keyframe_id] = keyframe;
+        
+                        last_keyframe.is_active = false;
+    
+                        // Debug
+                        // save_keyframes(keyframes_, "./output/localization/keyframes.csv");
+                    }
                 }
+    
             }
         }
 
@@ -571,16 +696,19 @@ namespace multirobot_slam
         }
 
         // Update ISAM2
+        Eigen::Matrix<double,6,6> covariance;
         {
             std::lock_guard<std::mutex> lock(isam_mutex_);
             isam_.update(new_factors, new_estimates);
             pose_estimate_ = isam_.calculateEstimate<Pose3>(x_curr);
+            covariance = isam_.marginalCovariance(x_curr);
         }
 
         // Update current state estimate
         state_.timestamp = odom.timestamp;
         state_.position = pose_estimate_.translation();
-        state_.attitude = Eigen::Quaterniond(pose_estimate_.rotation().matrix());
+        state_.orientation = Eigen::Quaterniond(pose_estimate_.rotation().matrix());
+        state_.covariance = covariance;
 
         state_updated_ = true;
 
@@ -640,7 +768,7 @@ namespace multirobot_slam
         }
     }
 
-    void Backend::save_keyframes(std::vector<KeyFrame> keyframes, const std::string &filename)
+    void Backend::save_keyframes(std::map<int, KeyFrame> keyframes, const std::string &filename)
     {
         std::ofstream file(filename);
 
@@ -648,7 +776,7 @@ namespace multirobot_slam
 
         file << std::fixed << std::setprecision(3);
 
-        for(KeyFrame& kf : keyframes)
+        for (auto& [id, kf] : keyframes)
         {
             file << kf.timestamp << ","
                 << kf.keyframe_id << ","

@@ -82,6 +82,7 @@ namespace multirobot_slam
         int keyframe_id;
         std::pair<char, int> pose_symbol;
         Pose pose;
+        Eigen::Matrix<double, 6, 6> covariance;
         std::vector<Keypoint, Eigen::aligned_allocator<Keypoint>> keypoints;
         bool is_active = false;
     };
@@ -100,8 +101,10 @@ namespace multirobot_slam
 
         double timestamp;
         Eigen::Vector3d position;
+        Eigen::Quaterniond orientation;
+        Eigen::Matrix<double, 6, 6> covariance;
+
         Eigen::Vector3d velocity;
-        Eigen::Quaterniond attitude;
         Eigen::Vector3d accelerometer_bias;
         Eigen::Vector3d gyroscope_bias;
     };

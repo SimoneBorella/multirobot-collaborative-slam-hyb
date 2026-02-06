@@ -19,6 +19,9 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/PointArray.msg"
   "msg/MapLogOddsUpdate.msg"
   "msg/FrontierMapUpdate.msg"
+  "msg/KeyframeUpdate.msg"
+  "msg/KeyframeUpdateArray.msg"
+  "msg/State.msg"
   DEPENDENCIES std_msgs geometry_msgs
 )
 
