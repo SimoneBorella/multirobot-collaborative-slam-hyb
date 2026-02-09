@@ -11,13 +11,13 @@ multirobot_simulator:
     # map: "vineyard_map_0"
     # map: "openstreetmap_map_2"
 
-    # robots: ["robot_0"]
-    robots: ["robot_0", "robot_1"]
+    robots: ["robot_0"]
+    # robots: ["robot_0", "robot_1"]
     # robots: ["robot_0", "robot_1", "robot_2"]
     # robots: ["robot_0", "robot_1", "robot_2", "robot_3"]
     # robots: ["robot_0", "robot_1", "robot_2", "robot_3", "robot_4"]
     # robots: ["robot_0", "robot_1", "robot_2", "robot_3", "robot_4", "robot_5"]
 
-    landmarks_density: 4.0
+    landmarks_density: 0.2
   
     use_sim_time: false

@@ -47,5 +47,26 @@ struct BlindSpot
     double x, y, r;
 };
 
+struct Obstacle
+{
+    double x;
+    double y;
+    double theta;
+
+    virtual ~Obstacle() = default;
+};
+
+struct ObstacleCircle : public Obstacle
+{
+    double r;
+};
+
+struct ObstacleRectangle : public Obstacle
+{
+    double w;
+    double h;
+};
+
+
 
 #endif // TYPES_H

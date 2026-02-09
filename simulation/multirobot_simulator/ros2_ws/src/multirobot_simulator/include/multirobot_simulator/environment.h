@@ -21,7 +21,7 @@ class Environment
 public:
     Environment() = default;
 
-    Environment(rclcpp::Node::SharedPtr node, const std::string& map_yaml_path, const std::string& map_pgm_path, const std::string& blind_spots_yaml_path, double landmarks_density)
+    Environment(rclcpp::Node::SharedPtr node, const std::string& map_yaml_path, const std::string& map_pgm_path, const std::string& blind_spots_yaml_path, const std::string& obstacles_yaml_path, double landmarks_density)
     {
         this->node = node;
         map_subscription_count = 0;
@@ -58,6 +58,53 @@ public:
         {
             RCLCPP_ERROR_STREAM(node->get_logger(), "Failed to load blind spots YAML: " << e.what());
         }
+
+
+        std::vector<std::unique_ptr<Obstacle>> obstacles;
+
+        try
+        {
+            YAML::Node obstacles_config = YAML::LoadFile(obstacles_yaml_path);
+            if (obstacles_config["obstacles"])
+            {
+                for (const auto& obstacle_node : obstacles_config["obstacles"])
+                {
+                    std::string type = obstacle_node["type"].as<std::string>();
+
+                    if (type == "circle")
+                    {
+                        auto obs = std::make_unique<ObstacleCircle>();
+                        obs->x = obstacle_node["x"].as<double>();
+                        obs->y = obstacle_node["y"].as<double>();
+                        if (obstacle_node["theta"])
+                            obs->theta = obstacle_node["theta"].as<double>();
+                        obs->r = obstacle_node["r"].as<double>();
+                        obstacles.push_back(std::move(obs));
+                    }
+                    else if (type == "rectangle")
+                    {
+                        auto obs = std::make_unique<ObstacleRectangle>();
+                        obs->x = obstacle_node["x"].as<double>();
+                        obs->y = obstacle_node["y"].as<double>();
+                        obs->theta = obstacle_node["theta"].as<double>();
+                        obs->w = obstacle_node["w"].as<double>();
+                        obs->h = obstacle_node["h"].as<double>();
+                        obstacles.push_back(std::move(obs));
+                    }
+                    else
+                    {
+                        std::cerr << "Unknown obstacle type: " << type << std::endl;
+                    }
+                }
+            }
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr << "Failed to load obstacles YAML: " << e.what() << std::endl;
+        }
+
+        generateObstacles(obstacles);
+        RCLCPP_INFO_STREAM(node->get_logger(), "Obstacles generated.");
 
         generateLandmarks(landmarks_density, blind_spots);
         RCLCPP_INFO_STREAM(node->get_logger(), "Landmarks generated.");
@@ -108,57 +155,246 @@ public:
         file.close();
     }
 
-    void generateLandmarks(double landmarks_density, std::vector<BlindSpot> blind_spots)
+    bool worldToGrid(double x, double y, int& gx, int& gy)
     {
-        double width_dim = width * resolution;
+        gx = static_cast<int>(std::round((x - origin[0]) / resolution));
+        gy = static_cast<int>(std::round((y - origin[1]) / resolution));
+
+        return gx >= 0 && gx < static_cast<int>(width) &&
+            gy >= 0 && gy < static_cast<int>(height);
+    }
+
+
+    void generateObstacles(const std::vector<std::unique_ptr<Obstacle>>& obstacles)
+    {
+        if (!occupancy_map)
+            return;
+
+        for (const auto& obs_ptr : obstacles)
+        {
+            // Cricle obstacle
+            if (auto* c = dynamic_cast<ObstacleCircle*>(obs_ptr.get()))
+            {
+                int cx, cy;
+                if (!worldToGrid(c->x, c->y, cx, cy))
+                    continue;
+
+                int r_cells = static_cast<int>(std::ceil(c->r / resolution));
+
+                for (int dy = -r_cells; dy <= r_cells; ++dy)
+                {
+                    for (int dx = -r_cells; dx <= r_cells; ++dx)
+                    {
+                        int gx = cx + dx;
+                        int gy = cy + dy;
+
+                        if (gx < 0 || gx >= static_cast<int>(width) ||
+                            gy < 0 || gy >= static_cast<int>(height))
+                            continue;
+
+                        double wx = origin[0] + gx * resolution;
+                        double wy = origin[1] + gy * resolution;
+
+                        double dist_sq =
+                            (wx - c->x) * (wx - c->x) +
+                            (wy - c->y) * (wy - c->y);
+
+                        if (dist_sq <= c->r * c->r)
+                            (*occupancy_map)[gy][gx] = 100;
+                    }
+                }
+            }
+
+
+            // Rectangle obstacle
+            else if (auto* r = dynamic_cast<ObstacleRectangle*>(obs_ptr.get()))
+            {
+                double half_w = r->w * 0.5;
+                double half_h = r->h * 0.5;
+
+                double c = std::cos(r->theta);
+                double s = std::sin(r->theta);
+
+                // Bounding box in world
+                double radius = std::hypot(half_w, half_h);
+
+                int cx, cy;
+                if (!worldToGrid(r->x, r->y, cx, cy))
+                    continue;
+
+                int range = static_cast<int>(std::ceil(radius / resolution));
+
+                for (int dy = -range; dy <= range; ++dy)
+                {
+                    for (int dx = -range; dx <= range; ++dx)
+                    {
+                        int gx = cx + dx;
+                        int gy = cy + dy;
+
+                        if (gx < 0 || gx >= static_cast<int>(width) ||
+                            gy < 0 || gy >= static_cast<int>(height))
+                            continue;
+
+                        double wx = origin[0] + gx * resolution;
+                        double wy = origin[1] + gy * resolution;
+
+                        // Transform world → obstacle frame
+                        double lx =  c * (wx - r->x) + s * (wy - r->y);
+                        double ly = -s * (wx - r->x) + c * (wy - r->y);
+
+                        if (std::abs(lx) <= half_w && std::abs(ly) <= half_h)
+                            (*occupancy_map)[gy][gx] = 100;
+                    }
+                }
+            }
+        }
+    }
+
+    std::vector<std::vector<int>> computeObstacleDistanceGrid()
+    {
+        const int INF = 1e9;
+        std::vector<std::vector<int>> dist(height, std::vector<int>(width, INF));
+
+        std::queue<std::pair<int,int>> q;
+
+        for (int y = 0; y < (int)height; ++y)
+        {
+            for (int x = 0; x < (int)width; ++x)
+            {
+                if ((*occupancy_map)[y][x] > 0)   // obstacle
+                {
+                    dist[y][x] = 0;
+                    q.emplace(x, y);
+                }
+            }
+        }
+
+        const int dx[8] = {1,-1,0,0,1,1,-1,-1};
+        const int dy[8] = {0,0,1,-1,1,-1,1,-1};
+
+        while (!q.empty())
+        {
+            auto [x, y] = q.front();
+            q.pop();
+
+            for (int k = 0; k < 8; ++k)
+            {
+                int nx = x + dx[k];
+                int ny = y + dy[k];
+
+                if (nx < 0 || ny < 0 || nx >= (int)width || ny >= (int)height)
+                    continue;
+
+                if (dist[ny][nx] > dist[y][x] + 1)
+                {
+                    dist[ny][nx] = dist[y][x] + 1;
+                    q.emplace(nx, ny);
+                }
+            }
+        }
+
+        return dist;
+    }
+
+
+    
+
+
+
+    void generateLandmarks(double landmarks_density,
+                       const std::vector<BlindSpot>& blind_spots)
+    {
+        double width_dim  = width  * resolution;
         double height_dim = height * resolution;
 
-        size_t n_landmarks = round((width_dim * height_dim) * landmarks_density);
+        const size_t n_landmarks =
+            std::round((width_dim * height_dim) * landmarks_density);
+
+        if (n_landmarks == 0 || !occupancy_map)
+            return;
+
+        // distance transform
+        auto dist_grid = computeObstacleDistanceGrid();
+
+        const double r_min = 0.05;   // m
+        const double r_max = 0.30;   // m
+
+        const int r_min_cells = std::ceil(r_min / resolution);
+        const int r_max_cells = std::ceil(r_max / resolution);
+
+        // collect candidate cells 
+        std::vector<std::pair<int,int>> candidates;
+        candidates.reserve(width * height / 10);
+
+        for (int y = 0; y < (int)height; ++y)
+        {
+            for (int x = 0; x < (int)width; ++x)
+            {
+                if ((*occupancy_map)[y][x] != 0)
+                    continue;
+
+                int d = dist_grid[y][x];
+                if (d >= r_min_cells && d <= r_max_cells)
+                    candidates.emplace_back(x, y);
+            }
+        }
+
+        if (candidates.empty())
+        {
+            RCLCPP_WARN_STREAM(node->get_logger(),
+                "No valid cells near obstacles for landmark generation");
+            return;
+        }
 
         std::random_device rd;
         std::mt19937 gen(rd());
-        std::uniform_real_distribution<> dis_x(origin[0], origin[0] + width_dim);
-        std::uniform_real_distribution<> dis_y(origin[1], origin[1] + height_dim);
+        std::uniform_int_distribution<size_t> cell_dist(0, candidates.size() - 1);
+        std::uniform_real_distribution<> jitter(0.0, resolution);
         std::uniform_real_distribution<> val_z(0.0, 2.5);
         std::uniform_int_distribution<uint8_t> descriptor_dist(0, 255);
 
-        for (size_t i = 0; i < n_landmarks; ++i) {
-            double x = dis_x(gen);
-            double y = dis_y(gen);
+        landmarks.reserve(landmarks.size() + n_landmarks);
+
+        // generate landmarks
+        for (size_t i = 0; i < n_landmarks; ++i)
+        {
+            auto [cx, cy] = candidates[cell_dist(gen)];
+
+            double x = origin[0] + cx * resolution + jitter(gen);
+            double y = origin[1] + cy * resolution + jitter(gen);
             double z = val_z(gen);
 
-            bool blind_spot_hit = false;
-            for(auto& blind_spot : blind_spots)
+            // blind spots check
+            bool blind_hit = false;
+            for (const auto& b : blind_spots)
             {
-                double blind_spot_dist_sq = (x - blind_spot.x)*(x - blind_spot.x) + (y - blind_spot.y)*(y - blind_spot.y);
-                if(blind_spot_dist_sq < blind_spot.r*blind_spot.r)
+                double d2 = (x - b.x)*(x - b.x) + (y - b.y)*(y - b.y);
+                if (d2 < b.r * b.r)
                 {
-                    blind_spot_hit = true;
+                    blind_hit = true;
                     break;
                 }
             }
 
-            if(blind_spot_hit)
-                continue;
-
-            size_t x_grid = std::clamp<size_t>(round((x - origin[0]) / resolution), 0, width - 1);
-            size_t y_grid = std::clamp<size_t>(round((y - origin[1]) / resolution), 0, height - 1);
-
-            if ((*occupancy_map)[y_grid][x_grid] == 0)
+            if (blind_hit)
             {
-                KeyPoint landmark;
-                landmark.point.x = x;
-                landmark.point.y = y;
-                landmark.point.z = z;
-
-                // Generate random descriptor (32 bytes)
-                for (int b = 0; b < 32; ++b)
-                    landmark.descriptor[b] = descriptor_dist(gen);
-
-                landmarks.push_back(landmark);
+                --i;
+                continue;
             }
+
+            KeyPoint kp;
+            kp.point.x = x;
+            kp.point.y = y;
+            kp.point.z = z;
+
+            for (int k = 0; k < 32; ++k)
+                kp.descriptor[k] = descriptor_dist(gen);
+
+            landmarks.push_back(kp);
         }
     }
+
+
 
     void publishMapOccupancyGridIfNewSubscriber()
     {
@@ -181,7 +417,7 @@ public:
     void publishMapOccupancyGrid()
     {
         nav_msgs::msg::OccupancyGrid map_msg;
-        map_msg.header.frame_id = "all";
+        map_msg.header.frame_id = "world";
         map_msg.header.stamp = node->get_clock()->now();
         map_msg.info.resolution = resolution;
         map_msg.info.width = width;
@@ -215,10 +451,10 @@ public:
     {
         visualization_msgs::msg::Marker marker = visualization_msgs::msg::Marker();
 
-        marker.header.frame_id = "all";
+        marker.header.frame_id = "world";
         marker.header.stamp = node->get_clock()->now();
 
-        marker.ns = "all";
+        marker.ns = "world";
         marker.id = 0;
         marker.type = visualization_msgs::msg::Marker::POINTS;
         marker.action = visualization_msgs::msg::Marker::ADD;

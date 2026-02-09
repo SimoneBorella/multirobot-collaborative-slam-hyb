@@ -67,18 +67,6 @@ Visualization Manager:
           Value: true
         robot_0/odom:
           Value: true
-        robot_1/base_footprint:
-          Value: false
-        robot_1/base_link:
-          Value: true
-        robot_1/camera_link:
-          Value: false
-        robot_1/lidar_link:
-          Value: false
-        robot_1/map:
-          Value: true
-        robot_1/odom:
-          Value: true
         world:
           Value: true
       Marker Scale: 3
@@ -96,15 +84,6 @@ Visualization Manager:
                 robot_0/camera_link:
                   {}
                 robot_0/lidar_link:
-                  {}
-          robot_1/map:
-            robot_1/odom:
-              robot_1/base_link:
-                robot_1/base_footprint:
-                  {}
-                robot_1/camera_link:
-                  {}
-                robot_1/lidar_link:
                   {}
       Update Interval: 0
       Value: true
@@ -312,6 +291,7 @@ Visualization Manager:
           Enabled: true
           Name: Keyframes
           Namespaces:
+            keyframe_covariance: true
             keyframes: true
           Topic:
             Depth: 5
@@ -495,7 +475,7 @@ Visualization Manager:
           Enabled: true
           Name: Keyframes
           Namespaces:
-            keyframes: true
+            {}
           Topic:
             Depth: 5
             Durability Policy: Volatile
@@ -876,10 +856,10 @@ Visualization Manager:
       Enabled: false
       Name: robot_3
     - Class: rviz_default_plugins/Marker
-      Enabled: false
+      Enabled: true
       Name: Landmarks
       Namespaces:
-        {}
+        world: true
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -887,7 +867,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /landmarks/plot
-      Value: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48

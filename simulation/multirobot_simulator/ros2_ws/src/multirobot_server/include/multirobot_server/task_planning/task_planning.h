@@ -82,9 +82,10 @@ namespace multirobot_slam
         void update_robot_state(State state, std::string robot);
         void update_robot_keyframes(std::map<int, KeyFrame>& keyframes, std::string robot);
 
+        Pose compose_global_pose(const Pose& initial, const Pose& local);
+        bool task_reached(const Pose& current, const Task& target);
         std::map<std::string, Task> plan_tasks(std::map<std::string, Pose> robot_poses, std::vector<Frontier> frontiers);
     private:
-
         TaskPlanningParams params_;
         std::map<std::string, Pose> robot_initial_poses_;
         std::map<std::string, Task> robot_last_planned_tasks_;
@@ -92,6 +93,7 @@ namespace multirobot_slam
         std::map<std::string, State> robot_state_;
         std::map<std::string, std::map<int, KeyFrame>> robot_keyframes_;
 
+        std::map<std::string, Task> active_uncertainty_tasks_;
     };
 }
 

@@ -194,6 +194,8 @@ namespace multirobot_slam
             LoopClosureConstraint loop_closure_constraint = loop_closure_opt.value();
             backend_.add_loop_closure(loop_closure_constraint);
             loop_closure_detector_.notify_loop_closure_updated();
+
+            std::cout << "Loop closure detected!" << std::endl;
         }
     }
 

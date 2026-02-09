@@ -72,6 +72,72 @@ namespace multirobot_slam
         }
     }
 
+    Pose TaskPlanning::compose_global_pose(const Pose& initial, const Pose& local)
+    {
+        Pose out;
+
+        double yaw0 =
+            Eigen::AngleAxisd(initial.orientation).angle() *
+            Eigen::AngleAxisd(initial.orientation).axis().z();
+
+        double yaw_l =
+            Eigen::AngleAxisd(local.orientation).angle() *
+            Eigen::AngleAxisd(local.orientation).axis().z();
+
+        Eigen::Rotation2Dd R(yaw0);
+
+        Eigen::Vector2d p0(
+            initial.position.x(),
+            initial.position.y());
+
+        Eigen::Vector2d pl(
+            local.position.x(),
+            local.position.y());
+
+        Eigen::Vector2d pg = p0 + R * pl;
+
+        out.position.x() = pg.x();
+        out.position.y() = pg.y();
+        out.position.z() = initial.position.z();
+
+        double yaw_g = yaw0 + yaw_l;
+
+        out.orientation =
+            Eigen::AngleAxisd(yaw_g, Eigen::Vector3d::UnitZ());
+
+        return out;
+    }
+
+
+
+    bool TaskPlanning::task_reached(const Pose& current, const Task& target)
+    {
+        Eigen::Vector2d p_cur(
+            current.position.x(),
+            current.position.y());
+
+        Eigen::Vector2d p_tgt(
+            target.pose.position.x(),
+            target.pose.position.y());
+
+        double pos_err = (p_cur - p_tgt).norm();
+
+        double yaw_cur =
+            Eigen::AngleAxisd(current.orientation).angle() *
+            Eigen::AngleAxisd(current.orientation).axis().z();
+
+        double yaw_tgt =
+            Eigen::AngleAxisd(target.pose.orientation).angle() *
+            Eigen::AngleAxisd(target.pose.orientation).axis().z();
+
+        double yaw_err = std::abs(std::atan2(
+            std::sin(yaw_cur - yaw_tgt),
+            std::cos(yaw_cur - yaw_tgt)));
+
+        return (pos_err < 0.1) &&(yaw_err < 0.0785);
+    }
+
+
 
 
     std::map<std::string, Task> TaskPlanning::plan_tasks(std::map<std::string, Pose> robot_poses, std::vector<Frontier> frontiers)
@@ -88,19 +154,6 @@ namespace multirobot_slam
         {
             if (!robot_initial_poses_.count(robot))
                 robot_initial_poses_[robot] = pose;
-        }
-
-        // If no frontiers return to initial pose
-        if (n_frontiers == 0)
-        {
-            for (const auto& [robot, _] : robot_poses)
-            {
-                Task t;
-                t.pose = robot_initial_poses_[robot];
-                t.oriented = true;
-                tasks[robot] = t;
-            }
-            return tasks;
         }
 
         // Compute max distance and size
@@ -125,21 +178,61 @@ namespace multirobot_slam
         std::vector<std::string> explorative_robots;
         std::vector<std::string> uncertainty_reduction_robots;
 
+
         for (const auto& [robot, pose] : robot_poses)
         {
             if(params_.uncertainty_reduction_mode)
             {
-                Eigen::Matrix<double, 6, 6> cov = robot_state_[robot].covariance;
-                
-                double det = cov.determinant();
-                det = std::max(det, 1e-12);
+                if (active_uncertainty_tasks_.count(robot))
+                {
+                    const Task& active_task = active_uncertainty_tasks_[robot];
+
+                    if (!task_reached(pose, active_task))
+                    {
+                        tasks[robot] = active_task;
+                        continue;
+                    }
+                    else
+                    {
+                        active_uncertainty_tasks_.erase(robot);
+                    }
+                    
+                }
+
+                const Eigen::Matrix<double,6,6>& cov = robot_state_[robot].covariance;
+
+                Eigen::Matrix3d Sigma_pose;
+
+                Sigma_pose(0,0) = cov(0,0); // x
+                Sigma_pose(0,1) = cov(0,1); 
+                Sigma_pose(0,2) = cov(0,5); 
+
+                Sigma_pose(1,0) = cov(1,0);
+                Sigma_pose(1,1) = cov(1,1); // y
+                Sigma_pose(1,2) = cov(1,5);
+
+                Sigma_pose(2,0) = cov(5,0);
+                Sigma_pose(2,1) = cov(5,1);
+                Sigma_pose(2,2) = cov(5,5); // yaw
+
+                double det = std::max(Sigma_pose.determinant(), 1e-12);
                 double log_det = std::log(det);
-                
-                std::cout << "Log det:" << log_det << std::endl;
+
+                // std::cout << "Log det:" << log_det << std::endl;
 
                 if(log_det > params_.d_optimality_threshold)
                 {
                     uncertainty_reduction_robots.push_back(robot);
+                }
+                else if (n_frontiers == 0)
+                {
+                    for (const auto& [robot, _] : robot_poses)
+                    {
+                        Task t;
+                        t.pose = robot_initial_poses_[robot];
+                        t.oriented = true;
+                        tasks[robot] = t;
+                    }
                 }
                 else
                 {
@@ -148,6 +241,17 @@ namespace multirobot_slam
             }
             else
             {
+                if (n_frontiers == 0)
+                {
+                    for (const auto& [robot, _] : robot_poses)
+                    {
+                        Task t;
+                        t.pose = robot_initial_poses_[robot];
+                        t.oriented = true;
+                        tasks[robot] = t;
+                    }
+                }
+
                 explorative_robots.push_back(robot);
             }
         }
@@ -186,9 +290,7 @@ namespace multirobot_slam
                 double dist = delta.norm();
                 double bearing = std::atan2(delta.y(), delta.x());
 
-                double orientation_dist = std::abs(std::atan2(
-                    std::sin(bearing - robot_yaw),
-                    std::cos(bearing - robot_yaw)));
+                double orientation_dist = std::abs(std::atan2(std::sin(bearing - robot_yaw), std::cos(bearing - robot_yaw)));
 
                 double switch_dist = 0.0;
                 if (robot_last_planned_tasks_.count(robot))
@@ -283,10 +385,7 @@ namespace multirobot_slam
             const Pose& pose = robot_poses[robot];
             const Eigen::Matrix<double,6,6>& Sigma_i = robot_state_[robot].covariance;
 
-            Eigen::Vector2d robot_pos(
-                pose.position.x(),
-                pose.position.y()
-            );
+            Eigen::Vector2d robot_pos(pose.position.x(), pose.position.y());
 
             // Discrete graph for robot
             DiscreteFactorGraph graph;
@@ -300,45 +399,57 @@ namespace multirobot_slam
 
             std::vector<double> values(keyframes.size(), std::numeric_limits<double>::infinity());
 
-            // Iteration in keyframe order
-            Eigen::Vector2d prev_kf_pos = robot_pos;
-            double accumulated_cost_to_go = 0.0;
-
             size_t idx = 0;
             for (const auto& [kf_id, kf] : keyframes)
             {
-                Eigen::Vector2d kf_pos(
-                    kf.pose.position.x(),
-                    kf.pose.position.y()
-                );
+                const Pose& init_pose = robot_initial_poses_[robot];
+                Pose kf_global_pose = compose_global_pose(init_pose, kf.pose);
+
 
                 // Mahalanobis distance
                 Eigen::Matrix<double,6,6> Sigma_j = kf.covariance;
-                Eigen::Matrix<double,6,6> Sigma_ij = Sigma_i + Sigma_j;
+                
+                Eigen::Matrix3d Sigma_i_pose, Sigma_j_pose;
 
-                Eigen::Matrix<double,6,1> dx;
-                dx.setZero();
-                dx(0) = pose.position.x() - kf.pose.position.x();
-                dx(1) = pose.position.y() - kf.pose.position.y();
+                Sigma_i_pose <<
+                    Sigma_i(0,0), Sigma_i(0,1), Sigma_i(0,5),
+                    Sigma_i(1,0), Sigma_i(1,1), Sigma_i(1,5),
+                    Sigma_i(5,0), Sigma_i(5,1), Sigma_i(5,5);
+
+                Sigma_j_pose <<
+                    Sigma_j(0,0), Sigma_j(0,1), Sigma_j(0,5),
+                    Sigma_j(1,0), Sigma_j(1,1), Sigma_j(1,5),
+                    Sigma_j(5,0), Sigma_j(5,1), Sigma_j(5,5);
+
+                Eigen::Matrix3d Sigma_ij = Sigma_i_pose + Sigma_j_pose;
+                Sigma_ij += 1e-6 * Eigen::Matrix3d::Identity();
+
+
+                Eigen::Vector3d dx;
+
+                double yaw_i =
+                    Eigen::AngleAxisd(pose.orientation).angle() *
+                    Eigen::AngleAxisd(pose.orientation).axis().z();
+
+                double yaw_j =
+                    Eigen::AngleAxisd(kf_global_pose.orientation).angle() *
+                    Eigen::AngleAxisd(kf_global_pose.orientation).axis().z();
+
+                dx(0) = pose.position.x() - kf_global_pose.position.x();
+                dx(1) = pose.position.y() - kf_global_pose.position.y();
+                dx(2) = std::atan2(std::sin(yaw_i - yaw_j), std::cos(yaw_i - yaw_j));
 
                 double mahalanobis = dx.transpose() * Sigma_ij.inverse() * dx;
 
-                // Chi-square gating (2 DoF approx)
-                // if (mahalanobis > params_.mahalanobis_chi2_gate)
-                // {
-                //     values[idx++] = 1e9;
-                //     continue;
-                // }
-
                 // Cost to go
-                double step_cost = (kf_pos - prev_kf_pos).norm();
-                accumulated_cost_to_go += step_cost;
-                prev_kf_pos = kf_pos;
+                Eigen::Vector2d kf_pos(kf_global_pose.position.x(), kf_global_pose.position.y());
+                double cost_to_go = (kf_pos - robot_pos).norm();
 
                 // Score
-                double score =
-                    params_.w_mahalanobis * mahalanobis +
-                    params_.w_cost_to_go * accumulated_cost_to_go;
+                double score = std::exp(
+                    - params_.w_mahalanobis * mahalanobis
+                    - params_.w_cost_to_go * cost_to_go
+                );
 
                 values[idx++] = std::max(score, 1e-6);
             }
@@ -356,20 +467,23 @@ namespace multirobot_slam
 
             const KeyFrame& best_kf = it->second;
 
+            // std::cout << best_kf.keyframe_id << " " << best_kf.pose.position.x() << " " << best_kf.pose.position.y() << std::endl;
+
             // Assign task
+            Pose best_kf_global = compose_global_pose(robot_initial_poses_[robot], best_kf.pose);
+
             Task t;
-            t.pose = best_kf.pose;
+            t.pose = best_kf_global;
             t.oriented = true;
 
             tasks[robot] = t;
+            active_uncertainty_tasks_[robot] = t;
         }
 
 
         robot_last_planned_tasks_ = tasks;
         return tasks;
     }
-
-
 }
 
 

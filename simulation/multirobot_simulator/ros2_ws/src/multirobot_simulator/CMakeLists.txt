@@ -86,6 +86,7 @@ install(DIRECTORY
   config
   maps
   robots
+  elements
   DESTINATION share/${PROJECT_NAME})
 
 ament_package()
