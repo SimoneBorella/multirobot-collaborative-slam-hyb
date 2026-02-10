@@ -306,6 +306,8 @@ public:
                 }
             }
 
+            keyframe_update.keypoints_number = kf_msg.keypoints_number;
+
             robot_keyframes_update[keyframe_update.keyframe_id] = keyframe_update;
         }
 

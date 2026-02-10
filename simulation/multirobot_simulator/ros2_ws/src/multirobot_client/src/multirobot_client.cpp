@@ -425,6 +425,7 @@ private:
                     keyframe_update_msg.covariance[row * 6 + col] = kf.covariance(row, col);
                 }
             }
+            keyframe_update_msg.keypoints_number = kf.keypoints_number;
             keyframes_update_array_msg.updates.push_back(keyframe_update_msg);
         }
 

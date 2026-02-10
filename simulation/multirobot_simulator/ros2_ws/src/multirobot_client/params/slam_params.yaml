@@ -32,20 +32,20 @@ backend:
 
 
 loop_closure_detector:
-    run_loop_closure_detection: false
+    run_loop_closure_detection: true
     loop_closure_detection_rate: 1.0
     vocabulary_path : "/dep/DBoW3/orbvoc.dbow3"
     min_bow_score: 0.35
     min_time_separation: 15.0
     max_spatial_distance: 1.0
     covisibility_consistency_threshold: 3
-    min_matches: 25
+    min_matches: 10
     ransac_iters: 200
     ransac_set_size: 20
     inlier_threshold: 0.05
-    min_inliers: 15
-    min_inliers_ratio: 0.80
-    min_geometric_score: 0.90
+    min_inliers: 5
+    min_inliers_ratio: 0.40
+    min_geometric_score: 0.80
 
 
 

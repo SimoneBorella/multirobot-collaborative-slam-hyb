@@ -590,6 +590,5 @@ namespace multirobot_slam
 
         // Set frontier map update flag
         frontier_map_updated_ = true;
-
     }   
 }

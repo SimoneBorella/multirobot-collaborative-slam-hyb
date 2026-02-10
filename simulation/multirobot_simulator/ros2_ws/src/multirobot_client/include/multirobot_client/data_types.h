@@ -84,6 +84,7 @@ namespace multirobot_slam
         Pose pose;
         Eigen::Matrix<double, 6, 6> covariance;
         std::vector<Keypoint, Eigen::aligned_allocator<Keypoint>> keypoints;
+        int keypoints_number;
         bool is_active = false;
     };
 

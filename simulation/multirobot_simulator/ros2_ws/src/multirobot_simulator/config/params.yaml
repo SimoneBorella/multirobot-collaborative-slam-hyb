@@ -18,6 +18,6 @@ multirobot_simulator:
     # robots: ["robot_0", "robot_1", "robot_2", "robot_3", "robot_4"]
     # robots: ["robot_0", "robot_1", "robot_2", "robot_3", "robot_4", "robot_5"]
 
-    landmarks_density: 0.2
+    landmarks_density: 0.15
   
     use_sim_time: false

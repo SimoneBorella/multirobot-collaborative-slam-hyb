@@ -651,6 +651,7 @@ namespace multirobot_slam
                     keyframe.pose_symbol = std::make_pair(pose_symbol.chr(), pose_symbol.index());
                     keyframe.pose = Pose(pose_position, pose_orientation);
                     keyframe.keypoints = transformed_keypoints;
+                    keyframe.keypoints_number = transformed_keypoints.size();
                     keyframe.is_active = true;
                     keyframes_[keyframe.keyframe_id] = keyframe;
                 }
@@ -668,6 +669,7 @@ namespace multirobot_slam
                         keyframe.pose_symbol = std::make_pair(pose_symbol.chr(), pose_symbol.index());
                         keyframe.pose = Pose(pose_position, pose_orientation);
                         keyframe.keypoints = transformed_keypoints;
+                        keyframe.keypoints_number = transformed_keypoints.size();
                         keyframe.is_active = true;
                         keyframes_[keyframe.keyframe_id] = keyframe;
         
