@@ -4,12 +4,12 @@
 namespace multirobot_slam
 {
     MappingMerge::MappingMerge()
-        : map_updated_(true), costmap_updated_(true), frontiers_updated_(true), mapping_merge_thread_running_(false)
+        : map_updated_(true), costmap_updated_(true), refinement_frontier_map_updated_(true), frontiers_updated_(true), refinement_frontiers_updated_(true), mapping_merge_thread_running_(false)
     {
     }
 
     MappingMerge::MappingMerge(MappingMergeParams &params)
-        : params_(params), map_updated_(true), costmap_updated_(true), frontiers_updated_(true), mapping_merge_thread_running_(false)
+        : params_(params), map_updated_(true), costmap_updated_(true), refinement_frontier_map_updated_(true), frontiers_updated_(true), refinement_frontiers_updated_(true), mapping_merge_thread_running_(false)
     {
     }
 
@@ -55,6 +55,9 @@ namespace multirobot_slam
                 p.costmap_kernel_distance = config["costmap_kernel_distance"].as<double>();
             if (config["costmap_decay_rate"])
                 p.costmap_decay_rate = config["costmap_decay_rate"].as<double>();
+
+            if (config["refinement_variance_threshold"])
+                p.refinement_variance_threshold = config["refinement_variance_threshold"].as<double>();
 
             if (config["epsilon"])
                 p.epsilon = config["epsilon"].as<double>();
@@ -108,6 +111,16 @@ namespace multirobot_slam
         frontier_map_.origin_position = map_.origin_position;
         frontier_map_.origin_orientation = map_.origin_orientation;
         frontier_map_.data.resize(map_.width * map_.height, -1);
+
+        refinement_frontier_map_.resolution = map_.resolution;
+        refinement_frontier_map_.width = map_.width;
+        refinement_frontier_map_.height = map_.height;
+        refinement_frontier_map_.origin_position = map_.origin_position;
+        refinement_frontier_map_.origin_orientation = map_.origin_orientation;
+        refinement_frontier_map_.data.resize(map_.width * map_.height, -1);
+
+        map_observation_count_.assign(map_.width * map_.height, 0);
+
     }
 
     void MappingMerge::set_initial_poses(std::map<std::string, Pose> initial_poses)
@@ -199,6 +212,8 @@ namespace multirobot_slam
 
             map_.data[gidx] =
                 log_odds_to_probability(map_log_odds_data_[gidx]);
+
+            map_observation_count_[gidx] += 1;
         }
     }
 
@@ -332,6 +347,20 @@ namespace multirobot_slam
         {
             frontier_map_updated_ = false;
             return frontier_map_;
+        }
+        else
+        {
+            return std::nullopt;
+        }
+    }
+
+
+    std::optional<Map> MappingMerge::get_refinement_frontier_map_if_updated()
+    {
+        if (refinement_frontier_map_updated_)
+        {
+            refinement_frontier_map_updated_ = false;
+            return refinement_frontier_map_;
         }
         else
         {
@@ -592,6 +621,40 @@ namespace multirobot_slam
         costmap_updated_ = true;
 
 
+
+        // Refinement frontier map generation
+
+        for (size_t i = 0; i < map_.data.size(); i++)
+        {
+            if (filtered_map_.data[i] != 0)
+            {
+                refinement_frontier_map_.data[i] = -1;
+                continue;
+            }
+
+            if (map_observation_count_[i] == 0)
+            {
+                refinement_frontier_map_.data[i] = 0;
+                continue;
+            }
+
+
+            double p = map_.data[i] / 100.0;
+            int n = map_observation_count_[i];
+
+            double variance = (p * (1.0 - p)) / static_cast<double>(n);
+
+            if (variance > params_.refinement_variance_threshold)
+                refinement_frontier_map_.data[i] = 100;
+            else
+                refinement_frontier_map_.data[i] = 0;
+        }
+
+        refinement_frontier_map_updated_ = true;
+        frontier_map_updated_ = true;
+
+
+
         // Detect frontiers
         {
             std::lock_guard<std::mutex> lock(frontier_map_mutex_);
@@ -599,8 +662,13 @@ namespace multirobot_slam
             frontiers_ = frontier_centroids_detection(frontier_clusters);
         }
 
-        frontier_map_updated_ = true;
         frontiers_updated_ = true;
+
+
+        // Detect refinement frontiers
+        // TODO: DBSCAN on refinement_frontier_map_
+        // refinement_frontiers_updated_ = true;
+
 
 
 

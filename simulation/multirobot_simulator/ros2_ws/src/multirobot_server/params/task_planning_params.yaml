@@ -11,8 +11,11 @@ information_gain_mode: true
 
 # d_opt_threshold_hard: -4.214 # Hypothesis 0.3 m std dev and 0.087 rad std dev (5 degrees std dev)
 
-d_opt_threshold_soft: -16
-d_opt_threshold_hard: -5
+# d_opt_threshold_soft: -16
+# d_opt_threshold_hard: -5
+
+d_opt_threshold_soft: 1000
+d_opt_threshold_hard: 1000
 
 min_keypoints_number: 15
 w_cost_to_go: 0.4

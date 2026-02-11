@@ -33,6 +33,8 @@ namespace multirobot_slam
         double costmap_kernel_distance;
         double costmap_decay_rate;
 
+        double refinement_variance_threshold;
+
         double epsilon;
         int min_points;
         double min_frontier_size;
@@ -48,6 +50,7 @@ namespace multirobot_slam
             double free_threshold = 0.3,
             double costmap_kernel_distance = 0.2,
             double costmap_decay_rate = 4.0,
+            double refinement_variance_threshold = 0.05,
             double epsilon = 0.5,
             int min_points = 3,
             double min_frontier_size = 0.07)
@@ -61,6 +64,7 @@ namespace multirobot_slam
               free_threshold(free_threshold),
               costmap_kernel_distance(costmap_kernel_distance),
               costmap_decay_rate(costmap_decay_rate),
+              refinement_variance_threshold(refinement_variance_threshold),
               epsilon(epsilon),
               min_points(min_points),
               min_frontier_size(min_frontier_size){}
@@ -89,6 +93,7 @@ namespace multirobot_slam
         std::optional<Map> get_costmap_if_updated();
         Map get_frontier_map();
         std::optional<Map> get_frontier_map_if_updated();
+        std::optional<Map> get_refinement_frontier_map_if_updated();
         std::vector<Frontier> get_frontiers();
         std::optional<std::vector<Frontier>> get_frontiers_if_updated();
 
@@ -111,14 +116,21 @@ namespace multirobot_slam
         Map filtered_map_;
         Map costmap_;
         Map frontier_map_;
+        Map refinement_frontier_map_;
+        std::vector<int> map_observation_count_;
         std::vector<Frontier> frontiers_;
+        std::vector<Frontier> refinement_frontiers_;
 
         bool map_updated_;
         bool costmap_updated_;
         bool frontier_map_updated_;
+        bool refinement_frontier_map_updated_;
         bool frontiers_updated_;
+        bool refinement_frontiers_updated_;
 
         std::map<std::string, std::vector<Frontier>> robot_frontiers_data_;
+
+        
 
         std::mutex map_mutex_;
         std::mutex frontier_map_mutex_;

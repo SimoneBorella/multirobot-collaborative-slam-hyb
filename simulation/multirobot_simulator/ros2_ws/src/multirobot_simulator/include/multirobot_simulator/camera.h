@@ -21,6 +21,8 @@ public:
            double max_range,
            double field_of_view,
            double noise_std_dev,
+           double miss_rate,
+           double outlier_rate,
            std::string& topic);
 
 private:
@@ -42,13 +44,20 @@ private:
     double max_range;
     double field_of_view;
     double noise_std_dev;
+    double miss_rate;
+    double outlier_rate;
     double max_range_sq_;
 
     std::default_random_engine generator;
     std::normal_distribution<double> noise_dist_;
 
+
     std::uniform_int_distribution<int> byte_dist_{0, 32 - 1};
     std::uniform_int_distribution<int> bit_dist_{0, 7};
+
+    std::bernoulli_distribution miss_dist_;
+    std::bernoulli_distribution outlier_dist_;
+
 
     std::vector<KeyPoint> keypoints_;
 

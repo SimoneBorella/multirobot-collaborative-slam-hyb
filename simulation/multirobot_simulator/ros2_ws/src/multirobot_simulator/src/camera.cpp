@@ -11,13 +11,19 @@ Camera::Camera(
     double max_range,
     double field_of_view,
     double noise_std_dev,
+    double miss_rate,
+    double outlier_rate,
     std::string& topic)
     : Sensor(node, robot_name, robot_position, environment, name, position, frequency),
       max_range(max_range),
       field_of_view(field_of_view),
       noise_std_dev(noise_std_dev),
+      miss_rate(miss_rate),
+      outlier_rate(outlier_rate),
       max_range_sq_(max_range * max_range),
-      noise_dist_(0.0, noise_std_dev)
+      noise_dist_(0.0, noise_std_dev),
+      miss_dist_(miss_rate),
+      outlier_dist_(outlier_rate)
 {
     keypoints_publisher =
         node->create_publisher<interfaces::msg::KeyPointArray>(topic, 10);
@@ -104,6 +110,9 @@ std::vector<KeyPoint>& Camera::getKeyPoints()
 
     for (const auto& lm : global_landmarks)
     {
+        if (miss_dist_(generator))
+            continue;
+
         double dx = lm.point.x - cam_x;
         double dy = lm.point.y - cam_y;
 
@@ -129,11 +138,39 @@ std::vector<KeyPoint>& Camera::getKeyPoints()
         double ry = -dx * sin_t + dy * cos_t;
         
         // Keypoint generated with noise
-        KeyPoint kp(rx + noise_dist_(generator), ry + noise_dist_(generator), lm.point.z + noise_dist_(generator));
+        bool is_outlier = outlier_dist_(generator);
+
+        double nx, ny, nz;
+
+        if (is_outlier)
+        {
+            nx = 4.0 * noise_dist_(generator);
+            ny = 4.0 * noise_dist_(generator);
+            nz = 4.0 * noise_dist_(generator);
+        }
+        else
+        {
+            nx = noise_dist_(generator);
+            ny = noise_dist_(generator);
+            nz = noise_dist_(generator);
+        }
+
+        KeyPoint kp(rx + nx, ry + ny, lm.point.z + nz);
+
 
         // Descriptor generated with noise
         kp.descriptor = lm.descriptor;
-        addDescriptorNoise(kp.descriptor);
+
+        if (is_outlier)
+        {
+            // Completely random
+            for (auto& byte : kp.descriptor)
+                byte = static_cast<uint8_t>(byte_dist_(generator));
+        }
+        else
+        {
+            addDescriptorNoise(kp.descriptor);
+        }
 
         keypoints_.push_back(kp);
     }

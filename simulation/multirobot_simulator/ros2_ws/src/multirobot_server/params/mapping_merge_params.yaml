@@ -13,9 +13,9 @@ free_threshold: 0.30
 costmap_kernel_distance: 0.2
 costmap_decay_rate: 4.0
 
+refinement_variance_threshold: 0.001
+
 epsilon: 0.5
 min_points: 3
 min_frontier_size: 0.03 # Small Indoor
 # min_frontier_size: 0.04 # Large Indoor
-
-map_refinement_mode: true

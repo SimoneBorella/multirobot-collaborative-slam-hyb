@@ -15,4 +15,5 @@ noise_std_dev: 0.03
 obstacle_threshold: 0.70
 free_threshold: 0.30
 
-frontier_del_obstacles_radius: 0.18
+# frontier_del_obstacles_radius: 0.18
+frontier_del_obstacles_radius: 0.12

@@ -162,7 +162,7 @@ Visualization Manager:
       Class: rviz_default_plugins/Map
       Color Scheme: costmap
       Draw Behind: false
-      Enabled: true
+      Enabled: false
       Name: Frontier Map
       Topic:
         Depth: 5
@@ -178,7 +178,30 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /frontier_map_updates
       Use Timestamp: false
-      Value: true
+      Value: false
+    - Alpha: 0.699999988079071
+      Binary representation: false
+      Binary threshold: 100
+      Class: rviz_default_plugins/Map
+      Color Scheme: costmap
+      Draw Behind: false
+      Enabled: false
+      Name: Refinement Frontier Map
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /refinement_frontier_map
+      Update Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /refinement_frontier_map_updates
+      Use Timestamp: false
+      Value: false
     - Class: rviz_default_plugins/Marker
       Enabled: true
       Name: Frontiers

@@ -129,6 +129,8 @@ void Robot::loadRobotConfiguration(const std::string& robot_yaml_path) {
             double camera_field_of_view = sensor_node["field_of_view"].as<double>() * (M_PI / 180);
             int camera_frequency = sensor_node["frequency"].as<int>();
             double noise_std_dev = sensor_node["noise_std_dev"].as<double>();
+            double miss_rate = sensor_node["miss_rate"].as<double>();
+            double outlier_rate = sensor_node["outlier_rate"].as<double>();
             
             std::string topic;
             if (sensor_node["topic"]) {
@@ -139,7 +141,7 @@ void Robot::loadRobotConfiguration(const std::string& robot_yaml_path) {
 
             std::shared_ptr<Camera> camera = std::make_shared<Camera>(
                 node, name, position, environment, camera_name, camera_position,
-                camera_frequency, camera_max_range, camera_field_of_view, noise_std_dev, topic
+                camera_frequency, camera_max_range, camera_field_of_view, noise_std_dev, miss_rate, outlier_rate, topic
             );
             
             sensors.push_back(camera);
