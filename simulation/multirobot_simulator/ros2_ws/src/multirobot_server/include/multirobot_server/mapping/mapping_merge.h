@@ -8,6 +8,7 @@
 #include <atomic>
 #include <queue>
 #include <deque>
+#include <unordered_set>
 #include <mutex>
 #include <optional>
 #include <Eigen/Core>
@@ -34,10 +35,12 @@ namespace multirobot_slam
         double costmap_decay_rate;
 
         double refinement_variance_threshold;
+        int refinement_observations_threshold;
 
         double epsilon;
         int min_points;
         double min_frontier_size;
+        double min_refinement_frontier_size;
 
         MappingMergeParams(
             double mapping_rate = 2.0,
@@ -51,9 +54,11 @@ namespace multirobot_slam
             double costmap_kernel_distance = 0.2,
             double costmap_decay_rate = 4.0,
             double refinement_variance_threshold = 0.05,
+            int refinement_observations_threshold = 8,
             double epsilon = 0.5,
             int min_points = 3,
-            double min_frontier_size = 0.07)
+            double min_frontier_size = 0.07,
+            double min_refinement_frontier_size = 0.015)
             : mapping_rate(mapping_rate),
               map_resolution(map_resolution),
               map_width(map_width),
@@ -65,9 +70,11 @@ namespace multirobot_slam
               costmap_kernel_distance(costmap_kernel_distance),
               costmap_decay_rate(costmap_decay_rate),
               refinement_variance_threshold(refinement_variance_threshold),
+              refinement_observations_threshold(refinement_observations_threshold),
               epsilon(epsilon),
               min_points(min_points),
-              min_frontier_size(min_frontier_size){}
+              min_frontier_size(min_frontier_size),
+              min_refinement_frontier_size(min_refinement_frontier_size) {}
     };
 
 
@@ -96,14 +103,16 @@ namespace multirobot_slam
         std::optional<Map> get_refinement_frontier_map_if_updated();
         std::vector<Frontier> get_frontiers();
         std::optional<std::vector<Frontier>> get_frontiers_if_updated();
+        std::vector<Frontier> get_refinement_frontiers();
+        std::optional<std::vector<Frontier>> get_refinement_frontiers_if_updated();
 
     private:
         double probability_to_log_odds(int8_t prob);
         int8_t log_odds_to_probability(double log_odds);
 
-        std::vector<std::pair<int, int>> get_neighbors(int x, int y);
-        std::map<int, std::vector<std::pair<int, int>>> dbscan_frontier_clusters_detection();
-        std::vector<Frontier> frontier_centroids_detection(const std::map<int, std::vector<std::pair<int, int>>>& frontier_clusters);
+        std::vector<std::pair<int, int>> get_neighbors(Map& frontier_map, int x, int y, double epsilon);
+        std::map<int, std::vector<std::pair<int, int>>> dbscan_frontier_clusters_detection(Map& frontier_map, double min_points, double epsilon);
+        std::vector<Frontier> frontier_centroids_detection(const std::map<int, std::vector<std::pair<int, int>>>& frontier_clusters, double min_frontier_size);
 
         void mapping_merge();
 
@@ -116,6 +125,7 @@ namespace multirobot_slam
         Map filtered_map_;
         Map costmap_;
         Map frontier_map_;
+        std::unordered_set<int> global_visited_indices_;
         Map refinement_frontier_map_;
         std::vector<int> map_observation_count_;
         std::vector<Frontier> frontiers_;

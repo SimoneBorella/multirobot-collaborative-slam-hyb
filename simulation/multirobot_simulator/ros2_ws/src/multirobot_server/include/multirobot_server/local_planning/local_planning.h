@@ -425,6 +425,9 @@ namespace multirobot_slam
 
         std::map<std::string, VelCmd> vel_cmds_;
 
+        std::mutex global_paths_mutex_;
+        std::mutex costmap_mutex_;
+
         std::atomic<bool> local_planning_thread_running_;
         std::thread local_planning_thread_;
     };

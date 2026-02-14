@@ -138,6 +138,8 @@ public:
         std::string frontiers_marker_topic = "/frontiers_marker";
         frontiers_marker_publisher_ = this->create_publisher<visualization_msgs::msg::Marker>(frontiers_marker_topic, 10);
 
+        std::string refinement_frontiers_marker_topic = "/refinement_frontiers_marker";
+        refinement_frontiers_marker_publisher_ = this->create_publisher<visualization_msgs::msg::Marker>(refinement_frontiers_marker_topic, 10);
 
         rclcpp::on_shutdown([this]() {
             publishZeroCmd();
@@ -552,6 +554,37 @@ public:
         frontiers_marker_publisher_->publish(frontiers_marker);
     }
 
+    void publish_refinement_frontiers_marker(const std::vector<Frontier>& frontiers)
+    {
+        visualization_msgs::msg::Marker frontiers_marker = visualization_msgs::msg::Marker();
+        frontiers_marker.header.stamp = this->now();
+        frontiers_marker.header.frame_id = world_frame_;
+    
+        frontiers_marker.ns = "refinement_frontiers";
+        frontiers_marker.id = 0;
+        frontiers_marker.type = visualization_msgs::msg::Marker::POINTS;
+        frontiers_marker.action = visualization_msgs::msg::Marker::ADD;
+
+        frontiers_marker.color.r = 1.0f;
+        frontiers_marker.color.g = 0.5f;
+        frontiers_marker.color.b = 0.0f;
+        frontiers_marker.color.a = 1.0f;
+        
+        frontiers_marker.scale.x = 0.2;
+        frontiers_marker.scale.y = 0.2;
+
+        for (const auto& frontier : frontiers) {
+            geometry_msgs::msg::Point p;
+            p.x = frontier.centroid.x();
+            p.y = frontier.centroid.y();
+            p.z = 0.0;
+            frontiers_marker.points.push_back(p);
+        }
+
+        refinement_frontiers_marker_publisher_->publish(frontiers_marker);
+    }
+    
+
 
 
     void publish_global_paths(std::map<std::string, Path> global_paths)
@@ -636,14 +669,18 @@ public:
             publish_refinement_frontier_map(refinement_frontier_map.value());
         }
 
-        const std::optional<std::vector<Frontier>> &frontiers = mapping_merge_.get_frontiers_if_updated();
+        const std::optional<std::vector<Frontier>> &frontiers_opt = mapping_merge_.get_frontiers_if_updated();
+        const std::optional<std::vector<Frontier>> &refinement_frontiers_opt = mapping_merge_.get_refinement_frontiers_if_updated();
 
-        if (frontiers.has_value())
+        const std::vector<Frontier> frontiers = frontiers_opt.has_value() ? frontiers_opt.value() : std::vector<Frontier>{};
+        const std::vector<Frontier> refinement_frontiers = refinement_frontiers_opt.has_value() ? refinement_frontiers_opt.value() : std::vector<Frontier>{};
+        
+        publish_frontiers_marker(frontiers);
+        publish_refinement_frontiers_marker(refinement_frontiers);
+
+        if (frontiers_opt.has_value())
         {
-            publish_frontiers_marker(frontiers.value());
-
             std::map<std::string, Pose> robot_poses;
-
             for (const auto& robot : robots_)
             {
                 Pose pose;
@@ -652,11 +689,11 @@ public:
                     robot_poses[robot] = pose;
                 }
             }
-
-            std::map<std::string, Task> tasks = task_planning_.plan_tasks(robot_poses, frontiers.value());
-
+    
+            std::map<std::string, Task> tasks = task_planning_.plan_tasks(robot_poses, frontiers, refinement_frontiers);
+    
             std::map<std::string, Path> global_paths = global_planning_.plan_global_path(robot_poses, tasks);
-
+    
             publish_global_paths(global_paths);
 
             local_planning_.update_global_paths(global_paths);
@@ -694,6 +731,7 @@ public:
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr frontier_map_publisher_;
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr refinement_frontier_map_publisher_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr frontiers_marker_publisher_;
+    rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr refinement_frontiers_marker_publisher_;
     std::map<std::string, rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr> robot_global_path_publishers_;
     std::map<std::string, rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr> robot_cmd_vel_publishers_;
 };

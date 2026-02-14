@@ -18,7 +18,7 @@ backend:
     sigma_accelerometer_noise_density: 6e-1    # PSD_accelerometer (m/s^2)/sqrt(s)
     sigma_gyroscope_noise_density: 6e-1        # PSD_gyroscope (rad/s)/sqrt(s)
 
-    sigma_keypoint_noise: 0.05
+    sigma_keypoint_noise: 0.03
 
     data_association_distance: 0.2
 
@@ -35,17 +35,17 @@ loop_closure_detector:
     run_loop_closure_detection: true
     loop_closure_detection_rate: 1.0
     vocabulary_path : "/dep/DBoW3/orbvoc.dbow3"
-    min_bow_score: 0.35
+    min_bow_score: 0.25
     min_time_separation: 15.0
-    max_spatial_distance: 1.0
+    max_spatial_distance: 1.5
     covisibility_consistency_threshold: 3
     min_matches: 10
-    ransac_iters: 200
-    ransac_set_size: 20
+    ransac_iters: 100
+    ransac_set_size: 10
     inlier_threshold: 0.05
     min_inliers: 5
     min_inliers_ratio: 0.40
-    min_geometric_score: 0.80
+    min_geometric_score: 0.85
 
 
 

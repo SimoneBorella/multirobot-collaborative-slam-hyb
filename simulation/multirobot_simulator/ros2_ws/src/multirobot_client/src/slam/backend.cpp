@@ -275,7 +275,13 @@ namespace multirobot_slam
             for (size_t i = 0; i < keys.size(); ++i)
             {
                 poses[i] = estimates.at<Pose3>(keys[i].first);
-                covariances[i] = isam_.marginalCovariance(keys[i].first);
+                try {
+                    covariances[i] = isam_.marginalCovariance(keys[i].first);
+                } catch (const std::exception& e) {
+                    // Indeterminant linear system exception, high fallback covariance
+                    covariances[i] = Eigen::Matrix<double, 6, 6>::Identity() * 1.0; 
+                    std::cout << "Backend failed in retrieving marginal covariances." << std::endl;
+                }
             }
         }
 
@@ -550,7 +556,11 @@ namespace multirobot_slam
         {
             std::lock_guard<std::mutex> lock(isam_mutex_);
             estimates = isam_.calculateEstimate();
-            // marginals = Marginals(isam_.getFactorsUnsafe(), estimates);
+            // try {
+            //     marginals = Marginals(isam_.getFactorsUnsafe(), estimates);
+            // } catch (...) {
+                
+            // }
         }
 
         
@@ -600,7 +610,7 @@ namespace multirobot_slam
 
                 // Data association
                 auto associations = probabilistic_data_association(keypoint_observation, estimates, marginals);
-                // auto associations = nearest_neighbor_data_association(keypoint_observation, estimates);
+                
                 if (!associations.empty())
                 {
                     for (const auto &[associated_l, probability] : associations)
@@ -699,11 +709,23 @@ namespace multirobot_slam
 
         // Update ISAM2
         Eigen::Matrix<double,6,6> covariance;
-        {
+        try {
             std::lock_guard<std::mutex> lock(isam_mutex_);
             isam_.update(new_factors, new_estimates);
             pose_estimate_ = isam_.calculateEstimate<Pose3>(x_curr);
-            covariance = isam_.marginalCovariance(x_curr);
+
+            try {
+                covariance = isam_.marginalCovariance(x_curr);
+            } catch (...) {
+                // Fallback covariance as odometry covariance
+                covariance = odom_noise_->covariance(); 
+                std::cout << "Backend failed in retrieving marginal covariances." << std::endl;
+            }
+        } catch (const std::exception& e) {
+            std::cout << "Backend ISAM2 update failed: " << e.what() << std::endl;
+            
+            // Fallback to avoid system to lock, same as previous values
+            covariance = state_.covariance;
         }
 
         // Update current state estimate

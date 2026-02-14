@@ -139,11 +139,13 @@ namespace multirobot_slam
 
     void LocalPlanning::update_global_paths(std::map<std::string, Path> global_paths)
     {
+        std::lock_guard<std::mutex> lock(global_paths_mutex_);
         global_paths_ = global_paths;
     }
 
     void LocalPlanning::update_costmap(Map costmap)
     {
+        std::lock_guard<std::mutex> lock(costmap_mutex_);
         costmap_ = costmap;
         costmap_received_ = true;
     }
@@ -184,6 +186,9 @@ namespace multirobot_slam
 
         if(!get_robot_poses_callback_)
             return;
+
+        // std::lock_guard<std::mutex> lock(global_paths_mutex_);
+        // std::lock_guard<std::mutex> cm_lock(costmap_mutex_);
 
         std::map<std::string, Pose> robot_poses = get_robot_poses_callback_();
 
@@ -435,10 +440,28 @@ namespace multirobot_slam
         }
 
 
+        Values result;
 
+        try {
+            LevenbergMarquardtOptimizer optimizer(graph, estimates);
+            result = optimizer.optimize();
+        } catch (const std::exception& e) {
+            std::cout << "Local planning optimization failed." << std::endl;
 
-        LevenbergMarquardtOptimizer optimizer(graph, estimates);
-        Values result = optimizer.optimize();
+            for (std::string &robot : current_robots)
+            {
+                VelCmd vel_cmd;
+                vel_cmd.linear.x() = 0;
+                vel_cmd.angular.z() = 0;
+
+                vel_cmds_[robot] = vel_cmd;
+                last_vel_cmds_[robot] = vel_cmd;
+            }
+
+            send_vel_cmds_callback_(vel_cmds_);
+
+            return;
+        }
 
 
 
@@ -451,46 +474,78 @@ namespace multirobot_slam
         // }
 
 
+        // for (std::string &robot : current_robots)
+        // {
+        //     Symbol next_x('x', 1 + 1e6 * robot_ids_[robot]);
+
+        //     if (!result.exists(next_x))
+        //     {
+        //         std::cout << "No optimized state found for " << robot.c_str() << std::endl;
+        //         continue;
+        //     }
+
+        //     Vector4 next_state = result.at<Vector4>(next_x);
+        //     Symbol curr_x('x', 1e6 * robot_ids_[robot]);
+        //     Vector4 curr_state = result.at<Vector4>(curr_x);
+
+        //     // Compute displacement between timesteps
+        //     double dx = next_state[0] - curr_state[0];
+        //     double dy = next_state[1] - curr_state[1];
+
+        //     // Forward velocity = displacement / dt
+        //     double v = std::sqrt(dx * dx + dy * dy) / params_.dt;
+        //     v = std::clamp(v, params_.min_vel_x, params_.max_vel_x);
+
+        //     // Heading at current pose, from velocity components
+        //     double heading_curr = std::atan2(curr_state[3], curr_state[2]);
+
+        //     // Heading from displacement
+        //     double heading_next = std::atan2(dy, dx);
+
+        //     // Angular velocity
+        //     double dtheta = heading_next - heading_curr;
+        //     dtheta = std::atan2(std::sin(dtheta), std::cos(dtheta));
+        //     double r = dtheta / params_.dt;
+        //     r = std::clamp(r, -params_.max_vel_theta, params_.max_vel_theta);
+
+        //     VelCmd vel_cmd;
+        //     vel_cmd.linear.x() = v;
+        //     vel_cmd.angular.z() = r;
+
+        //     vel_cmds_[robot] = vel_cmd;
+        //     last_vel_cmds_[robot] = vel_cmd;
+        // }
+
         for (std::string &robot : current_robots)
         {
-            Symbol next_x('x', 1 + 1e6 * robot_ids_[robot]);
+            Symbol x0('x', 1e6 * robot_ids_[robot]);
+            Symbol x1('x', 1 + 1e6 * robot_ids_[robot]);
 
-            if (!result.exists(next_x))
-            {
-                std::cout << "No optimized state found for " << robot.c_str() << std::endl;
-                continue;
-            }
+            if (!result.exists(x1)) continue;
 
-            Vector4 next_state = result.at<Vector4>(next_x);
-            Symbol curr_x('x', 1e6 * robot_ids_[robot]);
-            Vector4 curr_state = result.at<Vector4>(curr_x);
+            Vector4 s0 = result.at<Vector4>(x0);
+            Vector4 s1 = result.at<Vector4>(x1);
 
-            // Compute displacement between timesteps
-            double dx = next_state[0] - curr_state[0];
-            double dy = next_state[1] - curr_state[1];
+            double dx = s1[0] - s0[0];
+            double dy = s1[1] - s0[1];
+            double dist = std::sqrt(dx*dx + dy*dy);
 
-            // Forward velocity = displacement / dt
-            double v = std::sqrt(dx * dx + dy * dy) / params_.dt;
+            double v = dist / params_.dt;
             v = std::clamp(v, params_.min_vel_x, params_.max_vel_x);
 
-            // Heading at current pose, from velocity components
-            double heading_curr = std::atan2(curr_state[3], curr_state[2]);
+            const Eigen::Quaterniond& q = robot_poses[robot].orientation;
+            double current_yaw = std::atan2(2.0*(q.w()*q.z() + q.x()*q.y()), 1.0 - 2.0*(q.y()*q.y() + q.z()*q.z()));
 
-            // Heading from displacement
-            double heading_next = std::atan2(dy, dx);
+            double heading_target = (dist > 1e-4) ? std::atan2(dy, dx) : current_yaw;
+            
+            double dtheta = std::atan2(std::sin(heading_target - current_yaw), std::cos(heading_target - current_yaw));
+            double r = std::clamp(dtheta / params_.dt, -params_.max_vel_theta, params_.max_vel_theta);
 
-            // Angular velocity
-            double dtheta = heading_next - heading_curr;
-            dtheta = std::atan2(std::sin(dtheta), std::cos(dtheta));
-            double r = dtheta / params_.dt;
-            r = std::clamp(r, -params_.max_vel_theta, params_.max_vel_theta);
-
-            VelCmd vel_cmd;
-            vel_cmd.linear.x() = v;
-            vel_cmd.angular.z() = r;
-
-            vel_cmds_[robot] = vel_cmd;
-            last_vel_cmds_[robot] = vel_cmd;
+            VelCmd cmd;
+            cmd.linear.x() = v;
+            cmd.angular.z() = r;
+            vel_cmds_[robot] = cmd;
+            last_vel_cmds_[robot] = cmd;
         }
 
         send_vel_cmds_callback_(vel_cmds_);

@@ -60,50 +60,94 @@ namespace multirobot_slam
     }
 
 
+    // Path GlobalPlanning::reconstructPath(std::shared_ptr<AStarNode> last)
+    // {
+    //     Path path;
+
+    //     std::vector<Pose> temp_poses;
+
+    //     std::shared_ptr<AStarNode> current = last;
+
+    //     while (current) {
+    //         Pose pose;
+    //         pose.position.x() = current->x * costmap_.resolution + costmap_.origin_position.x();
+    //         pose.position.y() = current->y * costmap_.resolution + costmap_.origin_position.y();
+
+    //         temp_poses.push_back(pose);
+    //         current = current->parent;
+    //     }
+
+    //     std::reverse(temp_poses.begin(), temp_poses.end());
+
+    //     // Compute orientation
+    //     for(size_t i = 0; i < temp_poses.size(); ++i) {
+    //         Pose pose = temp_poses[i];
+
+    //         if(i+1 < temp_poses.size()) {
+    //             double dx = temp_poses[i+1].position.x() - temp_poses[i].position.x();
+    //             double dy = temp_poses[i+1].position.y() - temp_poses[i].position.y();
+    //             double yaw = std::atan2(dy, dx);
+
+    //             pose.orientation = Eigen::Quaterniond(
+    //                 Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ())
+    //             );
+
+    //         } else if(i > 0) {
+    //             pose.orientation = temp_poses[i-1].orientation;
+    //         } else {
+    //             pose.orientation.w() = 1.0;
+    //         }
+
+    //         path.poses.push_back(pose);
+    //     }
+
+    //     return path;
+    // }
+
     Path GlobalPlanning::reconstructPath(std::shared_ptr<AStarNode> last)
     {
         Path path;
-
         std::vector<Pose> temp_poses;
-
         std::shared_ptr<AStarNode> current = last;
+
+        while (current && current->parent) {
+            int cell_cost = costmap_.data[current->y * costmap_.width + current->x];
+            
+            if (cell_cost >= 5) {
+                current = current->parent;
+            } else {
+                break;
+            }
+        }
 
         while (current) {
             Pose pose;
             pose.position.x() = current->x * costmap_.resolution + costmap_.origin_position.x();
             pose.position.y() = current->y * costmap_.resolution + costmap_.origin_position.y();
-
+            
             temp_poses.push_back(pose);
             current = current->parent;
         }
 
         std::reverse(temp_poses.begin(), temp_poses.end());
 
-        // Compute orientation
         for(size_t i = 0; i < temp_poses.size(); ++i) {
             Pose pose = temp_poses[i];
-
             if(i+1 < temp_poses.size()) {
                 double dx = temp_poses[i+1].position.x() - temp_poses[i].position.x();
                 double dy = temp_poses[i+1].position.y() - temp_poses[i].position.y();
                 double yaw = std::atan2(dy, dx);
-
-                pose.orientation = Eigen::Quaterniond(
-                    Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ())
-                );
-
+                pose.orientation = Eigen::Quaterniond(Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()));
             } else if(i > 0) {
                 pose.orientation = temp_poses[i-1].orientation;
             } else {
                 pose.orientation.w() = 1.0;
             }
-
             path.poses.push_back(pose);
         }
 
         return path;
     }
-
 
     Path GlobalPlanning::aStar(int sx, int sy, int gx, int gy)
     {

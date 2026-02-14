@@ -45,11 +45,9 @@ namespace multirobot_slam
 
         int min_keypoints_number;
 
-        double w_cost_to_go;
-        double w_mahalanobis;
+        double w_keyframe_distance;
+        double w_information_gain;
         double w_keyframe_switch;
-
-        double mahalanobis_sigma_scale;
 
         TaskPlanningParams(
             double w_distance = 0.4,
@@ -63,10 +61,9 @@ namespace multirobot_slam
             double d_opt_threshold_soft = -10.0,
             double d_opt_threshold_hard = -5.0,
             int min_keypoints_number = 25,
-            double w_cost_to_go = 0.3,
-            double w_mahalanobis = 0.7,
-            double w_keyframe_switch = 0.2,
-            double mahalanobis_sigma_scale = 5.0)
+            double w_keyframe_distance = 0.3,
+            double w_information_gain = 0.7,
+            double w_keyframe_switch = 0.2)
             : w_distance(w_distance),
               w_orientation(w_orientation),
               w_frontier_switch(w_frontier_switch),
@@ -78,10 +75,9 @@ namespace multirobot_slam
               d_opt_threshold_soft(d_opt_threshold_soft),
               d_opt_threshold_hard(d_opt_threshold_hard),
               min_keypoints_number(min_keypoints_number),
-              w_cost_to_go(w_cost_to_go),
-              w_mahalanobis(w_mahalanobis),
-              w_keyframe_switch(w_keyframe_switch),
-              mahalanobis_sigma_scale(mahalanobis_sigma_scale) {}
+              w_keyframe_distance(w_keyframe_distance),
+              w_information_gain(w_information_gain),
+              w_keyframe_switch(w_keyframe_switch){}
     };
 
     class TaskPlanning
@@ -98,7 +94,7 @@ namespace multirobot_slam
 
         Pose compose_global_pose(const Pose& initial, const Pose& local);
         bool task_reached(const Pose& current, const Task& target);
-        std::map<std::string, Task> plan_tasks(std::map<std::string, Pose> robot_poses, std::vector<Frontier> frontiers);
+        std::map<std::string, Task> plan_tasks(std::map<std::string, Pose> robot_poses, std::vector<Frontier> frontiers, std::vector<Frontier> refinement_frontiers);
     private:
         TaskPlanningParams params_;
         std::map<std::string, Pose> robot_initial_poses_;
