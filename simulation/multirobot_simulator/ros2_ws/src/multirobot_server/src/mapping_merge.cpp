@@ -124,6 +124,21 @@ namespace multirobot_slam
 
         map_observation_count_.assign(map_.width * map_.height, 0);
 
+
+        int kernel_radius = static_cast<int>(std::ceil(params_.costmap_kernel_distance / map_.resolution));
+        lut_kernel_size_ = 2 * kernel_radius + 1;
+        cost_lut_.assign(lut_kernel_size_ * lut_kernel_size_, 0);
+
+        int center = kernel_radius;
+        for (int dy = -kernel_radius; dy <= kernel_radius; ++dy) {
+            for (int dx = -kernel_radius; dx <= kernel_radius; ++dx) {
+                double distance = std::sqrt(dx * dx + dy * dy) * map_.resolution;
+                if (distance <= params_.costmap_kernel_distance) {
+                    int8_t cost = static_cast<int8_t>(std::round(100 * std::exp(-params_.costmap_decay_rate * distance)));
+                    cost_lut_[(dy + center) * lut_kernel_size_ + (dx + center)] = cost;
+                }
+            }
+        }
     }
 
     void MappingMerge::set_initial_poses(std::map<std::string, Pose> initial_poses)
@@ -312,6 +327,12 @@ namespace multirobot_slam
         }
     }
 
+    void MappingMerge::update_robot_poses(std::map<std::string, Pose> robot_poses)
+    {
+        std::lock_guard<std::mutex> lock(robot_poses_mutex_);
+        robot_poses_ = robot_poses;
+    }
+
 
     Map MappingMerge::get_map()
     {
@@ -439,95 +460,87 @@ namespace multirobot_slam
     }
 
 
-
-    std::vector<std::pair<int, int>> MappingMerge::get_neighbors(Map& frontier_map, int x, int y, double epsilon)
+    std::vector<int> MappingMerge::get_neighbors_indices(const Map& map, int index, int eps_cells, int eps_sq_cells)
     {
-        std::vector<std::pair<int, int>> neighbors;
+        std::vector<int> neighbors;
+        neighbors.reserve(64);
 
-        int epsilon_cells = std::ceil(epsilon / frontier_map.resolution);
+        int w = map.width;
+        int h = map.height;
+        int x = index % w;
+        int y = index / w;
 
-        for (int dx = -epsilon_cells; dx <= epsilon_cells; dx++)
-        {
-            for (int dy = -epsilon_cells; dy <= epsilon_cells; dy++)
-            {
-                if (dx == 0 && dy == 0)
-                    continue;
+        int x_min = std::max(0, x - eps_cells);
+        int x_max = std::min(w - 1, x + eps_cells);
+        int y_min = std::max(0, y - eps_cells);
+        int y_max = std::min(h - 1, y + eps_cells);
 
-                if ((dx * dx + dy * dy) * frontier_map.resolution * frontier_map.resolution > epsilon * epsilon)
-                    continue;
+        for (int ny = y_min; ny <= y_max; ++ny) {
+            int row_offset = ny * w;
+            int dy = ny - y;
+            int dy_sq = dy * dy;
 
-                int nx = x + dx;
-                int ny = y + dy;
+            for (int nx = x_min; nx <= x_max; ++nx) {
+                int dx = nx - x;
+                int dist_sq = dx * dx + dy_sq;
 
-                int nidx = ny * frontier_map.width + nx;
-
-                if (nx >= 0 && ny >= 0 && nx < frontier_map.width && ny < frontier_map.height && frontier_map.data[nidx] == 100)
-                {
-                    neighbors.emplace_back(nx, ny);
+                if (dist_sq <= eps_sq_cells) {
+                    int nidx = row_offset + nx;
+                    if (map.data[nidx] == 100) {
+                        neighbors.push_back(nidx);
+                    }
                 }
             }
         }
-
         return neighbors;
     }
 
-    std::map<int, std::vector<std::pair<int, int>>> MappingMerge::dbscan_frontier_clusters_detection(Map& frontier_map, double min_points, double epsilon)
+    std::map<int, std::vector<std::pair<int, int>>> MappingMerge::dbscan_frontier_detection(Map& map, double min_points, double epsilon)
     {
-        std::map<std::pair<int, int>, int> labels;
+        int w = map.width;
+        int h = map.height;
+        std::vector<int> labels(w * h, 0); 
         std::map<int, std::vector<std::pair<int, int>>> clusters;
-
         int cluster_id = 0;
 
-        for (int y = 0; y < frontier_map.height; y++) {
-            for (int x = 0; x < frontier_map.width; x++) {
-                int idx = y * frontier_map.width + x;
-        
-                if (frontier_map.data[idx] != 100)
-                    continue;
-        
-                if (labels.find({x, y}) != labels.end())
-                    continue;
-        
-                std::vector<std::pair<int, int>> neighbors = get_neighbors(frontier_map, x, y, epsilon);
-        
-                if (neighbors.size() < static_cast<size_t>(min_points)) {
-                    labels[{x, y}] = -1;
-                    continue;
+        int eps_cells = std::ceil(epsilon / map.resolution);
+        int eps_sq_cells = eps_cells * eps_cells;
+
+        for (int i = 0; i < w * h; ++i) {
+            if (map.data[i] != 100 || labels[i] != 0) continue;
+
+            std::vector<int> neighbors = get_neighbors_indices(map, i, eps_cells, eps_sq_cells);
+
+            if (neighbors.size() < static_cast<size_t>(min_points)) {
+                labels[i] = -1;
+                continue;
+            }
+
+            cluster_id++;
+            labels[i] = cluster_id;
+            std::queue<int> q;
+            for (int n : neighbors) {
+                if (labels[n] == 0) {
+                    labels[n] = cluster_id;
+                    q.push(n);
                 }
-        
-                labels[{x, y}] = cluster_id;
-                clusters[cluster_id].push_back({x, y});
-        
-                std::queue<std::pair<int, int>> queue;
-        
-                for (const auto& p : neighbors)
-                    queue.push(p);
-        
-                while (!queue.empty()) {
-                    auto p = queue.front(); queue.pop();
-        
-                    if (labels.find(p) != labels.end()) {
-                        if (labels[p] == -1) {
-                            labels[p] = cluster_id;
-                            clusters[cluster_id].push_back(p);
+            }
+
+            while (!q.empty()) {
+                int curr = q.front(); q.pop();
+                clusters[cluster_id].push_back({curr % w, curr / h});
+
+                std::vector<int> next_neighbors = get_neighbors_indices(map, curr, eps_cells, eps_sq_cells);
+                if (next_neighbors.size() >= static_cast<size_t>(min_points)) {
+                    for (int n : next_neighbors) {
+                        if (labels[n] <= 0) {
+                            if (labels[n] == 0) q.push(n);
+                            labels[n] = cluster_id;
                         }
-                        continue;
-                    }
-        
-                    labels[p] = cluster_id;
-                    clusters[cluster_id].push_back(p);
-        
-                    auto p_neighbors = get_neighbors(frontier_map, p.first, p.second, epsilon);
-                    if (p_neighbors.size() >= static_cast<size_t>(min_points)) {
-                        for (const auto& n : p_neighbors)
-                            queue.push(n);
                     }
                 }
-        
-                cluster_id++;
             }
         }
-        
         return clusters;
     }
 
@@ -587,6 +600,92 @@ namespace multirobot_slam
     }
 
 
+    std::vector<Frontier> MappingMerge::dbscan(const std::vector<Frontier>& points, int min_points, double epsilon)
+    {
+        int n = points.size();
+        if (n == 0) return {};
+
+        std::vector<int> labels(n, 0); // 0: unvisited, -1: noise, >0: cluster_id
+        int cluster_id = 0;
+        std::vector<Frontier> results;
+        double epsilon_sq = epsilon * epsilon;
+
+        for (int i = 0; i < n; ++i) {
+            // Salta se già processato o se il punto iniziale è invalido
+            if (labels[i] != 0 || !std::isfinite(points[i].centroid.x())) continue;
+
+            std::vector<int> neighbors;
+            for(int j = 0; j < n; ++j) {
+                if (!std::isfinite(points[j].centroid.x())) continue;
+                if ((points[i].centroid - points[j].centroid).squaredNorm() < epsilon_sq) {
+                    neighbors.push_back(j);
+                }
+            }
+
+            if (neighbors.size() < (size_t)min_points) {
+                labels[i] = -1;
+                continue;
+            }
+
+            cluster_id++;
+            labels[i] = cluster_id;
+            
+            // Inizializzazione pulita
+            Eigen::Vector2d cluster_centroid_sum = points[i].centroid;
+            double cluster_total_size = points[i].size;
+            int cluster_count = 1;
+
+            std::queue<int> q;
+            for (int idx : neighbors) {
+                if (idx == i) continue;
+                if (labels[idx] == 0) {
+                    labels[idx] = cluster_id; // Segna come visitato PRIMA di inserire in coda
+                    q.push(idx);
+                }
+            }
+
+            while (!q.empty()) {
+                int curr = q.front(); q.pop();
+                
+                cluster_centroid_sum += points[curr].centroid;
+                cluster_total_size += points[curr].size;
+                cluster_count++;
+
+                std::vector<int> next_neighbors;
+                for(int j = 0; j < n; ++j) {
+                    if (!std::isfinite(points[j].centroid.x())) continue;
+                    if ((points[curr].centroid - points[j].centroid).squaredNorm() < epsilon_sq) {
+                        next_neighbors.push_back(j);
+                    }
+                }
+
+                if (next_neighbors.size() >= (size_t)min_points) {
+                    for (int next_idx : next_neighbors) {
+                        if (labels[next_idx] <= 0) { // Se è unvisited (0) o noise (-1)
+                            if (labels[next_idx] == 0) {
+                                q.push(next_idx);
+                            }
+                            labels[next_idx] = cluster_id; // Evita inserimenti multipli
+                        }
+                    }
+                }
+            }
+
+            if (cluster_count > 0) {
+                Frontier f;
+                f.centroid = cluster_centroid_sum / static_cast<double>(cluster_count);
+                f.size = cluster_total_size;
+                
+                // Verifica finale anti-NaN
+                if (std::isfinite(f.centroid.x()) && std::isfinite(f.centroid.y())) {
+                    results.push_back(f);
+                }
+            }
+        }
+        return results;
+    }
+
+
 
     void MappingMerge::mapping_merge()
     {
@@ -617,263 +716,277 @@ namespace multirobot_slam
         // Costmap generation
         std::fill(costmap_.data.begin(), costmap_.data.end(), 0);
 
-        int kernel_size = static_cast<int>(2 * std::floor(params_.costmap_kernel_distance / filtered_map_.resolution));
+        int kernel_radius = lut_kernel_size_ / 2;
+        int width = filtered_map_.width;
+        int height = filtered_map_.height;
 
-        for (int y = 0; y < filtered_map_.height; y++)
-        {
-            for (int x = 0; x < filtered_map_.width; x++)
-            {
-                int idx = y * filtered_map_.width + x;
-                if (filtered_map_.data[idx] != 100)
-                    continue;
-        
-                for (int dy = -kernel_size/2; dy <= kernel_size/2; ++dy)
-                {
-                    for (int dx = -kernel_size/2; dx <= kernel_size/2; ++dx)
-                    {
-                        int nx = x + dx;
-                        int ny = y + dy;
-            
-                        if (nx < 0 || ny < 0 || nx >= filtered_map_.width || ny >= filtered_map_.height)
-                            continue;
-            
-                        double distance = std::sqrt(dx * dx + dy * dy) * filtered_map_.resolution;
-                        if (distance > params_.costmap_kernel_distance)
-                            continue;
-                        int8_t cost = static_cast<int8_t>(std::round(100 * std::exp(-params_.costmap_decay_rate * distance)));
-            
-                        int nidx = ny * filtered_map_.width + nx;
-                        costmap_.data[nidx] = std::max(costmap_.data[nidx], cost);
+        for (int y = 0; y < height; ++y) {
+            int row_offset = y * width;
+            for (int x = 0; x < width; ++x) {
+                if (filtered_map_.data[row_offset + x] != 100) continue;
+
+                int y_min = std::max(0, y - kernel_radius);
+                int y_max = std::min(height - 1, y + kernel_radius);
+                int x_min = std::max(0, x - kernel_radius);
+                int x_max = std::min(width - 1, x + kernel_radius);
+
+                for (int ny = y_min; ny <= y_max; ++ny) {
+                    int lut_y = ny - y + kernel_radius;
+                    int lut_row_ptr = lut_y * lut_kernel_size_;
+                    int map_row_ptr = ny * width;
+
+                    for (int nx = x_min; nx <= x_max; ++nx) {
+                        int lut_x = nx - x + kernel_radius;
+                        int8_t cost = cost_lut_[lut_row_ptr + lut_x];
+                        
+                        if (cost > 0) {
+                            int8_t& current_cost = costmap_.data[map_row_ptr + nx];
+                            if (cost > current_cost) {
+                                current_cost = cost;
+                            }
+                        }
                     }
                 }
             }
         }
-        
         costmap_updated_ = true;
 
 
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        // Check previously detected refinement frontiers
+        if (!refinement_frontiers_raw_.empty()) 
+        {
+            refinement_frontiers_raw_.erase(
+                std::remove_if(refinement_frontiers_raw_.begin(), refinement_frontiers_raw_.end(),
+                [this](const Frontier& f) {
+
+                    int gx = static_cast<int>((f.centroid.x() - map_.origin_position.x()) / map_.resolution);
+                    int gy = static_cast<int>((f.centroid.y() - map_.origin_position.y()) / map_.resolution);
+
+                    if (gx < 2 || gx >= map_.width - 2 || gy < 2 || gy >= map_.height - 2) return true;
+
+                    double sum_obs = 0;
+                    double sum_variance = 0;
+                    int valid_neighbors = 0;
+
+                    for (int dy = -2; dy <= 2; dy++)
+                    {
+                        for (int dx = -2; dx <= 2; dx++)
+                        {
+                            int nidx = (gy + dy) * map_.width + (gx + dx);
+                            
+                            if (filtered_map_.data[nidx] != -1)
+                            {
+                                sum_obs += map_observation_count_[nidx];
+                                double p = map_.data[nidx] / 100.0;
+                                sum_variance += (p * (1.0 - p));
+                                valid_neighbors++;
+                            }
+                        }
+                    }
+
+                    if (valid_neighbors > 0)
+                    {
+                        double avg_obs = sum_obs / valid_neighbors;
+                        double avg_var = sum_variance / valid_neighbors;
+
+                        bool still_uncertain = (avg_var > params_.refinement_variance_threshold || avg_obs < params_.refinement_observations_threshold);
+                        return !still_uncertain; 
+                    }
+                    return true;
+                }), 
+                refinement_frontiers_raw_.end()
+            );
+        }
+
+
+        // Monte carlo sampling around robot positions
+        int n_samples = 1000;
+        double max_radius = 10.0;
+
+        {
+            std::lock_guard<std::mutex> lock(robot_poses_mutex_);
+            for (const auto& [_, pose] : robot_poses_)
+            {
+                for (int i = 0; i < n_samples; ++i)
+                {
+    
+                    double r = max_radius * std::sqrt((double)rand() / RAND_MAX);
+                    double theta = 2.0 * M_PI * ((double)rand() / RAND_MAX);
+                    
+                    double wx = pose.position.x() + r * std::cos(theta);
+                    double wy = pose.position.y() + r * std::sin(theta);
+    
+                    int gx = static_cast<int>((wx - map_.origin_position.x()) / map_.resolution);
+                    int gy = static_cast<int>((wy - map_.origin_position.y()) / map_.resolution);
+    
+                    if (gx >= 2 && gx < map_.width - 2 && gy >= 2 && gy < map_.height - 2)
+                    {
+                        int idx = gy * map_.width + gx;
+    
+                        if (filtered_map_.data[idx] == 0)
+                        {
+                            
+                            double sum_obs = 0;
+                            double sum_variance = 0;
+                            int valid_neighbors = 0;
+                            bool near_obstacle = false;
+                            bool near_unknown = false;
+    
+                            for(int dy = -2; dy <= 2; dy++)
+                            {
+                                for(int dx = -2; dx <= 2; dx++)
+                                {
+                                    int nidx = (gy + dy) * map_.width + (gx + dx);
+    
+                                    // Unknown zone detection
+                                    if (filtered_map_.data[nidx] == -1)
+                                    {
+                                        near_unknown = true;
+                                    }
+                                    
+                                    // Obstacle zone detection
+                                    if (filtered_map_.data[nidx] == 100)
+                                    {
+                                        near_obstacle = true;
+                                    }
+    
+                                    // Uncertanty statistics
+                                    if (filtered_map_.data[nidx] != -1)
+                                    {
+                                        sum_obs += map_observation_count_[nidx];
+                                        double p = map_.data[nidx] / 100.0;
+                                        sum_variance += (p * (1.0 - p));
+                                        valid_neighbors++;
+                                    }
+                                }
+                            }
+    
+                            if (!near_unknown && valid_neighbors > 0 && near_obstacle)
+                            {
+                                double avg_obs = sum_obs / valid_neighbors;
+                                double avg_var = sum_variance / valid_neighbors;
+    
+                                if (avg_var > params_.refinement_variance_threshold || avg_obs < params_.refinement_observations_threshold)
+                                {
+                                    Frontier cand;
+                                    cand.centroid = Eigen::Vector2d(wx, wy);
+                                    cand.size = -1.0;
+                                    refinement_frontiers_raw_.push_back(cand);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+
+
         
-        // Refinement frontier map generation
-        refinement_frontier_map_.data.assign(refinement_frontier_map_.data.size(), -1);
-
-
-
-
-
-
-
-        // Single thread solution
-        // refinement_frontier_map_.data.assign(refinement_frontier_map_.data.size(), -1);
-
-        // for (int i : global_visited_indices_)
-        // {
-        //     if (filtered_map_.data[i] != 100 || map_observation_count_[i] > params_.refinement_observations_threshold * 2)
-        //     {
-        //         refinement_frontier_map_.data[i] = -1;
-        //         continue;
-        //     }
-
-        //     int x = i % map_.width;
-        //     int y = i / map_.width;
-            
-        //     double obs_sum = 0.0;
-        //     int neighbor_count = 0;
-
-        //     for (int dy = -1; dy <= 1; ++dy)
-        //     {
-        //         for (int dx = -1; dx <= 1; ++dx)
-        //         {
-        //             int nx = x + dx;
-        //             int ny = y + dy;
-
-        //             if (nx >= 0 && nx < map_.width && ny >= 0 && ny < map_.height)
-        //             {
-        //                 int nidx = ny * map_.width + nx;
-                        
-        //                 if (filtered_map_.data[nidx] == 100)
-        //                 {
-        //                     obs_sum += static_cast<double>(map_observation_count_[nidx]);
-        //                     neighbor_count++;
-        //                 }
-        //             }
-        //         }
-        //     }
-
-        //     // Calcolo osservazioni medie
-        //     double avg_observations = (neighbor_count > 0) ? (obs_sum / neighbor_count) : 0.0;
-            
-        //     // Calcolo della probabilità/varianza locale (puoi usare quella della cella i)
-        //     double p = map_.data[i] / 100.0;
-        //     double variance = p * (1.0 - p);
-
-        //     // Condizione di raffinamento basata sulla media locale
-        //     if (variance > params_.refinement_variance_threshold || avg_observations < params_.refinement_observations_threshold)
-        //     {
-        //         refinement_frontier_map_.data[i] = 100;
-        //     }
-        //     else
-        //     {
-        //         refinement_frontier_map_.data[i] = 0;
-        //     }
-        // }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        // // Multi thread solution
-        // refinement_frontier_map_.data.assign(refinement_frontier_map_.data.size(), -1);
-
-        // std::vector<int> visited_indices_vec(global_visited_indices_.begin(), global_visited_indices_.end());
-
-        // if (!visited_indices_vec.empty()) {
-        //     int num_threads = 8;
-        //     int total_indices = visited_indices_vec.size();
-        //     std::vector<std::thread> threads;
-
-        //     auto worker = [this, &visited_indices_vec](int start, int end) {
-        //         for (int j = start; j < end; ++j) {
-        //             int i = visited_indices_vec[j];
-
-        //             // Early exit
-        //             if (filtered_map_.data[i] != 100 || map_observation_count_[i] > params_.refinement_observations_threshold * 2) {
-        //                 // refinement_frontier_map_.data[i] è già -1 grazie all'assign iniziale
-        //                 continue;
-        //             }
-
-        //             int x = i % map_.width;
-        //             int y = i / map_.width;
-        //             double obs_sum = 0.0;
-        //             int neighbor_count = 0;
-
-        //             // Kernel 3x3
-        //             for (int dy = -1; dy <= 1; ++dy) {
-        //                 int ny = y + dy;
-        //                 if (ny < 0 || ny >= map_.height) continue;
-
-        //                 for (int dx = -1; dx <= 1; ++dx) {
-        //                     int nx = x + dx;
-        //                     if (nx < 0 || nx >= map_.width) continue;
-
-        //                     int nidx = ny * map_.width + nx;
-        //                     if (filtered_map_.data[nidx] == 100) {
-        //                         obs_sum += static_cast<double>(map_observation_count_[nidx]);
-        //                         neighbor_count++;
-        //                     }
-        //                 }
-        //             }
-
-        //             double avg_observations = (neighbor_count > 0) ? (obs_sum / neighbor_count) : 0.0;
-        //             double p = map_.data[i] / 100.0;
-        //             double variance = p * (1.0 - p);
-
-        //             if (variance > params_.refinement_variance_threshold || avg_observations < params_.refinement_observations_threshold) {
-        //                 refinement_frontier_map_.data[i] = 100;
-        //             } else {
-        //                 refinement_frontier_map_.data[i] = 0;
-        //             }
-        //         }
-        //     };
-
-        //     int chunk_size = total_indices / num_threads;
-        //     for (int t = 0; t < num_threads; ++t) {
-        //         int start = t * chunk_size;
-        //         int end = (t == num_threads - 1) ? total_indices : start + chunk_size;
-                
-        //         if (start < end) {
-        //             threads.emplace_back(worker, start, end);
-        //         }
-        //     }
-
-        //     for (auto& th : threads) {
-        //         if (th.joinable()) th.join();
-        //     }
-        // }
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
         // Detect frontiers
-
+        
         {
             std::lock_guard<std::mutex> lock(frontier_map_mutex_);
-            std::map<int, std::vector<std::pair<int, int>>> frontier_clusters = dbscan_frontier_clusters_detection(frontier_map_, params_.min_points, params_.epsilon);
-
-            // Add discarded clusters to refinement frontier map
+            
+            auto frontier_clusters = dbscan_frontier_detection(frontier_map_, params_.min_points, params_.epsilon);
+            
+            
+            std::map<int, std::vector<std::pair<int, int>>> discarded_frontier_clusters;
             for (const auto& [cluster_id, cluster] : frontier_clusters)
             {
                 double cluster_size = cluster.size() * frontier_map_.resolution * frontier_map_.resolution;
                 if (cluster_size < params_.min_frontier_size)
                 {
-                    for (const auto& point : cluster)
-                    {
-                        int idx = point.second * map_.width + point.first;
-                        refinement_frontier_map_.data[idx] = 100;
-                    }
+                    discarded_frontier_clusters[cluster_id] = cluster;
                 }
             }
+            for (const auto& [cluster_id, cluster] : discarded_frontier_clusters)
+            {
+                frontier_clusters.erase(cluster_id);
+            }
+
 
             frontiers_ = frontier_centroids_detection(frontier_clusters, params_.min_frontier_size);
+            std::vector<Frontier> discarded_frontiers_ = frontier_centroids_detection(discarded_frontier_clusters, 0);
+
+            for (auto& df : discarded_frontiers_)
+            {
+                df.size = -1.0;
+                refinement_frontiers_raw_.push_back(df);
+            }
         }
 
-        // // Detect refinement frontiers
-        // std::map<int, std::vector<std::pair<int, int>>> refinement_frontier_clusters = dbscan_frontier_clusters_detection(refinement_frontier_map_, params_.min_points, params_.epsilon);
-        // std::vector<Frontier> refinement_frontiers_tmp = frontier_centroids_detection(refinement_frontier_clusters, params_.min_refinement_frontier_size);
 
-        // // Filter refinement frontiers
-        // refinement_frontiers_.clear();
 
-        // double min_distance = 0.5;
-        // for (const auto& r_frontier : refinement_frontiers_tmp)
-        // {
-        //     bool too_close = false;
-        //     for (const auto& f_frontier : frontiers_)
-        //     {
-        //         double dx = r_frontier.centroid.x() - f_frontier.centroid.x();
-        //         double dy = r_frontier.centroid.y() - f_frontier.centroid.y();
-        //         double dist = std::sqrt(dx * dx + dy * dy);
-        //         if (dist < min_distance)
-        //         {
-        //             too_close = true;
-        //             break;
-        //         }
-        //     }
 
-        //     if (!too_close)
-        //         refinement_frontiers_.push_back(r_frontier);
-        // }
+        // Dbscan on candidate raw refinemnet frontiers
+        refinement_frontiers_.clear();
+        if (!refinement_frontiers_raw_.empty()) {
+            auto r_frontiers = dbscan(refinement_frontiers_raw_, 1, 1.2);
+            double min_dist_sq = 0.5 * 0.5;
+
+            for (const auto& rf : r_frontiers)
+            {
+                bool too_close = false;
+                for (const auto& ff : frontiers_)
+                {
+                    if ((rf.centroid - ff.centroid).squaredNorm() < min_dist_sq)
+                    {
+                        too_close = true;
+                        break;
+                    }
+                }
+
+                if (!too_close)
+                    refinement_frontiers_.push_back(rf);
+            }
+        }
+
 
         frontier_map_updated_ = true;
         frontiers_updated_ = true;
         refinement_frontier_map_updated_ = true;
         refinement_frontiers_updated_ = true;
+
+
 
         
         // auto end = std::chrono::high_resolution_clock::now();

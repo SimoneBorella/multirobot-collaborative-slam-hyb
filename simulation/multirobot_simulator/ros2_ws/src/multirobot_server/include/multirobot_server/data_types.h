@@ -9,6 +9,8 @@ namespace multirobot_slam
 {
     struct Pose
     {
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+        
         Eigen::Vector3d position;
         Eigen::Quaterniond orientation;
 
@@ -90,6 +92,8 @@ namespace multirobot_slam
 
     struct LoopClosureConstraint
     {
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
         int keyframe_i;
         int keyframe_j;
         Pose transform_pose;
@@ -113,6 +117,8 @@ namespace multirobot_slam
 
     struct Map
     {
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
         int keyframe_id;
         float resolution;
         int width;
@@ -125,6 +131,8 @@ namespace multirobot_slam
 
     struct MapLogOddsUpdate
     {
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
         float resolution;
         int width;
         int height;
@@ -137,6 +145,8 @@ namespace multirobot_slam
 
     struct FrontierMapUpdate
     {
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
         float resolution;
         int width;
         int height;
@@ -150,6 +160,8 @@ namespace multirobot_slam
 
     struct Submap
     {
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
         int keyframe_id;
         float resolution;
         int width;
@@ -202,6 +214,7 @@ namespace multirobot_slam
 
     struct Path
     {
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
         std::vector<Pose> poses;
         Eigen::Quaterniond final_orientation;
     };

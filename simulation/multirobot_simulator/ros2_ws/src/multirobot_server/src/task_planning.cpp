@@ -365,22 +365,41 @@ namespace multirobot_slam
                     frontier_switch_score = 1 - std::min((frontier.centroid - Eigen::Vector2d(old.pose.position.x(), old.pose.position.y())).norm() / max_frontier_distance, 1.0);
                 }
 
-                // Frontier size score
-                double frontier_size_score = frontier.size / max_frontier_size;
+                double score, sumw;
 
-                // Score normalized
-                double score =
-                    params_.w_distance * dist_score +
-                    params_.w_orientation * orientation_score +
-                    params_.w_frontier_switch * frontier_switch_score +
-                    params_.w_frontier_size * frontier_size_score;
-
-                // Weighted sum
-                double sumw =
-                    params_.w_distance +
-                    params_.w_orientation +
-                    params_.w_frontier_switch +
-                    params_.w_frontier_size;
+                if(frontier.size != -1)
+                {
+                    // Frontier size score
+                    double frontier_size_score = frontier.size / max_frontier_size;
+    
+                    // Score normalized
+                    score =
+                        params_.w_distance * dist_score +
+                        params_.w_orientation * orientation_score +
+                        params_.w_frontier_switch * frontier_switch_score +
+                        params_.w_frontier_size * frontier_size_score;
+    
+                    // Weighted sum
+                    sumw =
+                        params_.w_distance +
+                        params_.w_orientation +
+                        params_.w_frontier_switch +
+                        params_.w_frontier_size;
+                }
+                else
+                {
+                    // Score normalized
+                    score =
+                        params_.w_distance * dist_score +
+                        params_.w_orientation * orientation_score +
+                        params_.w_frontier_switch * frontier_switch_score;
+    
+                    // Weighted sum
+                    sumw =
+                        params_.w_distance +
+                        params_.w_orientation +
+                        params_.w_frontier_switch;
+                }
 
                 if (sumw > 0.0)
                     score /= sumw;

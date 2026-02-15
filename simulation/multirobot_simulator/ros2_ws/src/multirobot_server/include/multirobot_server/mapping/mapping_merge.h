@@ -94,6 +94,7 @@ namespace multirobot_slam
         void add_map_log_odds_update(const MapLogOddsUpdate &map_log_odds_update, const std::string& robot);
         void add_frontier_map_update(const FrontierMapUpdate &frontier_map_update, const std::string& robot);
 
+        void update_robot_poses(std::map<std::string, Pose> robot_poses);
         Map get_map();
         std::optional<Map> get_map_if_updated();
         Map get_costmap();
@@ -110,9 +111,11 @@ namespace multirobot_slam
         double probability_to_log_odds(int8_t prob);
         int8_t log_odds_to_probability(double log_odds);
 
-        std::vector<std::pair<int, int>> get_neighbors(Map& frontier_map, int x, int y, double epsilon);
-        std::map<int, std::vector<std::pair<int, int>>> dbscan_frontier_clusters_detection(Map& frontier_map, double min_points, double epsilon);
+        std::vector<int> get_neighbors_indices(const Map& map, int index, int eps_cells, int eps_sq_cells);
+        std::map<int, std::vector<std::pair<int, int>>> dbscan_frontier_detection(Map& map, double min_points, double epsilon);
         std::vector<Frontier> frontier_centroids_detection(const std::map<int, std::vector<std::pair<int, int>>>& frontier_clusters, double min_frontier_size);
+
+        std::vector<Frontier> dbscan(const std::vector<Frontier>& points, int min_points, double epsilon);
 
         void mapping_merge();
 
@@ -120,15 +123,20 @@ namespace multirobot_slam
 
         std::map<std::string, Pose> initial_poses_;
 
+        std::map<std::string, Pose> robot_poses_;
+
         Map map_;
         std::vector<double> map_log_odds_data_;
         Map filtered_map_;
         Map costmap_;
+        std::vector<int8_t> cost_lut_;
+        int lut_kernel_size_;
         Map frontier_map_;
         std::unordered_set<int> global_visited_indices_;
         Map refinement_frontier_map_;
         std::vector<int> map_observation_count_;
         std::vector<Frontier> frontiers_;
+        std::vector<Frontier> refinement_frontiers_raw_;
         std::vector<Frontier> refinement_frontiers_;
 
         bool map_updated_;
@@ -141,6 +149,7 @@ namespace multirobot_slam
         std::map<std::string, std::vector<Frontier>> robot_frontiers_data_;
 
         
+        std::mutex robot_poses_mutex_;
 
         std::mutex map_mutex_;
         std::mutex frontier_map_mutex_;

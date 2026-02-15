@@ -132,7 +132,7 @@ namespace multirobot_slam
         get_robot_poses_callback_ = std::move(callback);
     }
 
-    void LocalPlanning::set_send_vel_cmds_callback(std::function<void(const std::map<std::string, VelCmd>&)> callback)
+    void LocalPlanning::set_send_vel_cmds_callback(std::function<void(const std::map<std::string, VelCmd, std::less<std::string>, Eigen::aligned_allocator<std::pair<const std::string, VelCmd>>>&)> callback)
     {
         send_vel_cmds_callback_ = std::move(callback);
     }
@@ -150,7 +150,7 @@ namespace multirobot_slam
         costmap_received_ = true;
     }
 
-    std::map<std::string, VelCmd> LocalPlanning::get_vel_cmds()
+    std::map<std::string, VelCmd, std::less<std::string>, Eigen::aligned_allocator<std::pair<const std::string, VelCmd>>> LocalPlanning::get_vel_cmds()
     {
         return vel_cmds_;
     }

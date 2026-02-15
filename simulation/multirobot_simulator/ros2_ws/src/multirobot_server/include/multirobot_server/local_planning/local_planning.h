@@ -89,9 +89,12 @@ namespace multirobot_slam
 
     class DynamicsFactor : public NoiseModelFactor2<Vector4, Vector4>
     {
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
         double dt_;
 
     public:
+
         DynamicsFactor(Key key1, Key key2, const SharedNoiseModel &model, double dt)
             : NoiseModelFactor2<Vector4, Vector4>(model, key1, key2), dt_(dt) {}
 
@@ -133,10 +136,12 @@ namespace multirobot_slam
 
     class InterRobotFactor : public NoiseModelFactor2<Vector4, Vector4>
     {
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     private:
         double min_dist_;
 
     public:
+
         InterRobotFactor(Key key1, Key key2,
                          const SharedNoiseModel &model,
                          double min_dist)
@@ -184,6 +189,7 @@ namespace multirobot_slam
 
     class ObstacleFactor : public NoiseModelFactor1<Vector4>
     {
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     private:
         double resolution_;
         double origin_x_, origin_y_;
@@ -291,6 +297,7 @@ namespace multirobot_slam
 
     class VelocityLimitFactor : public NoiseModelFactor1<Vector4>
     {
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     private:
         double v_max_;
         double v_min_;
@@ -333,6 +340,7 @@ namespace multirobot_slam
 
     class AngularVelocityLimitFactor : public NoiseModelFactor2<Vector4, Vector4>
     {
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     private:
         double dt_;
         double max_angular_;
@@ -386,12 +394,12 @@ namespace multirobot_slam
         void start();
 
         void set_robot_pose_callback(std::function<std::map<std::string, Pose>()> callback);
-        void set_send_vel_cmds_callback(std::function<void(const std::map<std::string, VelCmd>&)> callback);
+        void set_send_vel_cmds_callback(std::function<void(const std::map<std::string, VelCmd, std::less<std::string>, Eigen::aligned_allocator<std::pair<const std::string, VelCmd>>>&)> callback);
 
         void update_global_paths(std::map<std::string, Path> global_paths);
         void update_costmap(Map costmap);
 
-        std::map<std::string, VelCmd> get_vel_cmds();
+        std::map<std::string, VelCmd, std::less<std::string>, Eigen::aligned_allocator<std::pair<const std::string, VelCmd>>> get_vel_cmds();
 
     private:
         Matrix make_dynamics_information(double sigma, double dt);
@@ -401,7 +409,7 @@ namespace multirobot_slam
         LocalPlanningParams params_;
 
         std::function<std::map<std::string, Pose>()> get_robot_poses_callback_;
-        std::function<void(const std::map<std::string, VelCmd>&)> send_vel_cmds_callback_;
+        std::function<void(const std::map<std::string, VelCmd, std::less<std::string>, Eigen::aligned_allocator<std::pair<const std::string, VelCmd>>>&)> send_vel_cmds_callback_;
 
         int iter_count;
 
@@ -421,9 +429,9 @@ namespace multirobot_slam
 
         std::map<std::string, int> robot_ids_;
 
-        std::map<std::string, VelCmd> last_vel_cmds_;
 
-        std::map<std::string, VelCmd> vel_cmds_;
+        std::map<std::string, VelCmd, std::less<std::string>, Eigen::aligned_allocator<std::pair<const std::string, VelCmd>>> last_vel_cmds_;
+        std::map<std::string, VelCmd, std::less<std::string>, Eigen::aligned_allocator<std::pair<const std::string, VelCmd>>> vel_cmds_;
 
         std::mutex global_paths_mutex_;
         std::mutex costmap_mutex_;

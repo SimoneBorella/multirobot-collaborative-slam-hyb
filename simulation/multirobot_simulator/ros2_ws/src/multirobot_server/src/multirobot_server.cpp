@@ -393,7 +393,7 @@ public:
         );
 
         local_planning_.set_send_vel_cmds_callback(
-            [this](const std::map<std::string, VelCmd>& vel_cmds) -> void
+            [this](const std::map<std::string, VelCmd, std::less<std::string>, Eigen::aligned_allocator<std::pair<const std::string, VelCmd>>>& vel_cmds) -> void
             {
                 publish_vel_cmds(vel_cmds);
             }
@@ -617,7 +617,7 @@ public:
     }
 
 
-    void publish_vel_cmds(std::map<std::string, VelCmd> vel_cmds)
+    void publish_vel_cmds(std::map<std::string, VelCmd, std::less<std::string>, Eigen::aligned_allocator<std::pair<const std::string, VelCmd>>> vel_cmds)
     {
         for (const auto& [robot, vel_cmd] : vel_cmds)
         {
@@ -638,6 +638,18 @@ public:
 
     void timer_callback()
     {
+        std::map<std::string, Pose> robot_poses;
+        for (const auto& robot : robots_)
+        {
+            Pose pose;
+            if (get_robot_pose(robot, pose))
+            {
+                robot_poses[robot] = pose;
+            }
+        }
+
+        mapping_merge_.update_robot_poses(robot_poses);
+
         const std::optional<Map> &map = mapping_merge_.get_map_if_updated();
 
         if (map.has_value())
@@ -680,16 +692,6 @@ public:
 
         if (frontiers_opt.has_value())
         {
-            std::map<std::string, Pose> robot_poses;
-            for (const auto& robot : robots_)
-            {
-                Pose pose;
-                if (get_robot_pose(robot, pose))
-                {
-                    robot_poses[robot] = pose;
-                }
-            }
-    
             std::map<std::string, Task> tasks = task_planning_.plan_tasks(robot_poses, frontiers, refinement_frontiers);
     
             std::map<std::string, Path> global_paths = global_planning_.plan_global_path(robot_poses, tasks);
