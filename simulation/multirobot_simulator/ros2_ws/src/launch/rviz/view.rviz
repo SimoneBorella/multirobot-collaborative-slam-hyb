@@ -158,29 +158,6 @@ Visualization Manager:
         Value: /costmap_updates
       Use Timestamp: false
       Value: false
-    - Alpha: 0.699999988079071
-      Binary representation: false
-      Binary threshold: 100
-      Class: rviz_default_plugins/Map
-      Color Scheme: costmap
-      Draw Behind: false
-      Enabled: false
-      Name: Frontier Map
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /frontier_map
-      Update Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /frontier_map_updates
-      Use Timestamp: false
-      Value: false
     - Class: rviz_default_plugins/Marker
       Enabled: true
       Name: Frontiers
@@ -938,11 +915,11 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 78.8648452758789
+      Scale: 38.95976638793945
       Target Frame: <Fixed Frame>
       Value: TopDownOrtho (rviz_default_plugins)
-      X: 3.5630576610565186
-      Y: -2.624743700027466
+      X: 0
+      Y: 0
     Saved: ~
 Window Geometry:
   Displays:
@@ -961,4 +938,4 @@ Window Geometry:
     collapsed: true
   Width: 1920
   X: 3000
-  Y: 410
+  Y: 401

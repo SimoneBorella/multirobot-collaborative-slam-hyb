@@ -13,8 +13,8 @@ multirobot_simulator:
     # map: "indoor_map_10"
     map: "custom_map_0"
 
-    robots: ["robot_0"]
-    # robots: ["robot_0", "robot_1"]
+    # robots: ["robot_0"]
+    robots: ["robot_0", "robot_1"]
     # robots: ["robot_0", "robot_1", "robot_2"]
     # robots: ["robot_0", "robot_1", "robot_2", "robot_3"]
     # robots: ["robot_0", "robot_1", "robot_2", "robot_3", "robot_4"]

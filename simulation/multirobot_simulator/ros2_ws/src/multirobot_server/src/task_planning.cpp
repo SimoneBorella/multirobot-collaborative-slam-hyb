@@ -511,7 +511,7 @@ namespace multirobot_slam
                     if (sumw > 0.0)
                         score /= sumw;
 
-                    std::cout << kf_id << ": " << score << std::endl;
+                    // std::cout << kf_id << ": " << score << std::endl;
                         
                     // Blending lambda exploration/information gain factor
                     score *= lambda_r[robot];
@@ -535,16 +535,19 @@ namespace multirobot_slam
                 const auto& r1 = explorative_robots[i];
                 const auto& r2 = explorative_robots[j];
 
+                size_t card1 = n_frontiers + n_robot_keyframes[r1];
+                size_t card2 = n_frontiers + n_robot_keyframes[r2];
+
                 // Conflict factor
-                std::vector<double> conflict(n_frontiers * n_frontiers, 1.0);
+                std::vector<double> conflict(card1 * card2, 1.0);
                 for (size_t f = 0; f < n_frontiers; ++f)
-                    conflict[f * n_frontiers + f] = params_.conflict_penalty;
+                    conflict[f * card2 + f] = params_.conflict_penalty;
 
                 graph.add(DecisionTreeFactor(
                     {robot_keys[r1], robot_keys[r2]}, conflict));
 
                 // Coverage factor
-                std::vector<double> coverage(n_frontiers * n_frontiers, 1.0);
+                std::vector<double> coverage(card1 * card2, 1.0);
                 for (size_t f1 = 0; f1 < n_frontiers; ++f1)
                 {
                     for (size_t f2 = 0; f2 < n_frontiers; ++f2)
@@ -554,14 +557,13 @@ namespace multirobot_slam
                             merged_frontiers[f2].centroid).norm();
 
                         double raw = 1.0 - std::exp(-d / params_.coverage_scale);
-                        coverage[f1 * n_frontiers + f2] =
+                        coverage[f1 * card2 + f2] =
                             (1.0 - params_.w_coverage) +
                             params_.w_coverage * raw;
                     }
                 }
 
-                graph.add(DecisionTreeFactor(
-                    {robot_keys[r1], robot_keys[r2]}, coverage));
+                graph.add(DecisionTreeFactor({robot_keys[r1], robot_keys[r2]}, coverage));
             }
         }
 

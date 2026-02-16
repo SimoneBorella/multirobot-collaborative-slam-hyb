@@ -10,7 +10,7 @@ log_odds_max: 10.0
 obstacle_threshold: 0.70
 free_threshold: 0.30
 
-costmap_kernel_distance: 0.3
+costmap_kernel_distance: 0.25
 costmap_decay_rate: 4.0
 
 refinement_variance_threshold: 0.09 # Probability under 0.9

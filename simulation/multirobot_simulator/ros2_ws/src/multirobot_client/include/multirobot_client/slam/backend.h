@@ -120,8 +120,8 @@ namespace multirobot_slam
 
         
     private:
-        std::vector<std::pair<Symbol, double>> nearest_neighbor_data_association(const Point3& observed_point, const Values& estimates);
-        std::vector<std::pair<Symbol, double>> probabilistic_data_association(const Point3& observed_point, const Values& estimates, const Marginals& marginals, const Matrix6 robot_cov);
+        std::vector<std::pair<Symbol, double>> nearest_neighbor_data_association(const Point3& observed_point,const Values& estimates);
+        std::vector<std::pair<Symbol, double>> probabilistic_data_association(const Point3& observed_point, const std::array<uint8_t, 32> &observed_descriptor, const Values& estimates, const Marginals& marginals, const Matrix6 robot_cov);
         bool find_bounding_poses(double landmark_ts, Symbol &prev_sym, Symbol &next_sym, double &prev_ts, double &next_ts);
         void save_keyframes(std::map<int, KeyFrame> keyframes, const std::string &filename);
         void save_loop_closure(const LoopClosureConstraint& loop_closure, const std::string &filename);
@@ -146,8 +146,8 @@ namespace multirobot_slam
 
         int landmark_id_;
         std::vector<Symbol> landmark_symbols_;
-
-        std::map<gtsam::Symbol, int> landmark_observation_count_;
+        std::map<Symbol, int> landmark_observation_count_;
+        std::map<Symbol, std::vector<std::array<uint8_t, 32>>> landmark_descriptors_;
 
         ISAM2 isam_;
         std::mutex isam_mutex_;

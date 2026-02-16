@@ -399,7 +399,32 @@ namespace multirobot_slam
         return results;
     }
 
-    std::vector<std::pair<Symbol, double>> Backend::probabilistic_data_association(const Point3 &observed_point, const Values &estimates, const Marginals &marginals, const Matrix6 robot_cov)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    std::vector<std::pair<Symbol, double>> Backend::probabilistic_data_association(const Point3 &observed_point, const std::array<uint8_t, 32> &observed_descriptor, const Values &estimates, const Marginals &marginals, const Matrix6 robot_cov)
     {
         std::vector<std::pair<Symbol, double>> results;
 
@@ -409,15 +434,35 @@ namespace multirobot_slam
         double total_likelihood = 0.0;
         std::vector<std::tuple<Symbol, double, double>> temp_results;
 
+        const int max_hamming_threshold = 60;
+        const int store_descriptor_hamming_threshold = 40;
+
         for (const Symbol &l : landmark_symbols_)
         {
             if (!estimates.exists(l))
                 continue;
 
+            // Gemetric Euclidean filter
             Point3 landmark_estimate = estimates.at<Point3>(l);
-            Vector3 dist = observed_point - landmark_estimate;
+            Vector3 delta = observed_point - landmark_estimate;
 
-            if (dist.norm() > params_.data_association_distance)
+            if (delta.norm() > params_.data_association_distance)
+                continue;
+
+            // Hamming Distance filter
+            int min_hamming_distance = 256;
+
+            for(std::array<uint8_t, 32>& landmark_descriptor : landmark_descriptors_[l])
+            {
+                int current_hamming = 0;
+                for (int i = 0; i < 32; ++i)
+                    current_hamming += __builtin_popcount(observed_descriptor[i] ^ landmark_descriptor[i]);
+                
+                if(current_hamming < min_hamming_distance)
+                    min_hamming_distance = current_hamming;
+            }
+
+            if (min_hamming_distance > max_hamming_threshold)
                 continue;
 
             // Could throw exception if marginal is singular
@@ -428,13 +473,9 @@ namespace multirobot_slam
                 // cov = isam_.marginalCovariance(l);
 
 
-
-
                 // Faster marginal estimation from bayes tree
                 // cov = marginals.marginalCovariance(l);
                 
-
-
 
                 // Obseravtion count based covariance
                 // double sigma_init = params_.sigma_keypoint_noise; 
@@ -456,8 +497,6 @@ namespace multirobot_slam
                 // cov = Matrix3::Identity() * (current_sigma * current_sigma) + robot_pos_cov;
 
 
-
-
                 // Assumption based covariance
                 cov = Matrix3::Identity() * (params_.sigma_keypoint_noise * params_.sigma_keypoint_noise);
             }
@@ -467,18 +506,15 @@ namespace multirobot_slam
                 cov = Matrix3::Identity() * (params_.sigma_keypoint_noise * params_.sigma_keypoint_noise);
             }
 
+            // Mahalanobis distance filter
             double cov_determinant = cov.determinant();
-            if (cov_determinant < 1e-6)
-            {
-                cov_determinant = 1e-6;
-            }
-
-            Matrix3 cov_inv = cov.inverse();
+            if (cov_determinant < 1e-9) cov_determinant = 1e-9;
 
             // Compute the Mahalanobis distance squared:
             //   d^2 = (x - mu)^T sigma^(-1) (x - mu)
             // where x = observed_point, mu = landmark_estimate, sigma = covariance matrix
-            double mahalanobis_dist = std::sqrt(dist.transpose() * cov_inv * dist);
+            Matrix3 cov_inv = cov.inverse();
+            double mahalanobis_dist = std::sqrt(delta.transpose() * cov_inv * delta);
 
             double mahalanobis_dist_threshold = 3.0;
             if (mahalanobis_dist > mahalanobis_dist_threshold)
@@ -497,7 +533,7 @@ namespace multirobot_slam
         // Normalize likelihoods to get probabilities
         for (const auto &[l, likelihood, _] : temp_results)
         {
-            if (total_likelihood > 0.0)
+            if (total_likelihood > 1e-12)
             {
                 double probability = likelihood / total_likelihood;
                 results.emplace_back(l, probability);
@@ -506,6 +542,35 @@ namespace multirobot_slam
 
         return results;
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     bool Backend::find_bounding_poses(double landmark_ts, Symbol &prev_sym, Symbol &next_sym, double &prev_ts, double &next_ts)
     {
@@ -647,7 +712,7 @@ namespace multirobot_slam
                 std::vector<std::pair<Symbol, double>> associations;
                 {
                     std::lock_guard<std::mutex> lock(isam_mutex_);
-                    associations = probabilistic_data_association(keypoint_observation, estimates, marginals, state_.covariance);
+                    associations = probabilistic_data_association(keypoint_observation, keypoint.descriptor, estimates, marginals, state_.covariance);
                 }
                 
                 if (!associations.empty())
@@ -658,6 +723,9 @@ namespace multirobot_slam
                         { 
                             landmark_observation_count_[associated_l]++;
                         }
+
+                        if (landmark_descriptors_.size() < 50)
+                            landmark_descriptors_[associated_l].push_back(keypoint.descriptor);
 
                         // To scale information
                         // I * p  =>  S / p => sigmas / sqrt(p)
@@ -674,7 +742,7 @@ namespace multirobot_slam
                     Symbol l('l', landmark_id_++);
                     new_estimates.insert(l, keypoint_observation);
                     landmark_symbols_.push_back(l);
-
+                    landmark_descriptors_[l].push_back(keypoint.descriptor);
                     landmark_observation_count_[l] = 1;
 
                     auto huber_noise = noiseModel::Robust::Create(
@@ -777,16 +845,25 @@ namespace multirobot_slam
             timestamped_pose_queue_.pop_front();
         }
 
-
-
-        // Remove old landmark symbols
-
+        // Remove old landmark symbols and cleanup associated data
         size_t landmarks_max_size = 200;
 
         if (landmark_symbols_.size() > landmarks_max_size)
         {
-            landmark_symbols_.erase(landmark_symbols_.begin(), landmark_symbols_.begin() + (landmark_symbols_.size() - landmarks_max_size));
+            size_t num_to_remove = landmark_symbols_.size() - landmarks_max_size;
+
+            for (size_t i = 0; i < num_to_remove; ++i)
+            {
+                Symbol l_to_remove = landmark_symbols_[i];
+                
+                landmark_descriptors_.erase(l_to_remove);
+                landmark_observation_count_.erase(l_to_remove);
+            }
+
+            landmark_symbols_.erase(landmark_symbols_.begin(), landmark_symbols_.begin() + num_to_remove);
         }
+
+
 
 
 
