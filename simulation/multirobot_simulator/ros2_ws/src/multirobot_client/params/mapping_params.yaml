@@ -5,8 +5,9 @@ map_width: 40.0
 map_height: 40.0
 
 free_belief: 0.38
-occ_belief: 0.80
-distance_belief_factor: 0.03
+occ_belief: 0.85
+distance_belief_factor: 0.0
+# distance_belief_factor: 0.03
 log_odds_min: -100.0
 log_odds_max: 100.0
 noise_radius: 0.03

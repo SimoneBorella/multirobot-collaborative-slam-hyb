@@ -755,71 +755,48 @@ namespace multirobot_slam
 
 
 
-        
-
-
-
-
-
         // Unobservability check
-        if (!refinement_frontiers_raw_.empty()) 
+        if (!refinement_frontiers_.empty()) 
         {
-            if (last_refinement_frontier_avg_obs_.size() != refinement_frontiers_raw_.size()) {
-                last_refinement_frontier_avg_obs_.resize(refinement_frontiers_raw_.size(), 0.0);
+            // Sincronizza il contatore di persistenza con il numero di frontiere raw
+            if (refinement_frontier_persistence_counters_.size() != refinement_frontiers_.size()) {
+                refinement_frontier_persistence_counters_.resize(refinement_frontiers_.size(), 0);
             }
 
             std::lock_guard<std::mutex> lock(robot_poses_mutex_);
             
-            for (size_t i = 0; i < refinement_frontiers_raw_.size(); ) 
+            for (size_t i = 0; i < refinement_frontiers_.size(); ) 
             {
-                const auto& f = refinement_frontiers_raw_[i];
+                const auto& f = refinement_frontiers_[i];
+                bool robot_is_near = false;
                 bool removed = false;
 
                 for (const auto& [_, robot_pose] : robot_poses_) 
                 {
                     double dist_to_robot = (f.centroid - Eigen::Vector2d(robot_pose.position.x(), robot_pose.position.y())).norm();
                     
-                    if (dist_to_robot < 1.5) 
+                    if (dist_to_robot < 1.0) 
                     {
-                        int gx = static_cast<int>((f.centroid.x() - map_.origin_position.x()) / map_.resolution);
-                        int gy = static_cast<int>((f.centroid.y() - map_.origin_position.y()) / map_.resolution);
-                        
-                        double sum_obs = 0;
-                        int valid_neighbors = 0;
-
-                        for (int dy = -2; dy <= 2; dy++)
-                        {
-                            for (int dx = -2; dx <= 2; dx++)
-                            {
-                                int nidx = (gy + dy) * map_.width + (gx + dx);
-                                
-                                if (filtered_map_.data[nidx] != -1)
-                                {
-                                    sum_obs += map_observation_count_[nidx];
-                                    valid_neighbors++;
-                                }
-                            }
-                        }
-
-
-                        
-                        double avg_obs = 0.0;
-                        
-                        if(valid_neighbors > 0)
-                            avg_obs = sum_obs/valid_neighbors;
-                        
-
-                        if (avg_obs <= last_refinement_frontier_avg_obs_[i] && last_refinement_frontier_avg_obs_[i] > 0) 
-                        {
-                            unobservable_zones_.push_back(f.centroid);
-                            refinement_frontiers_raw_.erase(refinement_frontiers_raw_.begin() + i);
-                            last_refinement_frontier_avg_obs_.erase(last_refinement_frontier_avg_obs_.begin() + i);
-                            removed = true;
-                            break; 
-                        }
-                        
-                        last_refinement_frontier_avg_obs_[i] = avg_obs;
+                        robot_is_near = true;
+                        break; 
                     }
+                }
+
+                if (robot_is_near) {
+                    refinement_frontier_persistence_counters_[i]++;
+
+                    if (refinement_frontier_persistence_counters_[i] >= 20) 
+                    {
+                        unobservable_zones_.push_back(f.centroid);
+                        
+                        refinement_frontiers_.erase(refinement_frontiers_.begin() + i);
+                        refinement_frontier_persistence_counters_.erase(refinement_frontier_persistence_counters_.begin() + i);
+                        removed = true;
+                        
+                        std::cout << "Area at [" << f.centroid.x() << ", " << f.centroid.y() << "] marked as unobservable." << std::endl;
+                    }
+                } else {
+                    refinement_frontier_persistence_counters_[i] = 0;
                 }
 
                 if (!removed) i++;
@@ -831,17 +808,12 @@ namespace multirobot_slam
 
 
 
-
-
-
-
-
         // Check previously detected refinement frontiers
-        if (!refinement_frontiers_raw_.empty()) 
+        if (!refinement_frontiers_.empty()) 
         {
-            for (size_t i = 0; i < refinement_frontiers_raw_.size();)
+            for (size_t i = 0; i < refinement_frontiers_.size();)
             {
-                const auto& f = refinement_frontiers_raw_[i];
+                const auto& f = refinement_frontiers_[i];
                 int gx = static_cast<int>((f.centroid.x() - map_.origin_position.x()) / map_.resolution);
                 int gy = static_cast<int>((f.centroid.y() - map_.origin_position.y()) / map_.resolution);
 
@@ -887,8 +859,8 @@ namespace multirobot_slam
 
                 if (should_remove)
                 {
-                    refinement_frontiers_raw_.erase(refinement_frontiers_raw_.begin() + i);
-                    last_refinement_frontier_avg_obs_.erase(last_refinement_frontier_avg_obs_.begin() + i);
+                    refinement_frontiers_.erase(refinement_frontiers_.begin() + i);
+                    refinement_frontier_persistence_counters_.erase(refinement_frontier_persistence_counters_.begin() + i);
                 } else
                 {
                     i++;
@@ -917,12 +889,25 @@ namespace multirobot_slam
                     // Check if inside unobservable zone
                     bool in_unobservable_zone = false;
                     for (const auto& uz : unobservable_zones_) {
-                        if ((Eigen::Vector2d(wx, wy) - uz).norm() < 1.5) {
+                        if ((Eigen::Vector2d(wx, wy) - uz).norm() < 1.0) {
                             in_unobservable_zone = true;
                             break;
                         }
                     }
                     if (in_unobservable_zone)
+                        continue;
+
+                    // Check if already discovered
+                    bool already_discovered = false;
+                    for(const auto& rf : refinement_frontiers_)
+                    {
+                        if ((Eigen::Vector2d(wx, wy) - rf.centroid).norm() < 1.0) {
+                            already_discovered = true;
+                            break;
+                        }
+                    }
+
+                    if(already_discovered)
                         continue;
     
                     int gx = static_cast<int>((wx - map_.origin_position.x()) / map_.resolution);
@@ -977,11 +962,11 @@ namespace multirobot_slam
     
                                 if (avg_var > params_.refinement_variance_threshold || avg_obs < params_.refinement_observations_threshold)
                                 {
-                                    Frontier cand;
-                                    cand.centroid = Eigen::Vector2d(wx, wy);
-                                    cand.size = -1.0;
-                                    refinement_frontiers_raw_.push_back(cand);
-                                    last_refinement_frontier_avg_obs_.push_back(avg_obs);
+                                    Frontier f;
+                                    f.centroid = Eigen::Vector2d(wx, wy);
+                                    f.size = -1.0;
+                                    refinement_frontiers_.push_back(f);
+                                    refinement_frontier_persistence_counters_.push_back(0);
                                 }
                             }
                         }
@@ -1025,36 +1010,38 @@ namespace multirobot_slam
             for (auto& df : discarded_frontiers_)
             {
                 df.size = -1.0;
-                refinement_frontiers_raw_.push_back(df);
-                last_refinement_frontier_avg_obs_.push_back(0.0);
-            }
-        }
 
-
-
-
-        // Dbscan on candidate raw refinemnet frontiers
-        refinement_frontiers_.clear();
-        if (!refinement_frontiers_raw_.empty()) {
-            auto r_frontiers = dbscan(refinement_frontiers_raw_, 1, 1.2);
-            double min_dist_sq = 0.5 * 0.5;
-
-            for (const auto& rf : r_frontiers)
-            {
-                bool too_close = false;
-                for (const auto& ff : frontiers_)
+                // Check if already discovered
+                bool already_discovered = false;
+                for(auto& rf : refinement_frontiers_)
                 {
-                    if ((rf.centroid - ff.centroid).squaredNorm() < min_dist_sq)
-                    {
-                        too_close = true;
+                    if ((df.centroid - rf.centroid).norm() < 0.5) {
+                        already_discovered = true;
+                        rf.centroid = df.centroid;
                         break;
                     }
                 }
 
-                if (!too_close)
-                    refinement_frontiers_.push_back(rf);
+                if(!already_discovered)
+                {
+                    bool in_unobservable_zone = false;
+                    for (const auto& uz : unobservable_zones_) {
+                        if ((df.centroid - uz).norm() < 1.0) {
+                            in_unobservable_zone = true;
+                            break;
+                        }
+                    }
+                    
+                    if(!in_unobservable_zone) {
+                        refinement_frontiers_.push_back(df);
+                        refinement_frontier_persistence_counters_.push_back(0);
+                    }
+                }
             }
         }
+
+
+
 
 
         frontier_map_updated_ = true;

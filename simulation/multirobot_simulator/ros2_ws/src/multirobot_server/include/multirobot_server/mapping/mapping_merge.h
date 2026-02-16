@@ -135,11 +135,10 @@ namespace multirobot_slam
         std::unordered_set<int> global_visited_indices_;
         std::vector<int> map_observation_count_;
         std::vector<Frontier, Eigen::aligned_allocator<Frontier>> frontiers_;
-        std::vector<Frontier, Eigen::aligned_allocator<Frontier>> refinement_frontiers_raw_;
         std::vector<Frontier, Eigen::aligned_allocator<Frontier>> refinement_frontiers_;
 
         std::vector<Eigen::Vector2d> unobservable_zones_;
-        std::vector<double> last_refinement_frontier_avg_obs_;
+        std::vector<int> refinement_frontier_persistence_counters_;
 
         bool map_updated_;
         bool costmap_updated_;
