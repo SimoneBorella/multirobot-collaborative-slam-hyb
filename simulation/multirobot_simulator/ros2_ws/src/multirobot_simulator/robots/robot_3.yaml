@@ -2,21 +2,17 @@ name: robot_3
 random_spawn: False
 seed: 20
 position:
-  x: 0.0
+  x: -1.0
   y: -1.0
-  theta: 270
-# position:
-#   x: 2.0
-#   y: -6.0
-#   theta: 270
+  theta: 0
 shape:
   type: circle
   diameter: 0.20
 sensors:
   - type: imu
     name: imu
-    linear_bias_std_dev: 0.0001    # Standard deviation of linear noise
-    angular_bias_std_dev: 0.00001   # Standard deviation of angular noise
+    linear_bias_std_dev: 0.001    # Standard deviation of linear noise
+    angular_bias_std_dev: 0.0001   # Standard deviation of angular noise
     alpha: 0.995                # Correlation factor (Gauss-Markov)
     linear_bias: 0.0    # Bias error for linear velocity
     angular_bias: 0.0    # Bias error for angular velocity
@@ -42,6 +38,7 @@ sensors:
     max_range: 10 # Max range of the lidar (m)
     field_of_view: 90 # Field of view (degrees)
     frequency: 30  # Frames per second
-    noise_std_dev: 0.01 # Standard deviation of the noise
+    noise_std_dev: 0.005 # Standard deviation of the noise
+    # noise_std_dev: 0.0 # Standard deviation of the noise
     miss_rate: 0.1
-    outlier_rate: 0.05
+    outlier_rate: 0.0

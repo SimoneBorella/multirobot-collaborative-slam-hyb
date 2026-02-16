@@ -898,7 +898,7 @@ namespace multirobot_slam
 
 
         // Monte carlo sampling around robot positions
-        int n_samples = 1000;
+        int n_samples = 250;
         double max_radius = 10.0;
 
         {

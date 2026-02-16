@@ -3,8 +3,8 @@ random_spawn: False
 seed: 19
 position:
   x: -1.0
-  y: 0.0
-  theta: 180
+  y: 1.0
+  theta: 0
 shape:
   type: circle
   diameter: 0.20
@@ -41,4 +41,4 @@ sensors:
     noise_std_dev: 0.005 # Standard deviation of the noise
     # noise_std_dev: 0.0 # Standard deviation of the noise
     miss_rate: 0.1
-    outlier_rate: 0.05
+    outlier_rate: 0.0
