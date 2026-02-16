@@ -54,6 +54,7 @@ docker run -it \
     --privileged \
     --volume $DOCKERFILE_PATH/ros2_ws:/ros2_ws \
     -p 6981:6080 \
+    --env VNC_RESOLUTION="3000x2000x16" \
     --name $IMAGE \
     --hostname $IMAGE \
     $IMAGE:$TAG \
