@@ -778,7 +778,8 @@ namespace multirobot_slam
         }
 
 
-        // Marginalization old poses and landmarks
+
+        // Remove old landmark symbols
 
         size_t landmarks_max_size = 200;
 
@@ -787,23 +788,6 @@ namespace multirobot_slam
             landmark_symbols_.erase(landmark_symbols_.begin(), landmark_symbols_.begin() + (landmark_symbols_.size() - landmarks_max_size));
         }
 
-
-
-        // FastList<Key> keys_to_marginalize;
-
-        // int horizon = 100;
-        // if (t_ >= horizon)
-        // {
-        //     Symbol x_old('x', t_-horizon);
-        //     keys_to_marginalize.push_back(x_old);
-        // }
-        
-        // try {
-        //     std::lock_guard<std::mutex> lock(isam_mutex_);
-        //     isam_.marginalizeLeaves(keys_to_marginalize);
-        //             } catch (const std::exception& e) {
-        //     std::cerr << "Backend marginalization error: " << e.what() << std::endl;
-        // }
 
 
         // Update discrete time

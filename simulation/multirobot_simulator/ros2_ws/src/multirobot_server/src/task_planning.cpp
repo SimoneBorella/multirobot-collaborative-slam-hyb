@@ -289,7 +289,7 @@ namespace multirobot_slam
                         0.0, 1.0
                     );
                     explorative_robots.push_back(robot);
-                    std::cout << "SOFT INFORMATION GAIN MODE - " << "Lambda: " << lambda_r[robot] << std::endl;
+                    // std::cout << "SOFT INFORMATION GAIN MODE - " << "Lambda: " << lambda_r[robot] << std::endl;
                 }
                 else
                 {
