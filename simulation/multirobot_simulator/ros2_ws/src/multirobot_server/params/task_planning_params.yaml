@@ -13,6 +13,8 @@ d_opt_threshold_soft: -18
 d_opt_threshold_hard: -10
 
 min_keypoints_number: 10
+
 w_keyframe_distance: 0.5
-w_information_gain: 0.4
-w_keyframe_switch: 0.1
+w_keyframe_orientation: 0.1
+w_keyframe_information_gain: 0.4
+w_keyframe_switch: 0.2

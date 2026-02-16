@@ -139,8 +139,10 @@ public:
 
         occupancy_map = std::make_shared<std::vector<std::vector<int8_t>>>(height, std::vector<int8_t>(width));
 
-        for (size_t h = 0; h < height; h++) {
-            for (size_t w = 0; w < width; w++) {
+        for (int h = height - 1; h >= 0; h--)
+        {
+            for (size_t w = 0; w < width; w++)
+            {
                 uint8_t pixel = file.get();
                 if (pixel == 0) {
                     (*occupancy_map)[h][w] = 100; // Occupied

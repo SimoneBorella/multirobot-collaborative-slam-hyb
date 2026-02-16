@@ -9,7 +9,7 @@ occ_belief: 0.80
 distance_belief_factor: 0.03
 log_odds_min: -100.0
 log_odds_max: 100.0
-noise_radius: 0.07
+noise_radius: 0.03
 noise_std_dev: 0.1
 
 obstacle_threshold: 0.70

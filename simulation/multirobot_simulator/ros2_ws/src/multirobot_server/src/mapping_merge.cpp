@@ -4,12 +4,12 @@
 namespace multirobot_slam
 {
     MappingMerge::MappingMerge()
-        : map_updated_(true), costmap_updated_(true), refinement_frontier_map_updated_(true), frontiers_updated_(true), refinement_frontiers_updated_(true), mapping_merge_thread_running_(false)
+        : map_updated_(true), costmap_updated_(true), frontiers_updated_(true), refinement_frontiers_updated_(true), mapping_merge_thread_running_(false)
     {
     }
 
     MappingMerge::MappingMerge(MappingMergeParams &params)
-        : params_(params), map_updated_(true), costmap_updated_(true), refinement_frontier_map_updated_(true), frontiers_updated_(true), refinement_frontiers_updated_(true), mapping_merge_thread_running_(false)
+        : params_(params), map_updated_(true), costmap_updated_(true), frontiers_updated_(true), refinement_frontiers_updated_(true), mapping_merge_thread_running_(false)
     {
     }
 
@@ -114,13 +114,6 @@ namespace multirobot_slam
         frontier_map_.origin_position = map_.origin_position;
         frontier_map_.origin_orientation = map_.origin_orientation;
         frontier_map_.data.resize(map_.width * map_.height, -1);
-
-        refinement_frontier_map_.resolution = map_.resolution;
-        refinement_frontier_map_.width = map_.width;
-        refinement_frontier_map_.height = map_.height;
-        refinement_frontier_map_.origin_position = map_.origin_position;
-        refinement_frontier_map_.origin_orientation = map_.origin_orientation;
-        refinement_frontier_map_.data.resize(map_.width * map_.height, -1);
 
         map_observation_count_.assign(map_.width * map_.height, 0);
 
@@ -389,25 +382,12 @@ namespace multirobot_slam
     }
 
 
-    std::optional<Map> MappingMerge::get_refinement_frontier_map_if_updated()
-    {
-        if (refinement_frontier_map_updated_)
-        {
-            refinement_frontier_map_updated_ = false;
-            return refinement_frontier_map_;
-        }
-        else
-        {
-            return std::nullopt;
-        }
-    }
-
-    std::vector<Frontier> MappingMerge::get_frontiers()
+    std::vector<Frontier, Eigen::aligned_allocator<Frontier>> MappingMerge::get_frontiers()
     {
         return frontiers_;
     }
 
-    std::optional<std::vector<Frontier>> MappingMerge::get_frontiers_if_updated()
+    std::optional<std::vector<Frontier, Eigen::aligned_allocator<Frontier>>> MappingMerge::get_frontiers_if_updated()
     {
         if (frontiers_updated_)
         {
@@ -420,12 +400,12 @@ namespace multirobot_slam
         }
     }
 
-    std::vector<Frontier> MappingMerge::get_refinement_frontiers()
+    std::vector<Frontier, Eigen::aligned_allocator<Frontier>> MappingMerge::get_refinement_frontiers()
     {
         return refinement_frontiers_;
     }
 
-    std::optional<std::vector<Frontier>> MappingMerge::get_refinement_frontiers_if_updated()
+    std::optional<std::vector<Frontier, Eigen::aligned_allocator<Frontier>>> MappingMerge::get_refinement_frontiers_if_updated()
     {
         if (refinement_frontiers_updated_)
         {
@@ -545,9 +525,9 @@ namespace multirobot_slam
     }
 
 
-    std::vector<Frontier> MappingMerge::frontier_centroids_detection(const std::map<int, std::vector<std::pair<int, int>>>& frontier_clusters, double min_frontier_size)
+    std::vector<Frontier, Eigen::aligned_allocator<Frontier>> MappingMerge::frontier_centroids_detection(const std::map<int, std::vector<std::pair<int, int>>>& frontier_clusters, double min_frontier_size)
     {
-        std::vector<Frontier> frontiers;
+        std::vector<Frontier, Eigen::aligned_allocator<Frontier>> frontiers;
 
         for (const auto& [cluster_id, cluster] : frontier_clusters)
         {
@@ -600,18 +580,17 @@ namespace multirobot_slam
     }
 
 
-    std::vector<Frontier> MappingMerge::dbscan(const std::vector<Frontier>& points, int min_points, double epsilon)
+    std::vector<Frontier, Eigen::aligned_allocator<Frontier>> MappingMerge::dbscan(const std::vector<Frontier, Eigen::aligned_allocator<Frontier>>& points, int min_points, double epsilon)
     {
         int n = points.size();
         if (n == 0) return {};
 
-        std::vector<int> labels(n, 0); // 0: unvisited, -1: noise, >0: cluster_id
+        std::vector<int> labels(n, 0);
         int cluster_id = 0;
-        std::vector<Frontier> results;
+        std::vector<Frontier, Eigen::aligned_allocator<Frontier>> results;
         double epsilon_sq = epsilon * epsilon;
 
         for (int i = 0; i < n; ++i) {
-            // Salta se già processato o se il punto iniziale è invalido
             if (labels[i] != 0 || !std::isfinite(points[i].centroid.x())) continue;
 
             std::vector<int> neighbors;
@@ -630,7 +609,6 @@ namespace multirobot_slam
             cluster_id++;
             labels[i] = cluster_id;
             
-            // Inizializzazione pulita
             Eigen::Vector2d cluster_centroid_sum = points[i].centroid;
             double cluster_total_size = points[i].size;
             int cluster_count = 1;
@@ -639,7 +617,7 @@ namespace multirobot_slam
             for (int idx : neighbors) {
                 if (idx == i) continue;
                 if (labels[idx] == 0) {
-                    labels[idx] = cluster_id; // Segna come visitato PRIMA di inserire in coda
+                    labels[idx] = cluster_id;
                     q.push(idx);
                 }
             }
@@ -661,11 +639,11 @@ namespace multirobot_slam
 
                 if (next_neighbors.size() >= (size_t)min_points) {
                     for (int next_idx : next_neighbors) {
-                        if (labels[next_idx] <= 0) { // Se è unvisited (0) o noise (-1)
+                        if (labels[next_idx] <= 0) {
                             if (labels[next_idx] == 0) {
                                 q.push(next_idx);
                             }
-                            labels[next_idx] = cluster_id; // Evita inserimenti multipli
+                            labels[next_idx] = cluster_id;
                         }
                     }
                 }
@@ -777,6 +755,77 @@ namespace multirobot_slam
 
 
 
+        
+
+
+
+
+
+        // Unobservability check
+        if (!refinement_frontiers_raw_.empty()) 
+        {
+            if (last_refinement_frontier_avg_obs_.size() != refinement_frontiers_raw_.size()) {
+                last_refinement_frontier_avg_obs_.resize(refinement_frontiers_raw_.size(), 0.0);
+            }
+
+            std::lock_guard<std::mutex> lock(robot_poses_mutex_);
+            
+            for (size_t i = 0; i < refinement_frontiers_raw_.size(); ) 
+            {
+                const auto& f = refinement_frontiers_raw_[i];
+                bool removed = false;
+
+                for (const auto& [_, robot_pose] : robot_poses_) 
+                {
+                    double dist_to_robot = (f.centroid - Eigen::Vector2d(robot_pose.position.x(), robot_pose.position.y())).norm();
+                    
+                    if (dist_to_robot < 1.5) 
+                    {
+                        int gx = static_cast<int>((f.centroid.x() - map_.origin_position.x()) / map_.resolution);
+                        int gy = static_cast<int>((f.centroid.y() - map_.origin_position.y()) / map_.resolution);
+                        
+                        double sum_obs = 0;
+                        int valid_neighbors = 0;
+
+                        for (int dy = -2; dy <= 2; dy++)
+                        {
+                            for (int dx = -2; dx <= 2; dx++)
+                            {
+                                int nidx = (gy + dy) * map_.width + (gx + dx);
+                                
+                                if (filtered_map_.data[nidx] != -1)
+                                {
+                                    sum_obs += map_observation_count_[nidx];
+                                    valid_neighbors++;
+                                }
+                            }
+                        }
+
+
+                        
+                        double avg_obs = 0.0;
+                        
+                        if(valid_neighbors > 0)
+                            avg_obs = sum_obs/valid_neighbors;
+                        
+
+                        if (avg_obs <= last_refinement_frontier_avg_obs_[i] && last_refinement_frontier_avg_obs_[i] > 0) 
+                        {
+                            unobservable_zones_.push_back(f.centroid);
+                            refinement_frontiers_raw_.erase(refinement_frontiers_raw_.begin() + i);
+                            last_refinement_frontier_avg_obs_.erase(last_refinement_frontier_avg_obs_.begin() + i);
+                            removed = true;
+                            break; 
+                        }
+                        
+                        last_refinement_frontier_avg_obs_[i] = avg_obs;
+                    }
+                }
+
+                if (!removed) i++;
+            }
+        }
+
 
 
 
@@ -790,15 +839,20 @@ namespace multirobot_slam
         // Check previously detected refinement frontiers
         if (!refinement_frontiers_raw_.empty()) 
         {
-            refinement_frontiers_raw_.erase(
-                std::remove_if(refinement_frontiers_raw_.begin(), refinement_frontiers_raw_.end(),
-                [this](const Frontier& f) {
+            for (size_t i = 0; i < refinement_frontiers_raw_.size();)
+            {
+                const auto& f = refinement_frontiers_raw_[i];
+                int gx = static_cast<int>((f.centroid.x() - map_.origin_position.x()) / map_.resolution);
+                int gy = static_cast<int>((f.centroid.y() - map_.origin_position.y()) / map_.resolution);
 
-                    int gx = static_cast<int>((f.centroid.x() - map_.origin_position.x()) / map_.resolution);
-                    int gy = static_cast<int>((f.centroid.y() - map_.origin_position.y()) / map_.resolution);
+                bool should_remove = false;
 
-                    if (gx < 2 || gx >= map_.width - 2 || gy < 2 || gy >= map_.height - 2) return true;
-
+                if (gx < 2 || gx >= map_.width - 2 || gy < 2 || gy >= map_.height - 2)
+                {
+                    should_remove = true;
+                }
+                else
+                {
                     double sum_obs = 0;
                     double sum_variance = 0;
                     int valid_neighbors = 0;
@@ -808,7 +862,6 @@ namespace multirobot_slam
                         for (int dx = -2; dx <= 2; dx++)
                         {
                             int nidx = (gy + dy) * map_.width + (gx + dx);
-                            
                             if (filtered_map_.data[nidx] != -1)
                             {
                                 sum_obs += map_observation_count_[nidx];
@@ -825,12 +878,22 @@ namespace multirobot_slam
                         double avg_var = sum_variance / valid_neighbors;
 
                         bool still_uncertain = (avg_var > params_.refinement_variance_threshold || avg_obs < params_.refinement_observations_threshold);
-                        return !still_uncertain; 
+                        should_remove = !still_uncertain;
+                    } else
+                    {
+                        should_remove = true;
                     }
-                    return true;
-                }), 
-                refinement_frontiers_raw_.end()
-            );
+                }
+
+                if (should_remove)
+                {
+                    refinement_frontiers_raw_.erase(refinement_frontiers_raw_.begin() + i);
+                    last_refinement_frontier_avg_obs_.erase(last_refinement_frontier_avg_obs_.begin() + i);
+                } else
+                {
+                    i++;
+                }
+            }
         }
 
 
@@ -850,6 +913,17 @@ namespace multirobot_slam
                     
                     double wx = pose.position.x() + r * std::cos(theta);
                     double wy = pose.position.y() + r * std::sin(theta);
+
+                    // Check if inside unobservable zone
+                    bool in_unobservable_zone = false;
+                    for (const auto& uz : unobservable_zones_) {
+                        if ((Eigen::Vector2d(wx, wy) - uz).norm() < 1.5) {
+                            in_unobservable_zone = true;
+                            break;
+                        }
+                    }
+                    if (in_unobservable_zone)
+                        continue;
     
                     int gx = static_cast<int>((wx - map_.origin_position.x()) / map_.resolution);
                     int gy = static_cast<int>((wy - map_.origin_position.y()) / map_.resolution);
@@ -907,6 +981,7 @@ namespace multirobot_slam
                                     cand.centroid = Eigen::Vector2d(wx, wy);
                                     cand.size = -1.0;
                                     refinement_frontiers_raw_.push_back(cand);
+                                    last_refinement_frontier_avg_obs_.push_back(avg_obs);
                                 }
                             }
                         }
@@ -945,12 +1020,13 @@ namespace multirobot_slam
 
 
             frontiers_ = frontier_centroids_detection(frontier_clusters, params_.min_frontier_size);
-            std::vector<Frontier> discarded_frontiers_ = frontier_centroids_detection(discarded_frontier_clusters, 0);
+            std::vector<Frontier, Eigen::aligned_allocator<Frontier>> discarded_frontiers_ = frontier_centroids_detection(discarded_frontier_clusters, 0);
 
             for (auto& df : discarded_frontiers_)
             {
                 df.size = -1.0;
                 refinement_frontiers_raw_.push_back(df);
+                last_refinement_frontier_avg_obs_.push_back(0.0);
             }
         }
 
@@ -983,7 +1059,6 @@ namespace multirobot_slam
 
         frontier_map_updated_ = true;
         frontiers_updated_ = true;
-        refinement_frontier_map_updated_ = true;
         refinement_frontiers_updated_ = true;
 
 

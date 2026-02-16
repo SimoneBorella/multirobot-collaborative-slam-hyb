@@ -1,17 +1,17 @@
 obstacles:
-- type: "circle"
-  x: 6.0
-  y: 0.0
-  r: 0.4
+# - type: "circle"
+#   x: 6.0
+#   y: 0.0
+#   r: 0.4
 
-- type: "rectangle"
-  x: 6.0
-  y: -6.0
-  theta: 0.7854
-  w: 1.5
-  h: 0.75
+# - type: "rectangle"
+#   x: 6.0
+#   y: -6.0
+#   theta: 0.7854
+#   w: 1.5
+#   h: 0.75
 
-- type: "circle"
-  x: 0.0
-  y: -6.0
-  r: 0.3
+# - type: "circle"
+#   x: 0.0
+#   y: -6.0
+#   r: 0.3

@@ -91,7 +91,7 @@ namespace multirobot_slam
         std::map<int, KeyFrame> keyframes_;
         std::mutex keyframes_mutex_;
 
-        std::vector<PosedScan> posed_scan_buffer_;
+        std::vector<PosedScan, Eigen::aligned_allocator<PosedScan>> posed_scan_buffer_;
         std::mutex buffer_mutex_;
 
         std::map<int, Submap> submaps_;

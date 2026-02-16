@@ -46,7 +46,8 @@ namespace multirobot_slam
         int min_keypoints_number;
 
         double w_keyframe_distance;
-        double w_information_gain;
+        double w_keyframe_orientation;
+        double w_keyframe_information_gain;
         double w_keyframe_switch;
 
         TaskPlanningParams(
@@ -62,7 +63,8 @@ namespace multirobot_slam
             double d_opt_threshold_hard = -5.0,
             int min_keypoints_number = 25,
             double w_keyframe_distance = 0.3,
-            double w_information_gain = 0.7,
+            double w_keyframe_orientation = 0.1,
+            double w_keyframe_information_gain = 0.7,
             double w_keyframe_switch = 0.2)
             : w_distance(w_distance),
               w_orientation(w_orientation),
@@ -76,7 +78,8 @@ namespace multirobot_slam
               d_opt_threshold_hard(d_opt_threshold_hard),
               min_keypoints_number(min_keypoints_number),
               w_keyframe_distance(w_keyframe_distance),
-              w_information_gain(w_information_gain),
+              w_keyframe_orientation(w_keyframe_orientation),
+              w_keyframe_information_gain(w_keyframe_information_gain),
               w_keyframe_switch(w_keyframe_switch){}
     };
 
@@ -94,7 +97,7 @@ namespace multirobot_slam
 
         Pose compose_global_pose(const Pose& initial, const Pose& local);
         bool task_reached(const Pose& current, const Task& target);
-        std::map<std::string, Task> plan_tasks(std::map<std::string, Pose> robot_poses, std::vector<Frontier> frontiers, std::vector<Frontier> refinement_frontiers);
+        std::map<std::string, Task> plan_tasks(std::map<std::string, Pose> robot_poses, std::vector<Frontier, Eigen::aligned_allocator<Frontier>> frontiers, std::vector<Frontier, Eigen::aligned_allocator<Frontier>> refinement_frontiers);
     private:
         TaskPlanningParams params_;
         std::map<std::string, Pose> robot_initial_poses_;
@@ -102,6 +105,8 @@ namespace multirobot_slam
 
         std::map<std::string, State> robot_state_;
         std::map<std::string, std::map<int, KeyFrame>> robot_keyframes_;
+
+        std::map<std::string, bool> robot_last_keyframe_choice_;
 
         std::map<std::string, Task> active_hard_information_gain_tasks_;
     };

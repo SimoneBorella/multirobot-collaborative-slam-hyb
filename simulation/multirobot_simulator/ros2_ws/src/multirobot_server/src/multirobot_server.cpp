@@ -132,9 +132,6 @@ public:
         std::string frontier_map_topic = "/frontier_map";
         frontier_map_publisher_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(frontier_map_topic, map_qos_profile);
 
-        std::string refinement_frontier_map_topic = "/refinement_frontier_map";
-        refinement_frontier_map_publisher_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(refinement_frontier_map_topic, map_qos_profile);
-
         std::string frontiers_marker_topic = "/frontiers_marker";
         frontiers_marker_publisher_ = this->create_publisher<visualization_msgs::msg::Marker>(frontiers_marker_topic, 10);
 
@@ -504,27 +501,7 @@ public:
         frontier_map_publisher_->publish(map_msg);
     }
 
-    void publish_refinement_frontier_map(const Map& refinement_frontier_map)
-    {
-        nav_msgs::msg::OccupancyGrid map_msg;
-        map_msg.header.stamp = this->now();
-        map_msg.header.frame_id = world_frame_;
-        map_msg.info.resolution = refinement_frontier_map.resolution;
-        map_msg.info.width = refinement_frontier_map.width;
-        map_msg.info.height = refinement_frontier_map.height;
-        map_msg.info.origin.position.x = refinement_frontier_map.origin_position.x();
-        map_msg.info.origin.position.y = refinement_frontier_map.origin_position.y();
-        map_msg.info.origin.position.z = refinement_frontier_map.origin_position.z();
-        map_msg.info.origin.orientation.w = refinement_frontier_map.origin_orientation.w();
-        map_msg.info.origin.orientation.x = refinement_frontier_map.origin_orientation.x();
-        map_msg.info.origin.orientation.y = refinement_frontier_map.origin_orientation.y();
-        map_msg.info.origin.orientation.z = refinement_frontier_map.origin_orientation.z();
-        map_msg.data = refinement_frontier_map.data;
-        refinement_frontier_map_publisher_->publish(map_msg);
-    }
-
-
-    void publish_frontiers_marker(const std::vector<Frontier>& frontiers)
+    void publish_frontiers_marker(const std::vector<Frontier, Eigen::aligned_allocator<Frontier>>& frontiers)
     {
         visualization_msgs::msg::Marker frontiers_marker = visualization_msgs::msg::Marker();
         frontiers_marker.header.stamp = this->now();
@@ -554,7 +531,7 @@ public:
         frontiers_marker_publisher_->publish(frontiers_marker);
     }
 
-    void publish_refinement_frontiers_marker(const std::vector<Frontier>& frontiers)
+    void publish_refinement_frontiers_marker(const std::vector<Frontier, Eigen::aligned_allocator<Frontier>>& frontiers)
     {
         visualization_msgs::msg::Marker frontiers_marker = visualization_msgs::msg::Marker();
         frontiers_marker.header.stamp = this->now();
@@ -674,18 +651,11 @@ public:
             publish_frontier_map(frontier_map.value());
         }
 
-        const std::optional<Map> &refinement_frontier_map = mapping_merge_.get_refinement_frontier_map_if_updated();
+        const std::optional<std::vector<Frontier, Eigen::aligned_allocator<Frontier>>> &frontiers_opt = mapping_merge_.get_frontiers_if_updated();
+        const std::optional<std::vector<Frontier, Eigen::aligned_allocator<Frontier>>> &refinement_frontiers_opt = mapping_merge_.get_refinement_frontiers_if_updated();
 
-        if (refinement_frontier_map.has_value())
-        {
-            publish_refinement_frontier_map(refinement_frontier_map.value());
-        }
-
-        const std::optional<std::vector<Frontier>> &frontiers_opt = mapping_merge_.get_frontiers_if_updated();
-        const std::optional<std::vector<Frontier>> &refinement_frontiers_opt = mapping_merge_.get_refinement_frontiers_if_updated();
-
-        const std::vector<Frontier> frontiers = frontiers_opt.has_value() ? frontiers_opt.value() : std::vector<Frontier>{};
-        const std::vector<Frontier> refinement_frontiers = refinement_frontiers_opt.has_value() ? refinement_frontiers_opt.value() : std::vector<Frontier>{};
+        const std::vector<Frontier, Eigen::aligned_allocator<Frontier>> frontiers = frontiers_opt.has_value() ? frontiers_opt.value() : std::vector<Frontier, Eigen::aligned_allocator<Frontier>>{};
+        const std::vector<Frontier, Eigen::aligned_allocator<Frontier>> refinement_frontiers = refinement_frontiers_opt.has_value() ? refinement_frontiers_opt.value() : std::vector<Frontier, Eigen::aligned_allocator<Frontier>>{};
         
         publish_frontiers_marker(frontiers);
         publish_refinement_frontiers_marker(refinement_frontiers);
@@ -731,7 +701,6 @@ public:
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr map_publisher_;
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr costmap_publisher_;
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr frontier_map_publisher_;
-    rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr refinement_frontier_map_publisher_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr frontiers_marker_publisher_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr refinement_frontiers_marker_publisher_;
     std::map<std::string, rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr> robot_global_path_publishers_;

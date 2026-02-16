@@ -64,7 +64,7 @@ namespace multirobot_slam
     // {
     //     Path path;
 
-    //     std::vector<Pose> temp_poses;
+    //     std::vector<Pose, Eigen::aligned_allocator<Pose>> temp_poses;
 
     //     std::shared_ptr<AStarNode> current = last;
 
@@ -107,7 +107,7 @@ namespace multirobot_slam
     Path GlobalPlanning::reconstructPath(std::shared_ptr<AStarNode> last)
     {
         Path path;
-        std::vector<Pose> temp_poses;
+        std::vector<Pose, Eigen::aligned_allocator<Pose>> temp_poses;
         std::shared_ptr<AStarNode> current = last;
 
         while (current && current->parent) {

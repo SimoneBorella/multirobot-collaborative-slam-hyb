@@ -101,11 +101,11 @@ namespace multirobot_slam
         std::optional<Map> get_costmap_if_updated();
         Map get_frontier_map();
         std::optional<Map> get_frontier_map_if_updated();
-        std::optional<Map> get_refinement_frontier_map_if_updated();
-        std::vector<Frontier> get_frontiers();
-        std::optional<std::vector<Frontier>> get_frontiers_if_updated();
-        std::vector<Frontier> get_refinement_frontiers();
-        std::optional<std::vector<Frontier>> get_refinement_frontiers_if_updated();
+        std::vector<Frontier, Eigen::aligned_allocator<Frontier>> get_frontiers();
+        
+        std::optional<std::vector<Frontier, Eigen::aligned_allocator<Frontier>>> get_frontiers_if_updated();
+        std::vector<Frontier, Eigen::aligned_allocator<Frontier>> get_refinement_frontiers();
+        std::optional<std::vector<Frontier, Eigen::aligned_allocator<Frontier>>> get_refinement_frontiers_if_updated();
 
     private:
         double probability_to_log_odds(int8_t prob);
@@ -113,9 +113,9 @@ namespace multirobot_slam
 
         std::vector<int> get_neighbors_indices(const Map& map, int index, int eps_cells, int eps_sq_cells);
         std::map<int, std::vector<std::pair<int, int>>> dbscan_frontier_detection(Map& map, double min_points, double epsilon);
-        std::vector<Frontier> frontier_centroids_detection(const std::map<int, std::vector<std::pair<int, int>>>& frontier_clusters, double min_frontier_size);
+        std::vector<Frontier, Eigen::aligned_allocator<Frontier>> frontier_centroids_detection(const std::map<int, std::vector<std::pair<int, int>>>& frontier_clusters, double min_frontier_size);
 
-        std::vector<Frontier> dbscan(const std::vector<Frontier>& points, int min_points, double epsilon);
+        std::vector<Frontier, Eigen::aligned_allocator<Frontier>> dbscan(const std::vector<Frontier, Eigen::aligned_allocator<Frontier>>& points, int min_points, double epsilon);
 
         void mapping_merge();
 
@@ -133,21 +133,21 @@ namespace multirobot_slam
         int lut_kernel_size_;
         Map frontier_map_;
         std::unordered_set<int> global_visited_indices_;
-        Map refinement_frontier_map_;
         std::vector<int> map_observation_count_;
-        std::vector<Frontier> frontiers_;
-        std::vector<Frontier> refinement_frontiers_raw_;
-        std::vector<Frontier> refinement_frontiers_;
+        std::vector<Frontier, Eigen::aligned_allocator<Frontier>> frontiers_;
+        std::vector<Frontier, Eigen::aligned_allocator<Frontier>> refinement_frontiers_raw_;
+        std::vector<Frontier, Eigen::aligned_allocator<Frontier>> refinement_frontiers_;
+
+        std::vector<Eigen::Vector2d> unobservable_zones_;
+        std::vector<double> last_refinement_frontier_avg_obs_;
 
         bool map_updated_;
         bool costmap_updated_;
         bool frontier_map_updated_;
-        bool refinement_frontier_map_updated_;
         bool frontiers_updated_;
         bool refinement_frontiers_updated_;
 
-        std::map<std::string, std::vector<Frontier>> robot_frontiers_data_;
-
+        std::map<std::string, std::vector<Frontier, Eigen::aligned_allocator<Frontier>>> robot_frontiers_data_;
         
         std::mutex robot_poses_mutex_;
 

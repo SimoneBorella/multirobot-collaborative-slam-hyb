@@ -31,7 +31,8 @@ namespace multirobot_slam
             if (config["d_opt_threshold_hard"]) p.d_opt_threshold_hard = config["d_opt_threshold_hard"].as<double>();
             if (config["min_keypoints_number"]) p.min_keypoints_number = config["min_keypoints_number"].as<int>();
             if (config["w_keyframe_distance"]) p.w_keyframe_distance = config["w_keyframe_distance"].as<double>();
-            if (config["w_information_gain"]) p.w_information_gain = config["w_information_gain"].as<double>();
+            if (config["w_keyframe_orientation"]) p.w_keyframe_orientation = config["w_keyframe_orientation"].as<double>();
+            if (config["w_keyframe_information_gain"]) p.w_keyframe_information_gain = config["w_keyframe_information_gain"].as<double>();
             if (config["w_keyframe_switch"]) p.w_keyframe_switch = config["w_keyframe_switch"].as<double>();
         }
         catch (const std::exception &e)
@@ -155,16 +156,24 @@ namespace multirobot_slam
 
 
 
-    std::map<std::string, Task> TaskPlanning::plan_tasks(std::map<std::string, Pose> robot_poses, std::vector<Frontier> frontiers, std::vector<Frontier> refinement_frontiers)
+    std::map<std::string, Task> TaskPlanning::plan_tasks(std::map<std::string, Pose> robot_poses, std::vector<Frontier, Eigen::aligned_allocator<Frontier>> frontiers, std::vector<Frontier, Eigen::aligned_allocator<Frontier>> refinement_frontiers)
     {
         std::map<std::string, Task> tasks;
 
         if (robot_poses.empty())
             return tasks;
 
+        for (const auto& [robot, _] : robot_poses)
+        {
+            if(robot_last_keyframe_choice_.find(robot) == robot_last_keyframe_choice_.end())
+            {
+                robot_last_keyframe_choice_[robot] = false;
+            }
+        }
+
         // Merge frontiers if information gain mode
 
-        std::vector<Frontier> merged_frontiers;
+        std::vector<Frontier, Eigen::aligned_allocator<Frontier>> merged_frontiers;
 
         if(params_.information_gain_mode)
         {
@@ -452,11 +461,14 @@ namespace multirobot_slam
                         kf_global_pose.position.x(),
                         kf_global_pose.position.y()
                     );
+
+                    Eigen::Vector2d delta = kf_pos - robot_pos;
     
                     // Distance
-                    double dist = (kf_pos - robot_pos).norm();
+                    double dist = delta.norm();
 
-                    if(dist < 2.0)
+                    // If first keyframe choice choose a far keyframe
+                    if(robot_last_keyframe_choice_[robot] == false && dist < 2.0)
                     {
                         values[n_frontiers + k] = 1e-6;
                         k++;
@@ -465,6 +477,11 @@ namespace multirobot_slam
 
                     // Distance score
                     double dist_score = 1.0 - dist / max_keyframe_distance;
+
+                    // Orientation score
+                    double bearing = std::atan2(delta.y(), delta.x());
+                    double orientation_score = 1 - std::abs(std::atan2(std::sin(bearing - robot_yaw), std::cos(bearing - robot_yaw))) / M_PI;
+
     
                     // Information gain score
                     double information_gain_score = 1 - relative_covariance_dets[kf_id]/max_relative_covariance_det;
@@ -480,13 +497,15 @@ namespace multirobot_slam
                     // Score normalized
                     double score =
                         params_.w_keyframe_distance * dist_score +
-                        params_.w_information_gain * information_gain_score +
+                        params_.w_keyframe_orientation * orientation_score +
+                        params_.w_keyframe_information_gain * information_gain_score +
                         params_.w_keyframe_switch * keyframe_switch_score;
     
                     // Weighted sum
                     double sumw =
                         params_.w_keyframe_distance +
-                        params_.w_information_gain +
+                        params_.w_keyframe_orientation +
+                        params_.w_keyframe_information_gain +
                         params_.w_keyframe_switch;
     
                     if (sumw > 0.0)
@@ -500,7 +519,7 @@ namespace multirobot_slam
                     values[n_frontiers + k] = std::max(score, 1e-6);
                     k++;
 
-                    // std::cout << kf_id << ": dist - " << params_.w_keyframe_distance * (1.0 - std::min(dist / max_keyframe_distance, 1.0)) << " - mahalanobis - " << params_.w_information_gain * (std::min(normalized_mahalanobis_dist, 1.0)) << " - lambda - " << lambda_r[robot] << std::endl;
+                    // std::cout << kf_id << ": dist - " << params_.w_keyframe_distance * (1.0 - std::min(dist / max_keyframe_distance, 1.0)) << " - mahalanobis - " << params_.w_keyframe_information_gain * (std::min(normalized_mahalanobis_dist, 1.0)) << " - lambda - " << lambda_r[robot] << std::endl;
                 }
             }
 
@@ -562,6 +581,8 @@ namespace multirobot_slam
                 t.pose.position.x() = merged_frontiers[assignment].centroid.x();
                 t.pose.position.y() = merged_frontiers[assignment].centroid.y();
                 t.oriented = false;
+
+                robot_last_keyframe_choice_[robot] = false;
             }
             else
             {
@@ -577,6 +598,8 @@ namespace multirobot_slam
 
                 t.pose = kf_global_pose;
                 t.oriented = true;
+
+                robot_last_keyframe_choice_[robot] = true;
             }
 
             tasks[robot] = t;
@@ -673,12 +696,12 @@ namespace multirobot_slam
                     // Score normalized
                     double score =
                         params_.w_keyframe_distance * dist_score +
-                        params_.w_information_gain * information_gain_score;
+                        params_.w_keyframe_information_gain * information_gain_score;
 
                     // Weighted sum
                     double sumw =
                         params_.w_keyframe_distance +
-                        params_.w_information_gain;
+                        params_.w_keyframe_information_gain;
 
                     if (sumw > 0.0)
                         score /= sumw;

@@ -211,7 +211,7 @@ namespace multirobot_slam
 
     void SubmapManager::submaps_mapping()
     {
-        std::vector<PosedScan> posed_scan_buffer;
+        std::vector<PosedScan, Eigen::aligned_allocator<PosedScan>> posed_scan_buffer;
 
         {
             std::lock_guard<std::mutex> lock(buffer_mutex_);

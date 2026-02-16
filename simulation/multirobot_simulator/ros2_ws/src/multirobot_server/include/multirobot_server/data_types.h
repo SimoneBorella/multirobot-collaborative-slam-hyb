@@ -10,7 +10,7 @@ namespace multirobot_slam
     struct Pose
     {
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-        
+
         Eigen::Vector3d position;
         Eigen::Quaterniond orientation;
 
@@ -208,6 +208,7 @@ namespace multirobot_slam
     struct Task
     {
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
         Pose pose;
         bool oriented;
     };
@@ -215,7 +216,8 @@ namespace multirobot_slam
     struct Path
     {
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-        std::vector<Pose> poses;
+
+        std::vector<Pose, Eigen::aligned_allocator<Pose>> poses;
         Eigen::Quaterniond final_orientation;
     };
 

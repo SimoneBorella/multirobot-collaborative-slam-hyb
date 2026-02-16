@@ -399,7 +399,7 @@ namespace multirobot_slam
         return results;
     }
 
-    std::vector<std::pair<Symbol, double>> Backend::probabilistic_data_association(const Point3 &observed_point, const Values &estimates, const Marginals &marginals)
+    std::vector<std::pair<Symbol, double>> Backend::probabilistic_data_association(const Point3 &observed_point, const Values &estimates, const Marginals &marginals, const Matrix6 robot_cov)
     {
         std::vector<std::pair<Symbol, double>> results;
 
@@ -424,12 +424,47 @@ namespace multirobot_slam
             Matrix3 cov;
             try
             {
-                cov = marginals.marginalCovariance(l);
+                // Pre-computed estimate
+                // cov = isam_.marginalCovariance(l);
+
+
+
+
+                // Faster marginal estimation from bayes tree
+                // cov = marginals.marginalCovariance(l);
+                
+
+
+
+                // Obseravtion count based covariance
+                // double sigma_init = params_.sigma_keypoint_noise; 
+                // double sigma_min = 0.005;
+                // double decay_rate = 0.5;
+
+                // int n = 0;
+                // if (landmark_observation_count_.count(l)) {
+                //     n = landmark_observation_count_[l];
+                // }
+
+                // // Observation sigma_n = sigma_min + (sigma_init - sigma_min) * exp(-decay_rate * n)
+                // double current_sigma = sigma_min + (sigma_init - sigma_min) * std::exp(-decay_rate * n);
+
+                // // Current robot covariance
+                // Matrix3 robot_pos_cov = robot_cov.block<3,3>(0,0);
+
+                // // Sum of estimated landmark covariance + current robot covariance
+                // cov = Matrix3::Identity() * (current_sigma * current_sigma) + robot_pos_cov;
+
+
+
+
+                // Assumption based covariance
+                cov = Matrix3::Identity() * (params_.sigma_keypoint_noise * params_.sigma_keypoint_noise);
             }
             catch (...)
             {
-                // Assumption
-                cov = Matrix3::Identity() * 0.05 * 0.05;
+                // Assumption based covariance
+                cov = Matrix3::Identity() * (params_.sigma_keypoint_noise * params_.sigma_keypoint_noise);
             }
 
             double cov_determinant = cov.determinant();
@@ -445,9 +480,9 @@ namespace multirobot_slam
             // where x = observed_point, mu = landmark_estimate, sigma = covariance matrix
             double mahalanobis_dist = std::sqrt(dist.transpose() * cov_inv * dist);
 
-            // double mahalanobis_dist_threshold = 5.0;
-            // if (mahalanobis_dist > mahalanobis_dist_threshold)
-            //     continue;
+            double mahalanobis_dist_threshold = 3.0;
+            if (mahalanobis_dist > mahalanobis_dist_threshold)
+                continue;
 
             // Compute the likelihood assuming a 3D Gaussian distribution:
             //   p(x) = (1 / ((2PI)^(n/2) * |sigma|^(1/2))) * exp(-0.5 * mahalanobis_dist^2)
@@ -609,12 +644,21 @@ namespace multirobot_slam
                 Point3 keypoint_observation(point_map.x(), point_map.y(), point_map.z());
 
                 // Data association
-                auto associations = probabilistic_data_association(keypoint_observation, estimates, marginals);
+                std::vector<std::pair<Symbol, double>> associations;
+                {
+                    std::lock_guard<std::mutex> lock(isam_mutex_);
+                    associations = probabilistic_data_association(keypoint_observation, estimates, marginals, state_.covariance);
+                }
                 
                 if (!associations.empty())
                 {
                     for (const auto &[associated_l, probability] : associations)
                     {
+                        if (probability > 0.8)
+                        { 
+                            landmark_observation_count_[associated_l]++;
+                        }
+
                         // To scale information
                         // I * p  =>  S / p => sigmas / sqrt(p)
                         auto scaled_noise = noiseModel::Robust::Create(
@@ -630,6 +674,8 @@ namespace multirobot_slam
                     Symbol l('l', landmark_id_++);
                     new_estimates.insert(l, keypoint_observation);
                     landmark_symbols_.push_back(l);
+
+                    landmark_observation_count_[l] = 1;
 
                     auto huber_noise = noiseModel::Robust::Create(
                         noiseModel::mEstimator::Huber::Create(1.345),
@@ -693,19 +739,7 @@ namespace multirobot_slam
             }
         }
 
-        // Queues pruning
 
-        size_t landmarks_max_size = 200;
-
-        if (landmark_symbols_.size() > landmarks_max_size)
-        {
-            landmark_symbols_.erase(landmark_symbols_.begin(), landmark_symbols_.begin() + (landmark_symbols_.size() - landmarks_max_size));
-        }
-
-        while (!timestamped_pose_queue_.empty() && ts - timestamped_pose_queue_.front().first > max_timestamped_pose_queue_duration_)
-        {
-            timestamped_pose_queue_.pop_front();
-        }
 
         // Update ISAM2
         Eigen::Matrix<double,6,6> covariance;
@@ -736,7 +770,42 @@ namespace multirobot_slam
 
         state_updated_ = true;
 
+
+        // Update timestamped poses
+        while (!timestamped_pose_queue_.empty() && ts - timestamped_pose_queue_.front().first > max_timestamped_pose_queue_duration_)
+        {
+            timestamped_pose_queue_.pop_front();
+        }
+
+
+        // Marginalization old poses and landmarks
+
+        size_t landmarks_max_size = 200;
+
+        if (landmark_symbols_.size() > landmarks_max_size)
+        {
+            landmark_symbols_.erase(landmark_symbols_.begin(), landmark_symbols_.begin() + (landmark_symbols_.size() - landmarks_max_size));
+        }
+
+
+
+        // FastList<Key> keys_to_marginalize;
+
+        // int horizon = 100;
+        // if (t_ >= horizon)
+        // {
+        //     Symbol x_old('x', t_-horizon);
+        //     keys_to_marginalize.push_back(x_old);
+        // }
         
+        // try {
+        //     std::lock_guard<std::mutex> lock(isam_mutex_);
+        //     isam_.marginalizeLeaves(keys_to_marginalize);
+        //             } catch (const std::exception& e) {
+        //     std::cerr << "Backend marginalization error: " << e.what() << std::endl;
+        // }
+
+
         // Update discrete time
         t_++;
 
@@ -824,7 +893,6 @@ namespace multirobot_slam
 
         if (first_call)
         {
-            // truncate file
             file.open(filename, std::ios::out);
             file << "keyframe_i,keyframe_j,x,y,z,q_w,q_x,q_y,q_z,score\n";
             first_call = false;

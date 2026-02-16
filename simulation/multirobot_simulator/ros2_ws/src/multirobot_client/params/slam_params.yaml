@@ -18,9 +18,9 @@ backend:
     sigma_accelerometer_noise_density: 6e-1    # PSD_accelerometer (m/s^2)/sqrt(s)
     sigma_gyroscope_noise_density: 6e-1        # PSD_gyroscope (rad/s)/sqrt(s)
 
-    sigma_keypoint_noise: 0.015
+    sigma_keypoint_noise: 0.04
 
-    data_association_distance: 0.2
+    data_association_distance: 0.3
 
     keyframe_distance: 0.5
     keyframe_angular_distance: 0.785
