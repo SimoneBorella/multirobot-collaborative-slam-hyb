@@ -57,6 +57,7 @@ docker run -it \
     --env VNC_PASSWORD="password" \
     --name $IMAGE \
     --hostname $IMAGE \
+    --entrypoint "/usr/local/share/desktop-init.sh" \
     $IMAGE:$TAG \
     bash
 
