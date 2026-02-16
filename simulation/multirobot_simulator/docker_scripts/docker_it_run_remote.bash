@@ -54,12 +54,12 @@ docker run -it \
     --privileged \
     --volume $DOCKERFILE_PATH/ros2_ws:/ros2_ws \
     -p 6981:6080 \
+    --env VNC_PASSWORD="" \
     --name $IMAGE \
     --hostname $IMAGE \
     $IMAGE:$TAG \
     /usr/local/share/desktop-init.sh bash
 
-    # --env VNC_PASSWORD="password" \
 
 
     # --volume /dev/bus/usb:/dev/bus/usb \
