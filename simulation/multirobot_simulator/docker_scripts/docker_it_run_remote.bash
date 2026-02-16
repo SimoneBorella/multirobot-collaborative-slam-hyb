@@ -53,7 +53,7 @@ docker run -it \
     --rm \
     --privileged \
     --volume $DOCKERFILE_PATH/ros2_ws:/ros2_ws \
-    -p 6982:6080 \
+    -p 6981:6080 \
     --env VNC_PASSWORD="password" \
     --name $IMAGE \
     --hostname $IMAGE \
