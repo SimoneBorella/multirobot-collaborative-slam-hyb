@@ -18,9 +18,6 @@ Robot::Robot(rclcpp::Node::SharedPtr node, std::shared_ptr<Environment> environm
     cmd_vel_subscription = node->create_subscription<geometry_msgs::msg::Twist>(
         name + "/cmd_vel", 10, std::bind(&Robot::cmdVelCallback, this, std::placeholders::_1));
 
-    cmd_vel_nav_subscription = node->create_subscription<geometry_msgs::msg::Twist>(
-        name + "/cmd_vel_nav", 10, std::bind(&Robot::cmdVelCallback, this, std::placeholders::_1));
-
     // publishWorldToMapTransform();
     // publishMapToOdomTransform();
     publishBaseLinkToBaseFootprintTransform();
@@ -276,6 +273,7 @@ void Robot::stateUpdate(double rate)
     publishOdometry();
     publishIMU();
 
+    publishMapToBaseLinkGroundTruthTransform();
     publishOdomToBaseLinkTransform();
     
     std::vector<Position> other_robots_positions;

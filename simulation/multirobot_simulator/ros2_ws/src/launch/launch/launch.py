@@ -45,17 +45,12 @@ def generate_launch_description():
     timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
     bag_name = f'./bag_records/bag_{timestamp}'
 
+
     topics_to_record = [
-        '/costmap',
-        '/costmap_updates',
-        '/frontier',
-        '/frontier_centroids',
-        '/frontier_centroids_array',
-        '/frontier_updates',
-        '/goal_pose',
-        '/initialpose',
         '/map',
-        '/map_updates',
+        '/map_ground_truth',
+        '/frontiers_marker',
+        '/refinement_frontiers_marker',
         '/tf',
         '/tf_static'
     ]
@@ -68,27 +63,21 @@ def generate_launch_description():
     for robot_name in mrs_config["multirobot_server"]["ros__parameters"]["robots"]:
         topics_to_record += [
             f'/{robot_name}/cmd_vel',
-            f'/{robot_name}/footprint',
-            f'/{robot_name}/footprint_array',
             f'/{robot_name}/global_path',
-            f'/{robot_name}/imu',
-            f'/{robot_name}/joint_states',
-            f'/{robot_name}/landmarks',
-            f'/{robot_name}/landmarks_marker',
-            f'/{robot_name}/landmarks_plot',
-            f'/{robot_name}/landmarks_plot_array',
             f'/{robot_name}/odom',
-            f'/{robot_name}/robot_description',
-            f'/{robot_name}/scan',
-            f'/{robot_name}/scan_plot',
-            f'/{robot_name}/sensor_state',
+            f'/{robot_name}/state',
             f'/{robot_name}/map',
+            f'/{robot_name}/keyframes_update',
+            f'/{robot_name}/keyframes_marker',
             f'/{robot_name}/tf',
             f'/{robot_name}/tf_static',
         ]
 
     bag_record_execute_process = ExecuteProcess(
-        cmd=['ros2', 'bag', 'record', '-o', bag_name] + topics_to_record,
+        # Record with MCAP
+        # cmd=['ros2', 'bag', 'record', '-o', bag_name] + topics_to_record,
+        # Record with Sqlite3
+        cmd=['ros2', 'bag', 'record', '-s', 'sqlite3', '-o', bag_name] + topics_to_record,
         output='screen',
         condition=IfCondition(LaunchConfiguration('bag_record')),
     )

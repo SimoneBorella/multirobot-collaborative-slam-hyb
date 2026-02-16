@@ -115,8 +115,8 @@ public:
         map_qos_profile.reliable();
         map_qos_profile.transient_local();
 
-        // std::string map_topic = "/" + ns_ + "/map";
-        // map_publisher_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(map_topic, map_qos_profile);
+        std::string map_topic = "/" + ns_ + "/map";
+        map_publisher_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(map_topic, map_qos_profile);
         
         std::string state_topic = "/" + ns_ + "/state";
         state_publisher_ = this->create_publisher<interfaces::msg::State>(state_topic, 10);
@@ -266,24 +266,24 @@ private:
         map_log_odds_update_publisher_->publish(map_log_odds_update_msg);
     }
 
-    // void publish_map(const Map& map)
-    // {
-    //     nav_msgs::msg::OccupancyGrid map_msg;
-    //     map_msg.header.stamp = this->now();
-    //     map_msg.header.frame_id = ns_ + "/" + map_frame_;
-    //     map_msg.info.resolution = map.resolution;
-    //     map_msg.info.width = map.width;
-    //     map_msg.info.height = map.height;
-    //     map_msg.info.origin.position.x = map.origin_position.x();
-    //     map_msg.info.origin.position.y = map.origin_position.y();
-    //     map_msg.info.origin.position.z = map.origin_position.z();
-    //     map_msg.info.origin.orientation.w = map.origin_orientation.w();
-    //     map_msg.info.origin.orientation.x = map.origin_orientation.x();
-    //     map_msg.info.origin.orientation.y = map.origin_orientation.y();
-    //     map_msg.info.origin.orientation.z = map.origin_orientation.z();
-    //     map_msg.data = map.data;
-    //     map_publisher_->publish(map_msg);
-    // }
+    void publish_map(const Map& map)
+    {
+        nav_msgs::msg::OccupancyGrid map_msg;
+        map_msg.header.stamp = this->now();
+        map_msg.header.frame_id = ns_ + "/" + map_frame_;
+        map_msg.info.resolution = map.resolution;
+        map_msg.info.width = map.width;
+        map_msg.info.height = map.height;
+        map_msg.info.origin.position.x = map.origin_position.x();
+        map_msg.info.origin.position.y = map.origin_position.y();
+        map_msg.info.origin.position.z = map.origin_position.z();
+        map_msg.info.origin.orientation.w = map.origin_orientation.w();
+        map_msg.info.origin.orientation.x = map.origin_orientation.x();
+        map_msg.info.origin.orientation.y = map.origin_orientation.y();
+        map_msg.info.origin.orientation.z = map.origin_orientation.z();
+        map_msg.data = map.data;
+        map_publisher_->publish(map_msg);
+    }
 
     void publish_frontier_map_update(const FrontierMapUpdate &frontier_map_update)
     {
@@ -704,7 +704,7 @@ private:
     message_filters::Subscriber<sensor_msgs::msg::LaserScan> scan_subscription_;
     std::shared_ptr<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>> scan_filter_;
 
-    // rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr map_publisher_;
+    rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr map_publisher_;
     
     rclcpp::Publisher<interfaces::msg::State>::SharedPtr state_publisher_;
     rclcpp::Publisher<interfaces::msg::MapLogOddsUpdate>::SharedPtr map_log_odds_update_publisher_;

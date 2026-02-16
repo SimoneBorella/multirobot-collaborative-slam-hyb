@@ -84,6 +84,58 @@ public:
     }
 
 
+    // void publishMapToBaseLinkGroundTruthTransform()
+    // {
+    //     geometry_msgs::msg::TransformStamped transform;
+    //     transform.header.stamp = node->get_clock()->now();
+    //     transform.header.frame_id = name + "/map";
+    //     transform.child_frame_id = name + "/base_link_ground_truth";
+    
+    //     transform.transform.translation.x = position.x;
+    //     transform.transform.translation.y = position.y;
+    //     transform.transform.translation.z = 0.0;
+
+    //     tf2::Quaternion q;
+    //     q.setRPY(0,0, position.theta);
+
+    //     transform.transform.rotation.x = q.x();
+    //     transform.transform.rotation.y = q.y();
+    //     transform.transform.rotation.z = q.z();
+    //     transform.transform.rotation.w = q.w();
+
+    //     tf_broadcaster->sendTransform(transform);
+    // }
+
+    void publishMapToBaseLinkGroundTruthTransform()
+    {
+        geometry_msgs::msg::TransformStamped transform;
+        transform.header.stamp = node->get_clock()->now();
+        transform.header.frame_id = name + "/map";
+        transform.child_frame_id = name + "/base_link_ground_truth";
+
+        double dx = position.x - init_position.x;
+        double dy = position.y - init_position.y;
+        double dtheta = position.theta - init_position.theta;
+
+        double cos_theta = cos(init_position.theta);
+        double sin_theta = sin(init_position.theta);
+        
+        transform.transform.translation.x = dx * cos_theta + dy * sin_theta;
+        transform.transform.translation.y = -dx * sin_theta + dy * cos_theta;
+        transform.transform.translation.z = 0.0;
+
+        tf2::Quaternion q;
+        q.setRPY(0, 0, dtheta);
+
+        transform.transform.rotation.x = q.x();
+        transform.transform.rotation.y = q.y();
+        transform.transform.rotation.z = q.z();
+        transform.transform.rotation.w = q.w();
+
+        tf_broadcaster->sendTransform(transform);
+    }
+
+
 
     void publishMapToOdomTransform()
     {
@@ -202,7 +254,6 @@ private:
     std::thread state_update_thread;
 
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_subscription;
-    rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_nav_subscription;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher;
     rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_publisher;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr footprint_publisher;
