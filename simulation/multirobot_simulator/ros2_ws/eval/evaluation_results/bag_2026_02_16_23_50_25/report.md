@@ -87,11 +87,11 @@
 
 **Map ground truth:**
 
-![Map](mapping/padded_map_ground_truth.png)
+![Map](mapping/map_ground_truth.png)
 
 **Map result:**
 
-![Map](mapping/map.png)
+![Map](mapping/resampled_map_on_gt.png)
 
 **Map error:**
 

@@ -1305,11 +1305,11 @@ if __name__ == "__main__":
     f.write(f"### Mapping results:\n\n")
 
     f.write(f"**Map ground truth:**\n\n")
-    f.write(f"![Map](mapping/padded_map_ground_truth.png)\n\n")
+    f.write(f"![Map](mapping/map_ground_truth.png)\n\n")
 
 
     f.write(f"**Map result:**\n\n")
-    f.write(f"![Map](mapping/map.png)\n\n")
+    f.write(f"![Map](mapping/resampled_map_on_gt.png)\n\n")
 
     f.write(f"**Map error:**\n\n")
     f.write(f"![Map](mapping/error_map.png)\n\n")
