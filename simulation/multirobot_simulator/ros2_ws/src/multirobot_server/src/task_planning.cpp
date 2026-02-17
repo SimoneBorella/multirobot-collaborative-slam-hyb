@@ -3,11 +3,12 @@
 namespace multirobot_slam
 {
     TaskPlanning::TaskPlanning()
+    : end_task_override_(false)
     {
     }
 
     TaskPlanning::TaskPlanning(TaskPlanningParams &params)
-        : params_(params)
+        : params_(params), end_task_override_(false)
     {
     }
 
@@ -155,6 +156,11 @@ namespace multirobot_slam
 
 
 
+    void TaskPlanning::toggle_end_task_override()
+    {
+        end_task_override_ = !end_task_override_;
+    }
+
 
     std::map<std::string, Task> TaskPlanning::plan_tasks(std::map<std::string, Pose> robot_poses, std::vector<Frontier, Eigen::aligned_allocator<Frontier>> frontiers, std::vector<Frontier, Eigen::aligned_allocator<Frontier>> refinement_frontiers)
     {
@@ -162,6 +168,20 @@ namespace multirobot_slam
 
         if (robot_poses.empty())
             return tasks;
+
+        if (end_task_override_)
+        {
+            for (const auto& [robot, _] : robot_poses)
+            {
+                Task t;
+                t.pose = robot_initial_poses_[robot];
+                t.oriented = true;
+                tasks[robot] = t;
+            }
+
+            return tasks;
+        }
+
 
         for (const auto& [robot, _] : robot_poses)
         {
@@ -279,7 +299,6 @@ namespace multirobot_slam
                     t.pose = robot_initial_poses_[robot];
                     t.oriented = true;
                     tasks[robot] = t;
-                    // std::cout << "GO HOME MODE" << std::endl;
                 }
                 else if (d_opt >= params_.d_opt_threshold_soft && d_opt < params_.d_opt_threshold_hard)
                 {

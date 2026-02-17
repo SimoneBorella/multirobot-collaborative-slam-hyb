@@ -775,7 +775,7 @@ namespace multirobot_slam
                 {
                     double dist_to_robot = (f.centroid - Eigen::Vector2d(robot_pose.position.x(), robot_pose.position.y())).norm();
                     
-                    if (dist_to_robot < 1.0) 
+                    if (dist_to_robot < 2.0) 
                     {
                         robot_is_near = true;
                         break; 
@@ -785,7 +785,7 @@ namespace multirobot_slam
                 if (robot_is_near) {
                     refinement_frontier_persistence_counters_[i]++;
 
-                    if (refinement_frontier_persistence_counters_[i] >= 20) 
+                    if (refinement_frontier_persistence_counters_[i] >= 40) 
                     {
                         unobservable_zones_.push_back(f.centroid);
                         

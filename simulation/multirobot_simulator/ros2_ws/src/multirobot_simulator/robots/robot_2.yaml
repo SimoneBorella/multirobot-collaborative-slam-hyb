@@ -11,8 +11,8 @@ shape:
 sensors:
   - type: imu
     name: imu
-    linear_bias_std_dev: 0.001    # Standard deviation of linear noise
-    angular_bias_std_dev: 0.0001   # Standard deviation of angular noise
+    linear_bias_std_dev: 0.0001    # Standard deviation of linear noise
+    angular_bias_std_dev: 0.00001   # Standard deviation of angular noise
     alpha: 0.995                # Correlation factor (Gauss-Markov)
     linear_bias: 0.0    # Bias error for linear velocity
     angular_bias: 0.0    # Bias error for angular velocity

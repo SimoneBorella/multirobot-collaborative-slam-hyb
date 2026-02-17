@@ -24,6 +24,7 @@
 #include "visualization_msgs/msg/marker.hpp"
 #include "nav_msgs/msg/path.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
+#include "std_msgs/msg/empty.hpp"
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -122,6 +123,15 @@ public:
             std::string robot_cmd_vel_topic = "/" + robot + "/cmd_vel";
             robot_cmd_vel_publishers_[robot] = this->create_publisher<geometry_msgs::msg::Twist>(robot_cmd_vel_topic, 10);
         }
+
+        std::string end_task_override_flag_topic = "/end_task_override";
+
+        end_task_override_flag_subscriber_ = this->create_subscription<std_msgs::msg::Empty>(
+            end_task_override_flag_topic,
+            10,
+            std::bind(&MultirobotServer::end_task_override_callback, this, std::placeholders::_1)
+        );
+
 
         std::string map_topic = "/map";
         map_publisher_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(map_topic, map_qos_profile);
@@ -314,6 +324,12 @@ public:
         }
 
         task_planning_.update_robot_keyframes(robot_keyframes_update, robot);
+    }
+
+
+    void end_task_override_callback(const std_msgs::msg::Empty::SharedPtr /*msg*/)
+    {
+        task_planning_.toggle_end_task_override(); 
     }
 
 
@@ -697,6 +713,7 @@ public:
     std::map<std::string, rclcpp::Subscription<interfaces::msg::FrontierMapUpdate>::SharedPtr> robot_frontier_map_update_subscriptions_;
     std::map<std::string, rclcpp::Subscription<interfaces::msg::State>::SharedPtr> robot_state_subscriptions_;
     std::map<std::string, rclcpp::Subscription<interfaces::msg::KeyframeUpdateArray>::SharedPtr> robot_keyframes_update_subscriptions_;
+    rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr end_task_override_flag_subscriber_;
 
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr map_publisher_;
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr costmap_publisher_;

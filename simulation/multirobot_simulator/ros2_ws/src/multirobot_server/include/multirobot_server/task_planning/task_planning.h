@@ -98,6 +98,8 @@ namespace multirobot_slam
         Pose compose_global_pose(const Pose& initial, const Pose& local);
         bool task_reached(const Pose& current, const Task& target);
         std::map<std::string, Task> plan_tasks(std::map<std::string, Pose> robot_poses, std::vector<Frontier, Eigen::aligned_allocator<Frontier>> frontiers, std::vector<Frontier, Eigen::aligned_allocator<Frontier>> refinement_frontiers);
+        void toggle_end_task_override();
+
     private:
         TaskPlanningParams params_;
         std::map<std::string, Pose> robot_initial_poses_;
@@ -109,6 +111,8 @@ namespace multirobot_slam
         std::map<std::string, bool> robot_last_keyframe_choice_;
 
         std::map<std::string, Task> active_hard_information_gain_tasks_;
+
+        bool end_task_override_;
     };
 }
 

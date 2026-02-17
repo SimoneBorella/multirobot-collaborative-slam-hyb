@@ -187,8 +187,8 @@ namespace multirobot_slam
         if(!get_robot_poses_callback_)
             return;
 
-        // std::lock_guard<std::mutex> lock(global_paths_mutex_);
-        // std::lock_guard<std::mutex> cm_lock(costmap_mutex_);
+        std::lock_guard<std::mutex> lock(global_paths_mutex_);
+        std::lock_guard<std::mutex> cm_lock(costmap_mutex_);
 
         std::map<std::string, Pose> robot_poses = get_robot_poses_callback_();
 
