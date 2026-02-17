@@ -15,6 +15,8 @@ def generate_launch_description():
 
     ld = LaunchDescription()
 
+    launch_dir = get_package_share_directory('launch')
+
     # Launch arguments
 
     bag_record_launch_arg = DeclareLaunchArgument(
@@ -51,94 +53,40 @@ def generate_launch_description():
     bag_name = f'./bag_records/bag_{timestamp}'
 
     topics_to_record = [
-        '/costmap',
-        '/costmap_updates',
-        '/frontier',
-        '/frontier_centroids',
-        '/frontier_centroids_array',
-        '/frontier_updates',
-        '/goal_pose',
-        '/initialpose',
         '/map',
-        '/map_updates',
+        '/frontiers_marker',
+        '/refinement_frontiers_marker',
         '/tf',
         '/tf_static'
     ]
 
 
-    with open(os.path.join(get_package_share_directory('slam'), 'config', 'params.yaml'), "r") as file:
+    with open(os.path.join(get_package_share_directory('multirobot_server'), 'config', 'params.yaml'), "r") as file:
         mrs_config = yaml.safe_load(file)
 
-
-    for robot_name in mrs_config["slam"]["ros__parameters"]["robots"]:
+    for robot_name in mrs_config["multirobot_server"]["ros__parameters"]["robots"]:
         topics_to_record += [
             f'/{robot_name}/cmd_vel',
-            f'/{robot_name}/footprint',
-            f'/{robot_name}/footprint_array',
             f'/{robot_name}/global_path',
-            f'/{robot_name}/imu',
-            f'/{robot_name}/joint_states',
-            f'/{robot_name}/landmarks',
-            f'/{robot_name}/landmarks_marker',
-            f'/{robot_name}/landmarks_plot',
-            f'/{robot_name}/landmarks_plot_array',
-            # f'/{robot_name}/oak/imu/data',
-            # f'/{robot_name}/oak/nn/spatial_detections',
-            # f'/{robot_name}/oak/rgb/camera_info',
-            # f'/{robot_name}/oak/rgb/image_raw',
-            # f'/{robot_name}/oak/rgb/image_raw/compressed',
-            # f'/{robot_name}/oak/rgb/image_raw/compressedDepth',
-            # f'/{robot_name}/oak/rgb/image_raw/theora',
-            # f'/{robot_name}/oak/rgb/image_rect',
-            # f'/{robot_name}/oak/rgb/image_rect/compressed',
-            # f'/{robot_name}/oak/rgb/image_rect/compressedDepth',
-            # f'/{robot_name}/oak/rgb/image_rect/theora',
-            # f'/{robot_name}/oak/rgb_landmarks/image_raw',
-            # f'/{robot_name}/oak/rgb_landmarks/image_raw/compressed',
-            # f'/{robot_name}/oak/rgb_landmarks/image_raw/compressedDepth',
-            # f'/{robot_name}/oak/rgb_landmarks/image_raw/theora',
-            # f'/{robot_name}/oak/stereo/camera_info',
-            # f'/{robot_name}/oak/stereo/image_raw',
-            # f'/{robot_name}/oak/stereo/image_raw/compressed',
-            # f'/{robot_name}/oak/stereo/image_raw/compressedDepth',
-            # f'/{robot_name}/oak/stereo/image_raw/theora',
             f'/{robot_name}/odom',
-            f'/{robot_name}/robot_description',
-            f'/{robot_name}/scan',
-            f'/{robot_name}/scan_plot',
-            f'/{robot_name}/sensor_state',
+            f'/{robot_name}/state',
             f'/{robot_name}/map',
+            f'/{robot_name}/keyframes_update',
+            f'/{robot_name}/keyframes_marker',
             f'/{robot_name}/tf',
             f'/{robot_name}/tf_static',
         ]
 
     bag_record_execute_process = ExecuteProcess(
-        cmd=['ros2', 'bag', 'record', '-o', bag_name] + topics_to_record,
+        # Record with MCAP
+        # cmd=['ros2', 'bag', 'record', '-o', bag_name] + topics_to_record,
+        # Record with Sqlite3
+        cmd=['ros2', 'bag', 'record', '-s', 'sqlite3', '-o', bag_name] + topics_to_record,
         output='screen',
         condition=IfCondition(LaunchConfiguration('bag_record')),
     )
 
     ld.add_action(bag_record_execute_process)
-
-    rviz_path = os.path.join(get_package_share_directory('slam'), 'rviz', 'multi_robot_view.rviz')
-
-    rviz_node = Node(
-        package='rviz2',
-        executable='rviz2',
-        arguments=[
-            '-d', rviz_path,
-            '--ros-args', '--log-level', LaunchConfiguration('log_level')
-        ],
-        condition=IfCondition(
-            PythonExpression(
-                [
-                    LaunchConfiguration('rviz'), " == True",
-                ]
-            )
-        )
-    )
-
-    ld.add_action(rviz_node)
 
 
     # Launch descriptions
@@ -178,18 +126,40 @@ def generate_launch_description():
         )
     )
     ld.add_action(vicon_tf_launch_description)
+    
 
-
-    slam_launch_description = IncludeLaunchDescription(
+    # Launch multirobot server
+    multirobot_server_launch_description = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
-            os.path.join(get_package_share_directory('slam'), 'launch', 'launch.py')
+            os.path.join(get_package_share_directory('multirobot_server'), 'launch', 'launch.py')
         ]),
         launch_arguments={
             'log_level': LaunchConfiguration('log_level'),
         }.items(),
-    )    
+    )
 
-    ld.add_action(slam_launch_description)
+    ld.add_action(multirobot_server_launch_description)
+
+
+
+
+    rviz_path = os.path.join(launch_dir, 'rviz', 'view.rviz')
+
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        arguments=[
+            '-d', rviz_path,
+            '--ros-args', '--log-level', LaunchConfiguration('log_level')
+        ],
+        condition=IfCondition(
+            PythonExpression([
+                "'", LaunchConfiguration('rviz'), "' == 'True'"
+            ])
+        )
+    )
+
+    ld.add_action(rviz_node)
 
         
     return ld

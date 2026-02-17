@@ -12,7 +12,16 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)  
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/KeyPoint.msg"
+  "msg/KeyPointArray.msg"
+  "msg/Frontier.msg"
+  "msg/FrontierArray.msg"
   "msg/PointArray.msg"
+  "msg/MapLogOddsUpdate.msg"
+  "msg/FrontierMapUpdate.msg"
+  "msg/KeyframeUpdate.msg"
+  "msg/KeyframeUpdateArray.msg"
+  "msg/State.msg"
   DEPENDENCIES std_msgs geometry_msgs
 )
 

@@ -16,3 +16,18 @@
 [submodule "simulation/multirobot_simulator/dep/DBoW3"]
 	path = simulation/multirobot_simulator/dep/DBoW3
 	url = https://github.com/rmsalinas/DBow3.git
+[submodule "release/multirobot_client/dep/DBoW3"]
+	path = release/multirobot_client/dep/DBoW3
+	url = https://github.com/rmsalinas/DBow3.git
+[submodule "release/multirobot_client/dep/gtsam"]
+	path = release/multirobot_client/dep/gtsam
+	url = git@github.com:borglab/gtsam.git
+[submodule "release/multirobot_client/dep/opencv"]
+	path = release/multirobot_client/dep/opencv
+	url = git@github.com:opencv/opencv.git
+[submodule "release/multirobot_client/dep/opencv_contrib"]
+	path = release/multirobot_client/dep/opencv_contrib
+	url = git@github.com:opencv/opencv_contrib.git
+[submodule "release/multirobot_server/dep/gtsam"]
+	path = release/multirobot_server/dep/gtsam
+	url = git@github.com:borglab/gtsam.git

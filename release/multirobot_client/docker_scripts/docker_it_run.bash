@@ -1,6 +1,6 @@
 #!/bin/bash
 
-IMAGE="multirobot_slam_client"
+IMAGE="multirobot_client"
 TAG="latest"
 DOCKERFILE_PATH="."
 

@@ -1,0 +1,19 @@
+multirobot_server:
+  ros__parameters:
+    world_frame: world
+    map_frame: map
+    odom_frame: odom
+    base_frame: base_link
+
+    robots: ["robot_0"]
+    # robots: ["robot_0", "robot_1"]
+    # robots: ["robot_0", "robot_1", "robot_2"]
+    # robots: ["robot_0", "robot_1", "robot_2", "robot_3"]
+
+    initial_poses: [
+      0.0,  0.0, 0.0,
+      0.0, 1.0, 0.0,
+      0.0, -1.0, 0.0
+    ]
+
+    use_sim_time: false

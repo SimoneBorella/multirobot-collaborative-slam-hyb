@@ -63,6 +63,16 @@ def generate_launch_description():
         }.items(),
     )
 
+    multirobot_client_launch_description = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            os.path.join(get_package_share_directory('multirobot_client'), 'launch', 'launch.py')
+        ]),
+        launch_arguments={
+            'namespace': LaunchConfiguration('namespace'),
+            'log_level': LaunchConfiguration('log_level'),
+        }.items(),
+    )
+
     nav2_launch_description = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             os.path.join(get_package_share_directory('nav2_launch'), 'launch', 'launch.py')
@@ -78,6 +88,7 @@ def generate_launch_description():
 
     ld.add_action(turtlebot3_launch_description)
     ld.add_action(sensor_processing_launch_description)
+    ld.add_action(multirobot_client_launch_description)
     ld.add_action(nav2_launch_description)
         
     return ld

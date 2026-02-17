@@ -1,21 +1,3 @@
-/*
-
-    REMEMBER TO CHANGE PUBLISHERS, PUBLISH KEYPOINTS WITH DESCRIPTORS NOT ONLY POINTS
-
-
-*/
-
-
-
-
-
-
-
-
-
-
-
-
 #include <memory>
 #include <string>
 #include <vector>
@@ -27,7 +9,6 @@
 #include "visualization_msgs/msg/marker.hpp"
 #include "interfaces/msg/key_point.hpp"
 #include "interfaces/msg/key_point_array.hpp"
-
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/features2d.hpp>
@@ -46,7 +27,7 @@ public:
         declare_parameter("cy", 239.5);
 
         declare_parameter("max_keypoints", 200);
-        declare_parameter("max_landmarks", 100);
+        declare_parameter("max_keypoints_3d", 80);
 
         declare_parameter("median_filter_depth", false);
 
@@ -63,7 +44,7 @@ public:
         cy = get_parameter("cy").as_double();
 
         max_keypoints = get_parameter("max_keypoints").as_int();
-        max_landmarks = get_parameter("max_landmarks").as_int();
+        max_keypoints_3d = get_parameter("max_keypoints_3d").as_int();
 
         median_filter_depth = get_parameter("median_filter_depth").as_bool();
 
@@ -84,9 +65,9 @@ public:
             "oak/stereo/image_raw", 10,
             std::bind(&RGBDFeatureExtraction::depth_callback, this, std::placeholders::_1));
 
-        rgb_landmark_publisher = it.advertise("oak/rgb_landmarks/image_raw", 10);
-        landmarks_marker_publisher = this->create_publisher<visualization_msgs::msg::Marker>("landmarks_marker", 10);
-        landmarks_publisher = this->create_publisher<interfaces::msg::PointArray>("landmarks", 10);
+        rgb_landmark_publisher = it.advertise("oak/rgb_keypoints/image_raw", 10);
+        keypoints_marker_publisher = this->create_publisher<visualization_msgs::msg::Marker>("keypoints_marker", 10);
+        keypoints_publisher = this->create_publisher<interfaces::msg::KeyPointArray>("keypoints", 10);
         
         orb = cv::ORB::create();
     }
@@ -141,133 +122,115 @@ private:
         if (rgb_image.empty() || depth_image.empty())
             return;
 
-        std::vector<cv::KeyPoint> keypoints;
-        cv::Mat descriptors;
-        orb->detectAndCompute(rgb_image, cv::noArray(), keypoints, descriptors);
+        // ORB
+        std::vector<cv::KeyPoint> raw_keypoints;
+        cv::Mat raw_descriptors;
+        orb->detectAndCompute(rgb_image, cv::noArray(), raw_keypoints, raw_descriptors);
 
-        if (keypoints.empty())
+        if (raw_keypoints.empty())
             return;
 
-        std::vector<int> indices(keypoints.size());
+        // Quality sorting and filter N top
+        std::vector<int> indices(raw_keypoints.size());
         std::iota(indices.begin(), indices.end(), 0);
+        std::sort(indices.begin(), indices.end(), [&](int a, int b) {
+            return raw_keypoints[a].response > raw_keypoints[b].response;
+        });
 
-        std::sort(indices.begin(), indices.end(),
-            [&](int a, int b) {
-                return keypoints[a].response > keypoints[b].response;
-            });
-
-        std::vector<cv::KeyPoint> sorted_kps;
-        cv::Mat sorted_desc;
-
-        size_t keep = std::min((size_t)max_keypoints, keypoints.size());
-
-        for (size_t i = 0; i < keep; ++i)
-        {
-            sorted_kps.push_back(keypoints[indices[i]]);
-            sorted_desc.push_back(descriptors.row(indices[i]));
-        }
-
-        keypoints = sorted_kps;
-        descriptors = sorted_desc;
+        size_t keep = std::min((size_t)max_keypoints, raw_keypoints.size());
         
-        cv::Mat img_with_keypoints;
-        cv::drawKeypoints(rgb_image, keypoints, img_with_keypoints, cv::Scalar(0, 255, 0));
+        // Results container preparation
+        struct ValidFeature {
+            geometry_msgs::msg::Point point;
+            std::vector<uint8_t> descriptor;
+        };
+        std::vector<ValidFeature> valid_features;
 
         if(median_filter_depth)
             cv::medianBlur(depth_image, depth_image, 5);
 
-
-
-
-        std::vector<cv::Point3f> landmarks;
-        for (int i = 0; i < keypoints.size(); ++i)
+        
+        // £D projection
+        for (size_t i = 0; i < keep; ++i)
         {
-            const cv::KeyPoint &kp = keypoints[i];
-            const cv::Mat descriptor = descriptors.row(i);
-
+            int idx = indices[i];
+            const cv::KeyPoint &kp = raw_keypoints[idx];
+            
             int x = static_cast<int>(kp.pt.x);
             int y = static_cast<int>(kp.pt.y);
 
-            if (x < border_filter || y < border_filter || x >= (depth_image.cols - border_filter) || y >= (depth_image.rows - border_filter))
+            // Border filtering
+            if (x < border_filter || y < border_filter || 
+                x >= (depth_image.cols - border_filter) || y >= (depth_image.rows - border_filter))
                 continue;
-
 
             uint16_t depth;
             if (!getValidDepth(x, y, depth, depth_image))
                 continue;
                 
-
-            float feature_z = depth * 0.001;
+            float feature_z = depth * 0.001f; // Meters convertion
 
             if (feature_z < min_range || feature_z > max_range)
                 continue;
 
-            float feature_x = (x - cx) * feature_z / fx;
-            float feature_y = (y - cy) * feature_z / fy;
+            // Pinhole projection model
+            // Coordinate change starting from camera frame (u,v,d)
+            ValidFeature vf;
+            vf.point.x = feature_z;
+            vf.point.y = -(x - cx) * feature_z / fx;
+            vf.point.z = -(y - cy) * feature_z / fy;
 
-            landmarks.emplace_back(feature_x, feature_y, feature_z);
+            // Descriptor conversion cv::Mat -> std::vector<uint8_t>
+            cv::Mat desc_row = raw_descriptors.row(idx);
+            vf.descriptor.assign(desc_row.begin<uint8_t>(), desc_row.end<uint8_t>());
+
+            valid_features.push_back(vf);
+
+            if (valid_features.size() >= max_keypoints_3d)
+                break;
         }
 
-        if (landmarks.size() > max_landmarks)
-            landmarks.resize(max_landmarks);
+        // Image publishing
+        cv::Mat img_with_keypoints;
+        cv::drawKeypoints(rgb_image, raw_keypoints, img_with_keypoints, cv::Scalar(0, 255, 0));
+        auto rgb_msg = cv_bridge::CvImage(std_msgs::msg::Header(), "bgr8", img_with_keypoints).toImageMsg();
+        rgb_landmark_publisher.publish(rgb_msg);
 
+        // Marker publishing
+        visualization_msgs::msg::Marker marker;
+        marker.header.frame_id = camera_frame;
+        marker.header.stamp = this->get_clock()->now();
+        marker.ns = "keypoints_3d";
+        marker.type = visualization_msgs::msg::Marker::POINTS;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+        marker.scale.x = 0.03; marker.scale.y = 0.03;
+        marker.color.r = 1.0; marker.color.a = 1.0;
+
+        // Keypoints publishing
+        interfaces::msg::KeyPointArray keypoints_msg;
+        keypoints_msg.header.frame_id = camera_frame;
+        keypoints_msg.header.stamp = marker.header.stamp;
+
+        for (const auto &vf : valid_features)
         {
-            sensor_msgs::msg::Image::SharedPtr rgb_landmarks_msg = cv_bridge::CvImage(std_msgs::msg::Header(), "bgr8", img_with_keypoints).toImageMsg();
-            rgb_landmark_publisher.publish(rgb_landmarks_msg);
+            marker.points.push_back(vf.point);
 
-            visualization_msgs::msg::Marker marker;
-            marker.header.frame_id = camera_frame;
-            marker.header.stamp = this->get_clock()->now();
-            marker.ns = "landmarks";
-            marker.id = 0;
-            marker.type = visualization_msgs::msg::Marker::POINTS;
-            marker.action = visualization_msgs::msg::Marker::ADD;
-
-            marker.color.r = 1.0f;
-            marker.color.g = 0.0f;
-            marker.color.b = 0.0f;
-            marker.color.a = 1.0f;
-
-            marker.scale.x = 0.05;
-            marker.scale.y = 0.05;
-
-            for (const auto &pt : landmarks)
-            {
-                geometry_msgs::msg::Point p;
-                p.x = pt.z;
-                p.y = -pt.x;
-                p.z = -pt.y;
-                marker.points.push_back(p);
-            }
-            landmarks_marker_publisher->publish(marker);
+            interfaces::msg::KeyPoint kp_msg;
+            kp_msg.point = vf.point;
+            kp_msg.descriptor = vf.descriptor;
+            keypoints_msg.keypoints.push_back(kp_msg);
         }
 
-        {
-            interfaces::msg::PointArray landmarks_msg = interfaces::msg::PointArray();
-        
-            landmarks_msg.header.frame_id = camera_frame;
-            landmarks_msg.header.stamp = this->get_clock()->now();
-            
-            for (const auto &pt : landmarks)
-            {
-                geometry_msgs::msg::Point p;
-                p.x = pt.z;
-                p.y = -pt.x;
-                p.z = -pt.y;
-                landmarks_msg.points.push_back(p);
-            }
-
-            landmarks_publisher->publish(landmarks_msg);
-        }
-
+        keypoints_marker_publisher->publish(marker);
+        keypoints_publisher->publish(keypoints_msg);
     }
 
     image_transport::Subscriber rgb_subscription;
     image_transport::Subscriber depth_subscription;
 
     image_transport::Publisher rgb_landmark_publisher;
-    rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr landmarks_marker_publisher;
-    rclcpp::Publisher<interfaces::msg::PointArray>::SharedPtr landmarks_publisher;
+    rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr keypoints_marker_publisher;
+    rclcpp::Publisher<interfaces::msg::KeyPointArray>::SharedPtr keypoints_publisher;
 
     cv::Mat rgb_image;
     cv::Mat depth_image;
@@ -278,7 +241,7 @@ private:
 
     float fx, fy, cx, cy;
     size_t max_keypoints;
-    size_t max_landmarks;
+    size_t max_keypoints_3d;
     bool median_filter_depth;
     double min_range;
     double max_range;

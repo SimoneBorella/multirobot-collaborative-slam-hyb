@@ -1,6 +1,6 @@
 #!/bin/bash
 
-IMAGE="multirobot_slam_server"
+IMAGE="multirobot_server"
 TAG="latest"
 DOCKERFILE_PATH="."
 

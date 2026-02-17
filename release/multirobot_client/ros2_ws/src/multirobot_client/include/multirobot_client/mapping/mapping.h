@@ -1,0 +1,140 @@
+#ifndef MAPPING_H
+#define MAPPING_H
+
+#include <yaml-cpp/yaml.h>
+#include <fstream>
+#include <iostream>
+#include <thread>
+#include <atomic>
+#include <queue>
+#include <deque>
+#include <mutex>
+#include <optional>
+#include <Eigen/Core>
+#include <Eigen/Geometry>
+
+#include "data_types.h"
+
+namespace multirobot_slam
+{
+    struct MappingParams
+    {
+        double mapping_rate;
+        double map_resolution;
+        double map_width;
+        double map_height;
+
+        double free_belief;
+        double occ_belief;
+        double distance_belief_factor;
+
+        double noise_radius;
+        double noise_std_dev;
+        
+        double log_odds_min;
+        double log_odds_max;
+
+        double obstacle_threshold;
+        double free_threshold;
+
+        double frontier_del_obstacles_radius;
+
+        MappingParams(
+            double mapping_rate = 2.0,
+            double map_resolution = 0.05,
+            double map_width = 40.0,
+            double map_height = 40.0,
+            double free_belief = 0.38,
+            double occ_belief = 0.80,
+            double distance_belief_factor = 0.03,
+            double noise_radius = 0.07,
+            double noise_std_dev = 0.02,
+            double log_odds_min = -10.0,
+            double log_odds_max = 10.0,
+            double obstacle_threshold = 0.7,
+            double free_threshold = 0.3,
+            double frontier_del_obstacles_radius = 0.18)
+            : mapping_rate(mapping_rate),
+              map_resolution(map_resolution),
+              map_width(map_width),
+              map_height(map_height),
+              free_belief(free_belief),
+              occ_belief(occ_belief),
+              distance_belief_factor(distance_belief_factor),
+              noise_radius(noise_radius),
+              noise_std_dev(noise_std_dev),
+              log_odds_min(log_odds_min),
+              log_odds_max(log_odds_max),
+              obstacle_threshold(obstacle_threshold),
+              free_threshold(free_threshold),
+              frontier_del_obstacles_radius(frontier_del_obstacles_radius){}
+    };
+
+
+    class Mapping
+    {
+    public:
+        Mapping();
+        Mapping(MappingParams &params);
+        ~Mapping();
+
+        static MappingParams params_from_yaml(std::string &params_path);
+
+        void init(MappingParams &params);
+        void start();
+        void add_posed_scan(const PosedScan &posed_scan);
+
+        std::optional<MapLogOddsUpdate> get_map_log_odds_update();
+        Map get_map();
+        std::optional<Map> get_map_if_updated();
+        Map get_frontier_map();
+        std::optional<Map> get_frontier_map_if_updated();
+        std::optional<FrontierMapUpdate> get_frontier_map_update();
+
+    private:
+        double probability_to_log_odds(int8_t prob);
+        int8_t log_odds_to_probability(double log_odds);
+
+        void bresenham_raytrace(int x0, int y0, int x1, int y1, bool hit_point);
+        void expanding_wavefront_frontier_cells_detection(int rx, int ry, double active_area_radius);
+
+        void mapping();
+
+        MappingParams params_;
+
+        std::deque<PosedScan> posed_scan_buffer_;
+        std::mutex buffer_mutex_;
+
+        double free_belief_log_odds_;
+        double occupied_belief_log_odds_;
+
+        std::unordered_map<int, float> local_log_odds_delta_;
+
+        MapLogOddsUpdate map_log_odds_update_;
+        std::mutex map_log_odds_update_mutex_;
+
+        std::vector<double> map_log_odds_data_;
+        Map map_;
+        Map filtered_map_;
+        
+        bool map_updated_;
+        
+        
+        bool ewfd_first_;
+        std::vector<bool> ewfd_visited_;
+        
+        Map frontier_map_;
+        bool frontier_map_updated_;
+
+        FrontierMapUpdate frontier_map_update_;
+        std::mutex frontier_map_update_mutex_;
+        
+        std::atomic<bool> mapping_thread_running_;
+        std::thread mapping_thread_;
+    };
+
+
+}
+
+
+#endif // MAPPING_H
