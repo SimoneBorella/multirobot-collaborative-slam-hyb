@@ -4,7 +4,7 @@ clear
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 
-bag_record=False
+bag_record=True
 rviz=True
 log_level=error
 

@@ -649,11 +649,11 @@ private:
             publish_map_log_odds_update(map_log_odds_update.value());
         }
 
-        // const std::optional<Map> &map = mapping_.get_map_if_updated();
-        // if (map.has_value())
-        // {
-        //     publish_map(map.value());
-        // }
+        const std::optional<Map> &map = mapping_.get_map_if_updated();
+        if (map.has_value())
+        {
+            publish_map(map.value());
+        }
 
         // const std::optional<Map> &frontier_map = mapping_.get_frontier_map_if_updated();
         // if (frontier_map.has_value())

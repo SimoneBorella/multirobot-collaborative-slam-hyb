@@ -135,7 +135,7 @@ if __name__ == "__main__":
 
     source_file_path = os.path.dirname(os.path.abspath(__file__))
 
-    maps_path = f"{source_file_path}/bag_extracted_maps"
+    maps_path = f"{source_file_path}/extracted_maps"
     if not os.path.exists(maps_path):
         os.makedirs(maps_path)
     

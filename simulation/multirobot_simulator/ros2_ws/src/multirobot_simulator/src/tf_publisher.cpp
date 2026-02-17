@@ -50,8 +50,9 @@ private:
             std::string base_frame = frame_id.substr(prefix_end + 1);
             std::string child_frame = child_frame_id.substr(prefix_end + 1);
 
-            if (!is_static && (base_frame != "odom" || child_frame != "base_link"))
+            if (!is_static && !((base_frame == "odom" && child_frame == "base_link") || (base_frame == "map" && child_frame == "base_link_ground_truth")))
                 continue;
+                
 
             geometry_msgs::msg::TransformStamped new_transform = transform;
             new_transform.header.frame_id = base_frame;
