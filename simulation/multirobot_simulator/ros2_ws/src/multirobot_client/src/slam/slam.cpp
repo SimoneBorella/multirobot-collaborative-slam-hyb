@@ -165,11 +165,11 @@ namespace multirobot_slam
 
         backend_.optimize();
 
-        if (++keyframe_update_counter_ > keyframe_update_threshold_)
-        {
-            backend_.update_keyframes(4);
-            keyframe_update_counter_ = 0;
-        }
+        // if (++keyframe_update_counter_ > keyframe_update_threshold_)
+        // {
+        //     backend_.update_keyframes(5);
+        //     keyframe_update_counter_ = 0;
+        // }
 
 
         // auto end = std::chrono::high_resolution_clock::now();

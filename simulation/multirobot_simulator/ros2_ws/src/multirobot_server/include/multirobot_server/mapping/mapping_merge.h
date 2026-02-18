@@ -40,6 +40,7 @@ namespace multirobot_slam
         double epsilon;
         int min_points;
         double min_frontier_size;
+        bool extract_refinement_frontiers;
         double min_refinement_frontier_size;
 
         MappingMergeParams(
@@ -58,6 +59,7 @@ namespace multirobot_slam
             double epsilon = 0.5,
             int min_points = 3,
             double min_frontier_size = 0.07,
+            bool extract_refinement_frontiers = true,
             double min_refinement_frontier_size = 0.015)
             : mapping_rate(mapping_rate),
               map_resolution(map_resolution),
@@ -74,6 +76,7 @@ namespace multirobot_slam
               epsilon(epsilon),
               min_points(min_points),
               min_frontier_size(min_frontier_size),
+              extract_refinement_frontiers(extract_refinement_frontiers),
               min_refinement_frontier_size(min_refinement_frontier_size) {}
     };
 

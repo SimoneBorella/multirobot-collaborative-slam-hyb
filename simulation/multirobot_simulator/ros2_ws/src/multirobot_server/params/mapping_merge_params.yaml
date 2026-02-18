@@ -21,4 +21,6 @@ min_points: 3
 min_frontier_size: 0.03 # Small Indoor
 # min_frontier_size: 0.04 # Large Indoor
 
+extract_refinement_frontiers: false
+
 min_refinement_frontier_size: 0.005

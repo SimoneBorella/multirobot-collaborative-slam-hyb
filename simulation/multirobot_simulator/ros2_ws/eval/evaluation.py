@@ -25,14 +25,42 @@ PRIMARY_CYAN = "#00FFFF"
 PRIMARY_MAGENTA = "#FF00FF"
 PRIMARY_YELLOW = "#FFFF00"
 
-PRIMARY_CYAN_DARK = "#009999"     # darker cyan
-PRIMARY_MAGENTA_DARK = "#990099"  # darker magenta
-PRIMARY_YELLOW_DARK = "#999900"   # darker yellow
+PRIMARY_CYAN_DARK = "#009999"
+PRIMARY_MAGENTA_DARK = "#990099"
+PRIMARY_YELLOW_DARK = "#999900"
 
 
 WHITE  = "#FFFFFF"
 GREY = "#CDCDCD"
 BLACK  = "#000000"
+
+
+# EXP 1 REFINEMENT (bag_2026_02_18_12_57_31)
+# LOCALIZATION_FIRST_N_LIMIT = 1119768 // MAX
+LOCALIZATION_FIRST_N_LIMIT = 980000
+
+# MAP_LAST_N_LIMIT = 1025 // MAX
+MAP_LAST_N_LIMIT = 125
+
+
+
+
+# EXP 2 REFINEMENT (bag_2026_02_18_12_46_28)
+# LOCALIZATION_FIRST_N_LIMIT = 774997 // MAX
+# LOCALIZATION_FIRST_N_LIMIT = 774996
+
+# MAP_LAST_N_LIMIT = 594 // MAX
+# MAP_LAST_N_LIMIT = 1
+
+
+
+
+# EXP 3 REFINEMENT (bag_2026_02_18_11_04_25)
+# LOCALIZATION_FIRST_N_LIMIT = 640931 // MAX
+# LOCALIZATION_FIRST_N_LIMIT = 500931
+
+# MAP_LAST_N_LIMIT = 464 // MAX
+# MAP_LAST_N_LIMIT = 54
 
 
 def parse_args():
@@ -67,6 +95,13 @@ def transform_to_matrix(t: Transform):
     T[0, 3] = t.translation.x
     T[1, 3] = t.translation.y
     T[2, 3] = t.translation.z
+    return T
+
+def pose_to_matrix(p):
+    T = quaternion_to_matrix(p.orientation)
+    T[0, 3] = p.position.x
+    T[1, 3] = p.position.y
+    T[2, 3] = p.position.z
     return T
 
 def matrix_to_transform(T):
@@ -344,7 +379,19 @@ def compute_map_accuracy_metrics(map_occupancy_grid, map_gt_grid, map_info, map_
     fp = int(np.count_nonzero((padded_map_resampled == 100) & (gt_grid == 0) & valid_mask))
     fn = int(np.count_nonzero((padded_map_resampled == 0) & (gt_grid == 100) & valid_mask))
 
-    return correct / total, total, correct, tp, tn, fp, fn
+
+    free_cells_map = np.count_nonzero(padded_map_resampled == 0)
+    
+    free_cells_gt = np.count_nonzero(gt_grid == 0)
+    
+    explored = np.count_nonzero((padded_map_resampled == 0) & (gt_grid == 0))
+
+    if explored > 0:
+        free_space_exploration_ratio = (explored / free_cells_gt) * 100
+    else:
+        free_space_exploration_ratio = 0.0
+
+    return correct / total, total, correct, tp, tn, fp, fn, free_space_exploration_ratio
 
 
 
@@ -410,7 +457,7 @@ if __name__ == "__main__":
 
 
     # Retrieve tf messages
-    tf_msgs = bag_parser.get_messages('/tf')
+    tf_msgs = bag_parser.get_n_first_messages('/tf', n=LOCALIZATION_FIRST_N_LIMIT)
     static_tf_msgs = bag_parser.get_messages('/tf_static')
 
 
@@ -535,9 +582,30 @@ if __name__ == "__main__":
     
     # Retrieve messages
     cmd_vel_msgs = {robot: bag_parser.get_messages(f'/{robot}/cmd_vel') for robot in robots}
-    map_gt_msg = bag_parser.get_last_message(f'/map_ground_truth')
-    last_map_msg = bag_parser.get_last_message(f'/map')
-    robot_map_msgs = {robot: bag_parser.get_last_message(f'/{robot}/map') for robot in robots}
+    map_gt_msg = bag_parser.get_n_last_message(f'/map_ground_truth')
+    last_map_msg = bag_parser.get_n_last_message(f'/map', n=MAP_LAST_N_LIMIT)
+    robot_map_msgs = {robot: bag_parser.get_n_last_message(f'/{robot}/map', n=MAP_LAST_N_LIMIT) for robot in robots}
+
+    # robot_keyframes_data = {robot: [] for robot in robots}
+    # for robot in robots:
+    #     kf_msg = bag_parser.get_n_last_message(f'/{robot}/keyframes_marker', n=MAP_LAST_N_LIMIT)
+    #     if kf_msg and kf_msg['data']:
+    #         T_world_map = transform_to_matrix(robot_world_to_map_transform[robot])
+
+    #         for marker in kf_msg['data'].markers:
+    #             T_map_kf = pose_to_matrix(marker.pose)
+                
+    #             T_world_kf = T_world_map @ T_map_kf
+                
+    #             qw = np.sqrt(max(0, 1 + T_world_kf[0, 0] + T_world_kf[1, 1] + T_world_kf[2, 2])) / 2
+    #             qx = (T_world_kf[2, 1] - T_world_kf[1, 2]) / (4*qw) if qw != 0 else 0
+    #             qy = (T_world_kf[0, 2] - T_world_kf[2, 0]) / (4*qw) if qw != 0 else 0
+    #             qz = (T_world_kf[1, 0] - T_world_kf[0, 1]) / (4*qw) if qw != 0 else 0
+                
+    #             class TempQ: w, x, y, z = qw, qx, qy, qz
+    #             yaw_world = quaternion_to_yaw(TempQ)
+                
+    #             robot_keyframes_data[robot].append((T_world_kf[0, 3], T_world_kf[1, 3], yaw_world))
 
 
 
@@ -750,20 +818,28 @@ if __name__ == "__main__":
         yaw_std[robot] = yaw_vals.std()
 
 
+    distance_traveled = {robot: 0.0 for robot in robots}
+    for robot in robots:
+        points = [np.array([item[1].translation.x, item[1].translation.y]) 
+                  for item in tf_world_to_base_link[robot]]
+        if len(points) > 1:
+            for p1, p2 in zip(points[:-1], points[1:]):
+                distance_traveled[robot] += np.linalg.norm(p2 - p1)
+
 
     f.write("## Localization evaluation:\n\n")
 
-    f.write("| Robot ID | Success | Ground truth | Final distance error | Distance MAE | Distance RMSE | Distance STD | Final yaw error | Yaw MAE | Yaw RMSE | Yaw STD |\n")
-    f.write("|----------|---------|--------------|----------------------|--------------|---------------|--------------|-----------------|---------|----------|---------|\n")
+    f.write("| Robot ID | Success | Ground truth | Traveled distance | Final distance error | Distance MAE | Distance RMSE | Distance STD | Final yaw error | Yaw MAE | Yaw RMSE | Yaw STD |\n")
+    f.write("|----------|---------|--------------|-------------------|----------------------|--------------|---------------|--------------|-----------------|---------|----------|---------|\n")
 
     for robot in robots:
         success_status = "Yes" if success[robot] else "No"
         ground_truth_status = "Yes" if robot_ground_truth_status[robot] else "No"
 
-        if success[robot] and robot_ground_truth_status[robot]:
-            f.write(f"| `{robot}` | {success_status} | {ground_truth_status} | {distance_errors[robot][-1][1]:.2f} m | {distance_mae[robot]:.2f} m | {distance_rmse[robot]:.2f} m | {distance_std[robot]:.2f} m | {yaw_errors[robot][-1][1]:.2f} rad | {yaw_mae[robot]:.2f} rad | {yaw_rmse[robot]:.2f} rad | {yaw_std[robot]:.2f} rad |\n")
+        if robot_ground_truth_status[robot]:
+            f.write(f"| `{robot}` | {success_status} | {ground_truth_status} | {distance_traveled[robot]:.2f} m | {distance_errors[robot][-1][1]:.2f} m | {distance_mae[robot]:.2f} m | {distance_rmse[robot]:.2f} m | {distance_std[robot]:.2f} m | {yaw_errors[robot][-1][1]:.2f} rad | {yaw_mae[robot]:.2f} rad | {yaw_rmse[robot]:.2f} rad | {yaw_std[robot]:.2f} rad |\n")
         else:
-            f.write(f"| `{robot}` | {success_status} | {ground_truth_status} | - | - | - | - | - | - |\n")
+            f.write(f"| `{robot}` | {success_status} | {ground_truth_status} | - | - | - | - | - | - | - |\n")
 
     f.write("\n")
 
@@ -886,6 +962,25 @@ if __name__ == "__main__":
 
             first = False
 
+
+        # if robot_keyframes_data[robot]:
+        #     kf_x = [k[0] for k in robot_keyframes_data[robot]]
+        #     kf_y = [k[1] for k in robot_keyframes_data[robot]]
+        #     kf_yaw = [k[2] for k in robot_keyframes_data[robot]]
+            
+        #     u = np.cos(kf_yaw)
+        #     v = np.sin(kf_yaw)
+            
+        #     label_kf = f"Keyframes - {robot}" if i == 0 else ""
+        #     plt.quiver(kf_x, kf_y, u, v, color=colors[i], 
+        #         scale=80,          # Più alto è, più la freccia è corta
+        #         width=0.002,       # Più basso è, più la freccia è sottile
+        #         headwidth=3,       # Rimpicciolisce la punta
+        #         headlength=4,      # Accorcia la punta
+        #         headaxislength=3,  # Rende la punta meno "panciuta"
+        #         pivot='mid',       # Centra la freccia sul punto esatto
+        #         alpha=0.8, 
+        #         label=label_kf)
             
 
     
@@ -1121,9 +1216,6 @@ if __name__ == "__main__":
     # Mapping
     unknown_value = -1
 
-    # CORRECTION: DELETE LAST PART OF THE EXPERIMENT
-    # last_map_msg = map_msgs[-5]
-
     resolution = last_map_msg['data'].info.resolution
     width = last_map_msg['data'].info.width
     height = last_map_msg['data'].info.height
@@ -1185,7 +1277,7 @@ if __name__ == "__main__":
     }
 
 
-    map_accuracy, map_total, map_correct, map_tp, map_tn, map_fp, map_fn = compute_map_accuracy_metrics(map_grid, map_gt_grid, map_info, map_gt_info, mapping_path)
+    map_accuracy, map_total, map_correct, map_tp, map_tn, map_fp, map_fn, free_space_exploration_ratio = compute_map_accuracy_metrics(map_grid, map_gt_grid, map_info, map_gt_info, mapping_path)
 
 
     map_tpr = map_tp / (map_tp + map_fn)
@@ -1227,6 +1319,25 @@ if __name__ == "__main__":
 
         plt.plot(xs, ys, color=colors[i], linewidth=0.8, label=f"Trajectory - {robot}")
 
+        # if robot_keyframes_data[robot]:
+        #     kf_x = [k[0] for k in robot_keyframes_data[robot]]
+        #     kf_y = [k[1] for k in robot_keyframes_data[robot]]
+        #     kf_yaw = [k[2] for k in robot_keyframes_data[robot]]
+            
+        #     u = np.cos(kf_yaw)
+        #     v = np.sin(kf_yaw)
+            
+        #     label_kf = f"Keyframes - {robot}" if i == 0 else ""
+        #     plt.quiver(kf_x, kf_y, u, v, color=colors[i], 
+        #         scale=80,          # Più alto è, più la freccia è corta
+        #         width=0.002,       # Più basso è, più la freccia è sottile
+        #         headwidth=3,       # Rimpicciolisce la punta
+        #         headlength=4,      # Accorcia la punta
+        #         headaxislength=3,  # Rende la punta meno "panciuta"
+        #         pivot='mid',       # Centra la freccia sul punto esatto
+        #         alpha=0.8, 
+        #         label=label_kf)
+
     plt.axis("off")
     plt.gca().set_xticks([])
     plt.gca().set_yticks([])
@@ -1252,6 +1363,9 @@ if __name__ == "__main__":
 
     explored_area = np.sum(map_grid != unknown_value) * resolution**2
     f.write(f"**Explored area:** {explored_area:.2f} m²\n\n")
+
+    f.write(f"**Explored area ratio:** {free_space_exploration_ratio:.2f}%\n\n")
+
 
 
     f.write("| Robot ID | Exploration area | Exploration percentage |\n")

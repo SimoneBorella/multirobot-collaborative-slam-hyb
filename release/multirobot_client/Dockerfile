@@ -149,7 +149,7 @@ RUN echo "# Avoid graphic issues using DRI2 instead of DRI3 with Intel Iris" >> 
     && echo "export LIBGL_DRI3_DISABLE=1" >> /root/.bashrc
 
 RUN echo "# Setup domain identifier to avoid wrong communications" >> /root/.bashrc \
-    && echo "export ROS_DOMAIN_ID=17" >> /root/.bashrc
+    && echo "export ROS_DOMAIN_ID=19" >> /root/.bashrc
 
 # RUN echo "# Setup ROS2 middleware implementation" >> /root/.bashrc \
 #     && echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> /root/.bashrc

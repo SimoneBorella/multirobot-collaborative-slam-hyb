@@ -54,7 +54,11 @@ class BagParser:
 
         return messages
 
-    def get_last_message(self, topic_name):
+    def get_n_first_messages(self, topic_name, n=1):
+        """
+        Recupera i primi n messaggi (i più vecchi) per un determinato topic.
+        Ritorna una lista di dizionari ordinati dal più vecchio al più recente.
+        """
         if topic_name not in self.topics:
             available = "\n  ".join(self.topics.keys())
             raise KeyError(
@@ -65,7 +69,6 @@ class BagParser:
         topic_id = topic_meta["id"]
         msg_type_identifier = topic_meta["type"]
 
-        # Resolve the message class
         try:
             msg_cls = get_message(msg_type_identifier)
         except ModuleNotFoundError:
@@ -73,11 +76,54 @@ class BagParser:
                 f"Cannot import message type '{msg_type_identifier}'."
             )
 
-        # Query only the single most recent record based on timestamp
+        # Cambiamo ORDER BY timestamp da DESC a ASC per prendere i primi messaggi
+        results = self.cursor.execute(
+            "SELECT timestamp, data FROM messages "
+            "WHERE topic_id = ? "
+            "ORDER BY timestamp ASC LIMIT ?",
+            (topic_id, n)
+        ).fetchall()
+
+        if not results:
+            return []
+
+        messages = []
+        for timestamp, raw_data in results:
+            msg = deserialize_message(raw_data, msg_cls)
+            messages.append({"timestamp": timestamp, "data": msg})
+        
+        return messages
+
+    def get_n_last_message(self, topic_name, n=1):
+        """
+        Recupera il singolo n-esimo messaggio più recente.
+        n=1 è l'ultimo, n=2 è il penultimo, ecc.
+        """
+        if n < 1:
+            raise ValueError("Il parametro n deve essere maggiore o uguale a 1.")
+
+        if topic_name not in self.topics:
+            available = "\n  ".join(self.topics.keys())
+            raise KeyError(
+                f"Topic '{topic_name}' not in bag. Available topics:\n  {available}"
+            )
+
+        topic_meta = self.topics[topic_name]
+        topic_id = topic_meta["id"]
+        msg_type_identifier = topic_meta["type"]
+
+        try:
+            msg_cls = get_message(msg_type_identifier)
+        except ModuleNotFoundError:
+            raise ModuleNotFoundError(
+                f"Cannot import message type '{msg_type_identifier}'."
+            )
+
         result = self.cursor.execute(
-            f"SELECT timestamp, data FROM messages "
-            f"WHERE topic_id = {topic_id} "
-            f"ORDER BY timestamp DESC LIMIT 1"
+            "SELECT timestamp, data FROM messages "
+            "WHERE topic_id = ? "
+            "ORDER BY timestamp DESC LIMIT 1 OFFSET ?",
+            (topic_id, n - 1)
         ).fetchone()
 
         if not result:

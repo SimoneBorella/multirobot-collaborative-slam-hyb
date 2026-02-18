@@ -67,6 +67,9 @@ namespace multirobot_slam
                 p.min_points = config["min_points"].as<int>();
             if (config["min_frontier_size"])
                 p.min_frontier_size = config["min_frontier_size"].as<double>();
+
+            if (config["extract_refinement_frontiers"])
+                p.extract_refinement_frontiers = config["extract_refinement_frontiers"].as<bool>();
             if (config["min_refinement_frontier_size"])
                 p.min_refinement_frontier_size = config["min_refinement_frontier_size"].as<double>();
         }
@@ -668,7 +671,7 @@ namespace multirobot_slam
     void MappingMerge::mapping_merge()
     {
         // auto start = std::chrono::high_resolution_clock::now();
-
+        
         map_updated_ = true;
 
         // Create filtered map
@@ -756,9 +759,8 @@ namespace multirobot_slam
 
 
         // Unobservability check
-        if (!refinement_frontiers_.empty()) 
+        if (params_.extract_refinement_frontiers && !refinement_frontiers_.empty()) 
         {
-            // Sincronizza il contatore di persistenza con il numero di frontiere raw
             if (refinement_frontier_persistence_counters_.size() != refinement_frontiers_.size()) {
                 refinement_frontier_persistence_counters_.resize(refinement_frontiers_.size(), 0);
             }
@@ -809,7 +811,7 @@ namespace multirobot_slam
 
 
         // Check previously detected refinement frontiers
-        if (!refinement_frontiers_.empty()) 
+        if (params_.extract_refinement_frontiers && !refinement_frontiers_.empty()) 
         {
             for (size_t i = 0; i < refinement_frontiers_.size();)
             {
@@ -870,103 +872,108 @@ namespace multirobot_slam
 
 
         // Monte carlo sampling around robot positions
-        int n_samples = 250;
-        double max_radius = 10.0;
 
+        if(params_.extract_refinement_frontiers)
         {
-            std::lock_guard<std::mutex> lock(robot_poses_mutex_);
-            for (const auto& [_, pose] : robot_poses_)
+
+            int n_samples = 250;
+            double max_radius = 10.0;
+    
             {
-                for (int i = 0; i < n_samples; ++i)
+                std::lock_guard<std::mutex> lock(robot_poses_mutex_);
+                for (const auto& [_, pose] : robot_poses_)
                 {
-    
-                    double r = max_radius * std::sqrt((double)rand() / RAND_MAX);
-                    double theta = 2.0 * M_PI * ((double)rand() / RAND_MAX);
-                    
-                    double wx = pose.position.x() + r * std::cos(theta);
-                    double wy = pose.position.y() + r * std::sin(theta);
-
-                    // Check if inside unobservable zone
-                    bool in_unobservable_zone = false;
-                    for (const auto& uz : unobservable_zones_) {
-                        if ((Eigen::Vector2d(wx, wy) - uz).norm() < 1.0) {
-                            in_unobservable_zone = true;
-                            break;
-                        }
-                    }
-                    if (in_unobservable_zone)
-                        continue;
-
-                    // Check if already discovered
-                    bool already_discovered = false;
-                    for(const auto& rf : refinement_frontiers_)
+                    for (int i = 0; i < n_samples; ++i)
                     {
-                        if ((Eigen::Vector2d(wx, wy) - rf.centroid).norm() < 1.0) {
-                            already_discovered = true;
-                            break;
+        
+                        double r = max_radius * std::sqrt((double)rand() / RAND_MAX);
+                        double theta = 2.0 * M_PI * ((double)rand() / RAND_MAX);
+                        
+                        double wx = pose.position.x() + r * std::cos(theta);
+                        double wy = pose.position.y() + r * std::sin(theta);
+    
+                        // Check if inside unobservable zone
+                        bool in_unobservable_zone = false;
+                        for (const auto& uz : unobservable_zones_) {
+                            if ((Eigen::Vector2d(wx, wy) - uz).norm() < 1.0) {
+                                in_unobservable_zone = true;
+                                break;
+                            }
                         }
-                    }
-
-                    if(already_discovered)
-                        continue;
+                        if (in_unobservable_zone)
+                            continue;
     
-                    int gx = static_cast<int>((wx - map_.origin_position.x()) / map_.resolution);
-                    int gy = static_cast<int>((wy - map_.origin_position.y()) / map_.resolution);
-    
-                    if (gx >= 2 && gx < map_.width - 2 && gy >= 2 && gy < map_.height - 2)
-                    {
-                        int idx = gy * map_.width + gx;
-    
-                        if (filtered_map_.data[idx] == 0)
+                        // Check if already discovered
+                        bool already_discovered = false;
+                        for(const auto& rf : refinement_frontiers_)
                         {
-                            
-                            double sum_obs = 0;
-                            double sum_variance = 0;
-                            int valid_neighbors = 0;
-                            bool near_obstacle = false;
-                            bool near_unknown = false;
+                            if ((Eigen::Vector2d(wx, wy) - rf.centroid).norm() < 1.0) {
+                                already_discovered = true;
+                                break;
+                            }
+                        }
     
-                            for(int dy = -2; dy <= 2; dy++)
+                        if(already_discovered)
+                            continue;
+        
+                        int gx = static_cast<int>((wx - map_.origin_position.x()) / map_.resolution);
+                        int gy = static_cast<int>((wy - map_.origin_position.y()) / map_.resolution);
+        
+                        if (gx >= 2 && gx < map_.width - 2 && gy >= 2 && gy < map_.height - 2)
+                        {
+                            int idx = gy * map_.width + gx;
+        
+                            if (filtered_map_.data[idx] == 0)
                             {
-                                for(int dx = -2; dx <= 2; dx++)
+                                
+                                double sum_obs = 0;
+                                double sum_variance = 0;
+                                int valid_neighbors = 0;
+                                bool near_obstacle = false;
+                                bool near_unknown = false;
+        
+                                for(int dy = -2; dy <= 2; dy++)
                                 {
-                                    int nidx = (gy + dy) * map_.width + (gx + dx);
-    
-                                    // Unknown zone detection
-                                    if (filtered_map_.data[nidx] == -1)
+                                    for(int dx = -2; dx <= 2; dx++)
                                     {
-                                        near_unknown = true;
-                                    }
-                                    
-                                    // Obstacle zone detection
-                                    if (filtered_map_.data[nidx] == 100)
-                                    {
-                                        near_obstacle = true;
-                                    }
-    
-                                    // Uncertanty statistics
-                                    if (filtered_map_.data[nidx] != -1)
-                                    {
-                                        sum_obs += map_observation_count_[nidx];
-                                        double p = map_.data[nidx] / 100.0;
-                                        sum_variance += (p * (1.0 - p));
-                                        valid_neighbors++;
+                                        int nidx = (gy + dy) * map_.width + (gx + dx);
+        
+                                        // Unknown zone detection
+                                        if (filtered_map_.data[nidx] == -1)
+                                        {
+                                            near_unknown = true;
+                                        }
+                                        
+                                        // Obstacle zone detection
+                                        if (filtered_map_.data[nidx] == 100)
+                                        {
+                                            near_obstacle = true;
+                                        }
+        
+                                        // Uncertanty statistics
+                                        if (filtered_map_.data[nidx] != -1)
+                                        {
+                                            sum_obs += map_observation_count_[nidx];
+                                            double p = map_.data[nidx] / 100.0;
+                                            sum_variance += (p * (1.0 - p));
+                                            valid_neighbors++;
+                                        }
                                     }
                                 }
-                            }
-    
-                            if (!near_unknown && valid_neighbors > 0 && near_obstacle)
-                            {
-                                double avg_obs = sum_obs / valid_neighbors;
-                                double avg_var = sum_variance / valid_neighbors;
-    
-                                if (avg_var > params_.refinement_variance_threshold || avg_obs < params_.refinement_observations_threshold)
+        
+                                if (!near_unknown && valid_neighbors > 0 && near_obstacle)
                                 {
-                                    Frontier f;
-                                    f.centroid = Eigen::Vector2d(wx, wy);
-                                    f.size = -1.0;
-                                    refinement_frontiers_.push_back(f);
-                                    refinement_frontier_persistence_counters_.push_back(0);
+                                    double avg_obs = sum_obs / valid_neighbors;
+                                    double avg_var = sum_variance / valid_neighbors;
+        
+                                    if (avg_var > params_.refinement_variance_threshold || avg_obs < params_.refinement_observations_threshold)
+                                    {
+                                        Frontier f;
+                                        f.centroid = Eigen::Vector2d(wx, wy);
+                                        f.size = -1.0;
+                                        refinement_frontiers_.push_back(f);
+                                        refinement_frontier_persistence_counters_.push_back(0);
+                                    }
                                 }
                             }
                         }
@@ -1005,36 +1012,40 @@ namespace multirobot_slam
 
 
             frontiers_ = frontier_centroids_detection(frontier_clusters, params_.min_frontier_size);
-            std::vector<Frontier, Eigen::aligned_allocator<Frontier>> discarded_frontiers_ = frontier_centroids_detection(discarded_frontier_clusters, 0);
 
-            for (auto& df : discarded_frontiers_)
+            if (params_.extract_refinement_frontiers)
             {
-                df.size = -1.0;
-
-                // Check if already discovered
-                bool already_discovered = false;
-                for(auto& rf : refinement_frontiers_)
+                std::vector<Frontier, Eigen::aligned_allocator<Frontier>> discarded_frontiers_ = frontier_centroids_detection(discarded_frontier_clusters, 0);
+    
+                for (auto& df : discarded_frontiers_)
                 {
-                    if ((df.centroid - rf.centroid).norm() < 0.5) {
-                        already_discovered = true;
-                        rf.centroid = df.centroid;
-                        break;
-                    }
-                }
-
-                if(!already_discovered)
-                {
-                    bool in_unobservable_zone = false;
-                    for (const auto& uz : unobservable_zones_) {
-                        if ((df.centroid - uz).norm() < 1.0) {
-                            in_unobservable_zone = true;
+                    df.size = -1.0;
+    
+                    // Check if already discovered
+                    bool already_discovered = false;
+                    for(auto& rf : refinement_frontiers_)
+                    {
+                        if ((df.centroid - rf.centroid).norm() < 0.5) {
+                            already_discovered = true;
+                            rf.centroid = df.centroid;
                             break;
                         }
                     }
-                    
-                    if(!in_unobservable_zone) {
-                        refinement_frontiers_.push_back(df);
-                        refinement_frontier_persistence_counters_.push_back(0);
+    
+                    if(!already_discovered)
+                    {
+                        bool in_unobservable_zone = false;
+                        for (const auto& uz : unobservable_zones_) {
+                            if ((df.centroid - uz).norm() < 1.0) {
+                                in_unobservable_zone = true;
+                                break;
+                            }
+                        }
+                        
+                        if(!in_unobservable_zone) {
+                            refinement_frontiers_.push_back(df);
+                            refinement_frontier_persistence_counters_.push_back(0);
+                        }
                     }
                 }
             }
@@ -1046,7 +1057,9 @@ namespace multirobot_slam
 
         frontier_map_updated_ = true;
         frontiers_updated_ = true;
-        refinement_frontiers_updated_ = true;
+
+        if(params_.extract_refinement_frontiers)
+            refinement_frontiers_updated_ = true;
 
 
 

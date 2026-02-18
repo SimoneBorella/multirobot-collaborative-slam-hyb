@@ -565,9 +565,7 @@ namespace multirobot_slam
                             merged_frontiers[f2].centroid).norm();
 
                         double raw = 1.0 - std::exp(-d / params_.coverage_scale);
-                        coverage[f1 * card2 + f2] =
-                            (1.0 - params_.w_coverage) +
-                            params_.w_coverage * raw;
+                        coverage[f1 * card2 + f2] = params_.w_coverage * raw;
                     }
                 }
 
