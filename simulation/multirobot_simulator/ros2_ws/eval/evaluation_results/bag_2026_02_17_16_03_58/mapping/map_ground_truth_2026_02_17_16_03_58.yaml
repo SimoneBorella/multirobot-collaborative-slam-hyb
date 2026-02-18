@@ -1,4 +1,4 @@
-image: map_ground_truth_2026_02_16_23_50_25.pgm
+image: map_ground_truth_2026_02_17_16_03_58.pgm
 mode: trinary
 resolution: 0.009999999776482582
 origin: [-20.0, -20.0, 0.0]

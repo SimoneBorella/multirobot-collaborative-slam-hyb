@@ -143,7 +143,7 @@ def align_and_merge_maps(robot_map_msgs, robot_world_to_map_transform, map_info,
 
     for robot in robots:
 
-        msg = robot_map_msgs[robot][-1]['data']
+        msg = robot_map_msgs[robot]['data']
         l_width = msg.info.width
         l_height = msg.info.height
         
@@ -535,9 +535,9 @@ if __name__ == "__main__":
     
     # Retrieve messages
     cmd_vel_msgs = {robot: bag_parser.get_messages(f'/{robot}/cmd_vel') for robot in robots}
-    map_gt_msgs = bag_parser.get_messages(f'/map_ground_truth')
-    map_msgs = bag_parser.get_messages(f'/map')
-    robot_map_msgs = {robot: bag_parser.get_messages(f'/{robot}/map') for robot in robots}
+    map_gt_msg = bag_parser.get_last_message(f'/map_ground_truth')
+    last_map_msg = bag_parser.get_last_message(f'/map')
+    robot_map_msgs = {robot: bag_parser.get_last_message(f'/{robot}/map') for robot in robots}
 
 
 
@@ -1121,11 +1121,8 @@ if __name__ == "__main__":
     # Mapping
     unknown_value = -1
 
-    map_gt_msg = map_gt_msgs[-1]
-
     # CORRECTION: DELETE LAST PART OF THE EXPERIMENT
     # last_map_msg = map_msgs[-5]
-    last_map_msg = map_msgs[-1]
 
     resolution = last_map_msg['data'].info.resolution
     width = last_map_msg['data'].info.width

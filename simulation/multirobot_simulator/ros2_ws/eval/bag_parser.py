@@ -53,3 +53,37 @@ class BagParser:
             messages.append({"timestamp": ts, "data": msg})
 
         return messages
+
+    def get_last_message(self, topic_name):
+        if topic_name not in self.topics:
+            available = "\n  ".join(self.topics.keys())
+            raise KeyError(
+                f"Topic '{topic_name}' not in bag. Available topics:\n  {available}"
+            )
+
+        topic_meta = self.topics[topic_name]
+        topic_id = topic_meta["id"]
+        msg_type_identifier = topic_meta["type"]
+
+        # Resolve the message class
+        try:
+            msg_cls = get_message(msg_type_identifier)
+        except ModuleNotFoundError:
+            raise ModuleNotFoundError(
+                f"Cannot import message type '{msg_type_identifier}'."
+            )
+
+        # Query only the single most recent record based on timestamp
+        result = self.cursor.execute(
+            f"SELECT timestamp, data FROM messages "
+            f"WHERE topic_id = {topic_id} "
+            f"ORDER BY timestamp DESC LIMIT 1"
+        ).fetchone()
+
+        if not result:
+            return None
+
+        timestamp, raw_data = result
+        msg = deserialize_message(raw_data, msg_cls)
+        
+        return {"timestamp": timestamp, "data": msg}

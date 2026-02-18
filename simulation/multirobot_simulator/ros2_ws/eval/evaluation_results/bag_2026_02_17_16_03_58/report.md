@@ -1,39 +1,33 @@
 # Multirobot Collaborative SLAM Evaluation Report
 
-**Bag ID:** bag_2026_02_16_23_50_25
+**Bag ID:** bag_2026_02_17_16_03_58
 
-**Experiment Date:** 2026-02-16
+**Experiment Date:** 2026-02-17
 
-**Experiment Time:** 23:50:25
+**Experiment Time:** 16:03:58
 
 **Evaluation Date:** 2026-02-17
 
 **Robots:**
 `robot_0`
-`robot_1`
-`robot_2`
 
 ## Timing evaluation:
 
-**Bag record time:** 42500 ms
+**Bag record time:** 1288537 ms
 
 | Robot ID | Success | Last cmd (linear_x, angular_z) | Execution time |
 |----------|---------|--------------------------------|----------------|
-| `robot_0` | No | 0.220 m/s, 0.427 rad/s | **42500 ms** (42.500 s) |
-| `robot_1` | No | 0.220 m/s, -0.039 rad/s | **41033 ms** (41.033 s) |
-| `robot_2` | No | 0.220 m/s, 0.405 rad/s | **42058 ms** (42.058 s) |
+| `robot_0` | Yes | 0.000 m/s, 0.000 rad/s | **1281349 ms** (1281.349 s) |
 
-**Exploration gap:** 1467 ms
+**Exploration gap:** 0 ms
 
-**Total time:** 42500 ms
+**Total time:** 1281349 ms
 
 ## Localization evaluation:
 
 | Robot ID | Success | Ground truth | Final distance error | Distance MAE | Distance RMSE | Distance STD | Final yaw error | Yaw MAE | Yaw RMSE | Yaw STD |
 |----------|---------|--------------|----------------------|--------------|---------------|--------------|-----------------|---------|----------|---------|
-| `robot_0` | No | Yes | - | - | - | - | - | - |
-| `robot_1` | No | Yes | - | - | - | - | - | - |
-| `robot_2` | No | Yes | - | - | - | - | - | - |
+| `robot_0` | Yes | Yes | 0.03 m | 0.02 m | 0.03 m | 0.01 m | 0.00 rad | 0.01 rad | 0.02 rad | 0.02 rad |
 
 ### Localization results:
 
@@ -57,32 +51,26 @@
 
 **Map origin:** (-20.0, -20.0, 0.0)
 
-**Explored area:** 304.01 m²
+**Explored area:** 507.68 m²
 
 | Robot ID | Exploration area | Exploration percentage |
 |----------|------------------|------------------------|
-| `robot_0` | 177.84 m² | 58.50% |
-| `robot_1` | 126.45 m² | 41.59% |
-| `robot_2` | 146.06 m² | 48.05% |
-| `robot_0`, `robot_1` | 220.42 m² | 72.50% |
-| `robot_0`, `robot_2` | 283.20 m² | 93.15% |
-| `robot_1`, `robot_2` | 221.74 m² | 72.94% |
-| `robot_0`, `robot_1`, `robot_2` | 309.35 m² | 100.00% |
+| `robot_0` | 507.68 m² | 100.00% |
 
-**Mapping accuracy**: 0.9811 (2978157/3035425 compared cells)
+**Mapping accuracy**: 0.9341 (4722737/5055825 compared cells)
 | Quantity | Value |
 |--------|-------|
-| True Positives (TP)  | 66026 |
-| True Negatives (TN)  | 2912131 |
-| False Positives (FP) | 25524 |
-| False Negatives (FN) | 31744 |
+| True Positives (TP)  | 232865 |
+| True Negatives (TN)  | 4489872 |
+| False Positives (FP) | 113885 |
+| False Negatives (FN) | 219203 |
 
 | Metric | Value |
 |--------|-------|
-| True Positive Rate (TPR)  | 0.6753196276976577 |
-| True Negative Rate (TNR)  | 0.99131143718374 |
-| False Positive Rate (FPR) | 0.008688562816259907 |
-| False Negative Rate (FNR) | 0.32468037230234226 |
+| True Positive Rate (TPR)  | 0.5151105585885309 |
+| True Negative Rate (TNR)  | 0.975262595310743 |
+| False Positive Rate (FPR) | 0.024737404689257055 |
+| False Negative Rate (FNR) | 0.48488944141146906 |
 ### Mapping results:
 
 **Map ground truth:**
@@ -106,14 +94,6 @@ Grey = not_evaluated, Green = TP, White = TN, Blue = FP, RED = FN
 **Map robot_0:**
 
 ![Map robot_0](mapping/map_robot_0.png)
-
-**Map robot_1:**
-
-![Map robot_1](mapping/map_robot_1.png)
-
-**Map robot_2:**
-
-![Map robot_2](mapping/map_robot_2.png)
 
 **Map merged:**
 
