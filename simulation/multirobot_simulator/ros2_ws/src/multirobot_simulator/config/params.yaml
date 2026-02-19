@@ -13,13 +13,13 @@ multirobot_simulator:
     # map: "indoor_map_10"
     map: "custom_map_2"
 
-    robots: ["robot_0"]
+    # robots: ["robot_0"]
     # robots: ["robot_0", "robot_1"]
-    # robots: ["robot_0", "robot_1", "robot_2"]
+    robots: ["robot_0", "robot_1", "robot_2"]
     # robots: ["robot_0", "robot_1", "robot_2", "robot_3"]
     # robots: ["robot_0", "robot_1", "robot_2", "robot_3", "robot_4"]
     # robots: ["robot_0", "robot_1", "robot_2", "robot_3", "robot_4", "robot_5"]
 
-    landmarks_density: 1.2
+    landmarks_density: 1.5
   
     use_sim_time: false
