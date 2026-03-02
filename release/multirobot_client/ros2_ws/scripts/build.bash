@@ -1,7 +1,7 @@
 #!/bin/bash
 clear
 
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 
 colcon build
 source install/setup.bash

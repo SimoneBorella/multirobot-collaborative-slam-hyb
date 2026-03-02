@@ -20,13 +20,6 @@ find_package(OpenCV REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(image_transport REQUIRED)
 
-# Stampa directory OpenCV e cv_bridge
-message(STATUS "OpenCV include dirs: ${OpenCV_INCLUDE_DIRS}")
-message(STATUS "cv_bridge include dirs: ${cv_bridge_INCLUDE_DIRS}")
-
-
-
-
 
 add_executable(rgbd_feature_extraction src/rgbd_feature_extraction.cpp)
 ament_target_dependencies(rgbd_feature_extraction rclcpp interfaces geometry_msgs visualization_msgs sensor_msgs tf2 tf2_ros tf2_geometry_msgs cv_bridge image_transport OpenCV)
@@ -35,6 +28,8 @@ target_include_directories(rgbd_feature_extraction
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/sensor_processing/rgbd_feature_extraction>
     $<INSTALL_INTERFACE:include>
     ${rclcpp_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIRS}
+    ${cv_bridge_INCLUDE_DIRS}
 )
 
 target_link_libraries(rgbd_feature_extraction
@@ -50,6 +45,8 @@ target_include_directories(camera_calibration
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/sensor_processing/camera_calibration>
     $<INSTALL_INTERFACE:include>
     ${rclcpp_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIRS}
+    ${cv_bridge_INCLUDE_DIRS}
 )
 
 target_link_libraries(camera_calibration

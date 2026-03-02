@@ -41,7 +41,7 @@ private:
             std::string frame_id = transform.header.frame_id;
             std::string child_frame_id = transform.child_frame_id;
 
-            if (!is_static && (frame_id != "map"))
+            if (!is_static && !(frame_id == "map" || frame_id == "odom"))
                 continue;
 
             geometry_msgs::msg::TransformStamped new_transform = transform;

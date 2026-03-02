@@ -12,7 +12,7 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/features2d.hpp>
 #include "image_transport/image_transport.hpp"
-#include <cv_bridge/cv_bridge.hpp>
+#include <cv_bridge/cv_bridge.h>
 
 
 

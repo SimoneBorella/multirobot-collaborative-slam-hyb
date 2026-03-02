@@ -7,10 +7,10 @@ export LDS_MODEL=LDS-02
 export ROS_DOMAIN_ID=19
 export CAMERA_MODEL=oakd
 
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 source install/setup.bash
 
-namespace=robot_13
+namespace=robot_14
 log_level=info
 
 ros2 launch launch camera_calibration.launch.py \
