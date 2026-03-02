@@ -22,32 +22,32 @@
 
 using namespace gtsam;
 
-namespace localization
+namespace multirobot_slam
 {
 
-    class OrientationPriorFactor : public NoiseModelFactor1<Pose3>
-    {
-    public:
-        Rot3 R0_;
+    // class OrientationPriorFactor : public NoiseModelFactor1<Pose3>
+    // {
+    // public:
+    //     Rot3 R0_;
 
-        OrientationPriorFactor(Key key, const Rot3 &R0,
-                               const SharedNoiseModel &model)
-            : NoiseModelFactor1<Pose3>(model, key), R0_(R0) {}
+    //     OrientationPriorFactor(Key key, const Rot3 &R0,
+    //                            const SharedNoiseModel &model)
+    //         : NoiseModelFactor1<Pose3>(model, key), R0_(R0) {}
 
-        Vector evaluateError(
-            const Pose3 &x,
-            boost::optional<Matrix &> H = boost::none) const override
-        {
-            if (H)
-            {
-                Matrix Hfull = Matrix::Zero(3, 6);
-                Hfull.block<3, 3>(0, 0) = Matrix3::Identity();
-                *H = Hfull;
-            }
+    //     Vector evaluateError(
+    //         const Pose3 &x,
+    //         boost::optional<Matrix &> H = boost::none) const override
+    //     {
+    //         if (H)
+    //         {
+    //             Matrix Hfull = Matrix::Zero(3, 6);
+    //             Hfull.block<3, 3>(0, 0) = Matrix3::Identity();
+    //             *H = Hfull;
+    //         }
 
-            return R0_.localCoordinates(x.rotation());
-        }
-    };
+    //         return R0_.localCoordinates(x.rotation());
+    //     }
+    // };
     
 }
 

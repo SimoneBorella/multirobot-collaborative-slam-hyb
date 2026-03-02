@@ -31,35 +31,38 @@ RUN mkdir build \
     && make install -j$(nproc)\
     && ldconfig
 
-# OpenCV dependencies
-RUN apt -y update && \
-    apt install -y --no-install-recommends \
-        libgtk2.0-dev \
-        pkg-config \
-        libavcodec-dev \
-        libavformat-dev \
-        libswscale-dev \
-        libtbbmalloc2 libtbb-dev \
-        libjpeg-dev \
-        libpng-dev \
-        libtiff-dev && \
-    rm -rf /var/lib/apt/lists/*
+# # OpenCV dependencies
+# RUN apt -y update && \
+#     apt install -y --no-install-recommends \
+#         libgtk2.0-dev \
+#         pkg-config \
+#         libavcodec-dev \
+#         libavformat-dev \
+#         libswscale-dev \
+#         libtbbmalloc2 libtbb-dev \
+#         libjpeg-dev \
+#         libpng-dev \
+#         libtiff-dev && \
+#     rm -rf /var/lib/apt/lists/*
 
-# OpenCV
-COPY dep/opencv /dep/opencv
-COPY dep/opencv_contrib /dep/opencv_contrib
+# # OpenCV
+# COPY dep/opencv /dep/opencv
+# COPY dep/opencv_contrib /dep/opencv_contrib
 
-WORKDIR /dep/opencv
-RUN mkdir build \
-    && cd build \
-    && cmake -D CMAKE_BUILD_TYPE=RELEASE \
-    -D CMAKE_INSTALL_PREFIX=/usr/local/opencv3 \
-    -D INSTALL_C_EXAMPLES=OFF \
-    -D INSTALL_PYTHON_EXAMPLES=OFF \
-    -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules \
-    -D BUILD_EXAMPLES=OFF .. \
-    && make install -j$(nproc) \
-    && ldconfig
+# WORKDIR /dep/opencv
+# RUN mkdir build \
+#     && cd build \
+#     && cmake -D CMAKE_BUILD_TYPE=RELEASE \
+#     -D CMAKE_INSTALL_PREFIX=/usr/local/opencv3 \
+#     -D INSTALL_C_EXAMPLES=OFF \
+#     -D INSTALL_PYTHON_EXAMPLES=OFF \
+#     -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules \
+#     -D BUILD_EXAMPLES=OFF .. \
+#     && make install -j$(nproc) \
+#     && ldconfig
+
+
+
 
 # DBoW3
 COPY dep/DBoW3 /dep/DBoW3
@@ -99,16 +102,17 @@ RUN apt -y update \
 
 
 # Turtlebot3
-RUN apt install -y ros-humble-turtlebot3*
+RUN apt install -y ros-jazzy-turtlebot3*
 
 # Depthai oakd pro driver
-RUN apt install -y ros-humble-depthai-ros
+RUN apt install -y ros-jazzy-depthai-ros
 
 # Navigation2
 RUN apt -y update \
-    && apt install -y ros-humble-navigation2 ros-humble-nav2-bringup ros-humble-slam-toolbox\
-    && apt install -y ros-humble-ros-ign-bridge
+    && apt install -y ros-jazzy-navigation2 ros-jazzy-nav2-bringup ros-jazzy-slam-toolbox
 
+RUN apt -y update \
+    && apt install -y ros-jazzy-cv-bridge ros-jazzy-image-transport ros-jazzy-vision-opencv
 
 # Remote desktop lite vnc novnc
 COPY desktop-lite-install.sh /tmp/desktop-lite-install.sh
@@ -139,8 +143,8 @@ COPY ros2_ws /ros2_ws
 
 # Configuration .bashrc
 
-RUN echo "# Set OpenCV library path" >> /root/.bashrc \
-    && echo "export LD_LIBRARY_PATH=/usr/local/opencv3/lib:\$LD_LIBRARY_PATH" >> /root/.bashrc
+# RUN echo "# Set OpenCV library path" >> /root/.bashrc \
+#     && echo "export LD_LIBRARY_PATH=/usr/local/opencv3/lib:\$LD_LIBRARY_PATH" >> /root/.bashrc
 
 RUN echo "# Set default XDG_RUNTIME_DIR" >> /root/.bashrc \
     && echo "export XDG_RUNTIME_DIR=/tmp/runtime-root" >> /root/.bashrc

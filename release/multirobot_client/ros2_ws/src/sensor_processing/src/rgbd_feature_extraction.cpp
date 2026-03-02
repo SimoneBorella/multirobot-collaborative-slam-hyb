@@ -1,17 +1,21 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <algorithm>
 
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/image.hpp"
-#include "cv_bridge/cv_bridge.h"
-#include "image_transport/image_transport.hpp"
 #include "visualization_msgs/msg/marker.hpp"
 #include "interfaces/msg/key_point.hpp"
 #include "interfaces/msg/key_point_array.hpp"
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/features2d.hpp>
+#include "image_transport/image_transport.hpp"
+#include <cv_bridge/cv_bridge.hpp>
+
+
+
 
 class RGBDFeatureExtraction: public rclcpp::Node
 {
@@ -217,7 +221,10 @@ private:
 
             interfaces::msg::KeyPoint kp_msg;
             kp_msg.point = vf.point;
-            kp_msg.descriptor = vf.descriptor;
+
+            for(size_t i=0; i<vf.descriptor.size(); i++)
+                kp_msg.descriptor[i] = vf.descriptor[i];
+            
             keypoints_msg.keypoints.push_back(kp_msg);
         }
 

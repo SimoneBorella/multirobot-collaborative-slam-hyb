@@ -4,13 +4,13 @@ clear
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export TURTLEBOT3_MODEL=burger
 export LDS_MODEL=LDS-02
-export ROS_DOMAIN_ID=2
+export ROS_DOMAIN_ID=19
 export CAMERA_MODEL=oakd
 
-source /opt/ros/humble/setup.bash
+source /opt/ros/jazzy/setup.bash
 source install/setup.bash
 
-namespace=robot_13
+namespace=robot_14
 launch_nav2=False
 log_level=error
 

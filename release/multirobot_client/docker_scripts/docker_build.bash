@@ -44,5 +44,6 @@ done
 
 # DOCKERFILE_PATH="${DOCKERFILE_PATH%/*}/."
 
-docker build -t $IMAGE:$TAG $DOCKERFILE_PATH
+docker build --memory=3g --cpuset-cpus="0-1" --progress=plain -t $IMAGE:$TAG $DOCKERFILE_PATH
+
 docker image prune -f

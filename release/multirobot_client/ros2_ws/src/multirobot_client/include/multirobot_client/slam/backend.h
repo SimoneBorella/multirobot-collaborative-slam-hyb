@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <optional>
 #include <mutex>
+#include <deque>
 
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/ISAM2.h>

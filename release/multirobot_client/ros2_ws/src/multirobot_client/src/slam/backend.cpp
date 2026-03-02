@@ -1046,11 +1046,11 @@ namespace multirobot_slam
         for (const auto &factor : graph)
         {
             // PRIORPOSE3
-            if (auto priorPose = boost::dynamic_pointer_cast<PriorFactor<Pose3>>(factor))
+            if (auto priorPose = std::dynamic_pointer_cast<PriorFactor<Pose3>>(factor))
             {
                 Symbol key = priorPose->keys().at(0);
                 Pose3 prior = priorPose->prior();
-                Matrix6 covariance = boost::dynamic_pointer_cast<noiseModel::Gaussian>(priorPose->noiseModel())->covariance();
+                Matrix6 covariance = std::dynamic_pointer_cast<noiseModel::Gaussian>(priorPose->noiseModel())->covariance();
 
                 Vector3 rpy = prior.rotation().rpy();
 
@@ -1065,11 +1065,11 @@ namespace multirobot_slam
             }
 
             // PRIORPOINT3
-            if (auto priorPoint = boost::dynamic_pointer_cast<PriorFactor<Point3>>(factor))
+            if (auto priorPoint = std::dynamic_pointer_cast<PriorFactor<Point3>>(factor))
             {
                 Symbol key = priorPoint->keys().at(0);
                 Point3 prior = priorPoint->prior();
-                Matrix3 covariance = boost::dynamic_pointer_cast<noiseModel::Gaussian>(priorPoint->noiseModel())->covariance();
+                Matrix3 covariance = std::dynamic_pointer_cast<noiseModel::Gaussian>(priorPoint->noiseModel())->covariance();
 
                 file << "PRIORPOINT3 " << key << " "
                            << prior.x() << " " << prior.y() << " " << prior.z();
@@ -1081,7 +1081,7 @@ namespace multirobot_slam
             }
 
             // BETWEENFACTOR3
-            if (auto betweenFactor = boost::dynamic_pointer_cast<BetweenFactor<Pose3>>(factor))
+            if (auto betweenFactor = std::dynamic_pointer_cast<BetweenFactor<Pose3>>(factor))
             {
                 Symbol pose_x1 = betweenFactor->keys().at(0);
                 Symbol pose_x2 = betweenFactor->keys().at(1);
@@ -1090,7 +1090,7 @@ namespace multirobot_slam
 
                 noiseModel::Base::shared_ptr noise_model;
 
-                if (auto robust_noise = boost::dynamic_pointer_cast<noiseModel::Robust>(betweenFactor->noiseModel()))
+                if (auto robust_noise = std::dynamic_pointer_cast<noiseModel::Robust>(betweenFactor->noiseModel()))
                 {
                     noise_model = robust_noise->noise();
                 }
@@ -1099,7 +1099,7 @@ namespace multirobot_slam
                     noise_model = betweenFactor->noiseModel();
                 }
 
-                Matrix6 covariance = boost::dynamic_pointer_cast<noiseModel::Diagonal>(betweenFactor->noiseModel())->covariance();
+                Matrix6 covariance = std::dynamic_pointer_cast<noiseModel::Diagonal>(betweenFactor->noiseModel())->covariance();
 
                 Vector3 rpy = measurement.rotation().rpy();
 
@@ -1114,7 +1114,7 @@ namespace multirobot_slam
             }
 
             // BEARINGRANGEFACTOR3
-            if (auto brFactor = boost::dynamic_pointer_cast<BearingRangeFactor<Pose3, Point3>>(factor))
+            if (auto brFactor = std::dynamic_pointer_cast<BearingRangeFactor<Pose3, Point3>>(factor))
             {
                 Symbol pose_x = brFactor->keys().at(0);
                 Symbol landmark_l = brFactor->keys().at(1);
@@ -1123,7 +1123,7 @@ namespace multirobot_slam
 
                 noiseModel::Base::shared_ptr noise_model;
 
-                if (auto robust_noise = boost::dynamic_pointer_cast<noiseModel::Robust>(brFactor->noiseModel()))
+                if (auto robust_noise = std::dynamic_pointer_cast<noiseModel::Robust>(brFactor->noiseModel()))
                 {
                     noise_model = robust_noise->noise();
                 }
@@ -1132,7 +1132,7 @@ namespace multirobot_slam
                     noise_model = brFactor->noiseModel();
                 }
 
-                auto covariance = boost::dynamic_pointer_cast<noiseModel::Diagonal>(noise_model)->covariance();
+                auto covariance = std::dynamic_pointer_cast<noiseModel::Diagonal>(noise_model)->covariance();
 
                 Point3 b = bearing.unitVector();
 
