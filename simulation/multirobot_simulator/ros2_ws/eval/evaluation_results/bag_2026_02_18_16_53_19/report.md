@@ -17,7 +17,7 @@
 
 | Robot ID | Success | Last cmd (linear_x, angular_z) | Execution time |
 |----------|---------|--------------------------------|----------------|
-| `robot_0` | No | 0.000 m/s, 0.000 rad/s | **948010 ms** (948.010 s) |
+| `robot_0` | No | 0.000 m/s, 0.000 rad/s | **948010 ms** (748.010 s) |
 
 **Exploration gap:** 0 ms
 
