@@ -5,7 +5,7 @@ Requires=docker.service
 
 [Service]
 Type=simple
-ExecStart=/home/students/SimoneBorella/multirobot/multirobot_client_container/docker_scripts/docker_run.bash
+ExecStart=/home/students/multirobot-collaborative-slam-hyb/release/multirobot_client/docker_scripts/docker_run.bash
 Restart=always
 User=root
 Group=docker

@@ -2,7 +2,7 @@
 
 IMAGE="multirobot_client"
 TAG="latest"
-DOCKERFILE_PATH="/home/students/SimoneBorella/multirobot/multirobot_client_container"
+DOCKERFILE_PATH="/home/students/multirobot-collaborative-slam-hyb/release/multirobot_client"
 
 usage() {
     echo "Usage: $(basename "$0") [OPTIONS]"
@@ -56,6 +56,8 @@ docker run \
     --env QT_X11_NO_MITSHM=1 \
     --volume /tmp/.X11-unix:/tmp/.X11-unix:rw \
     --env XAUTHORITY=$XAUTH \
+    --net host \
+    --ipc=host \
     --volume $DOCKERFILE_PATH/ros2_ws:/ros2_ws \
     --volume /dev/bus/usb:/dev/bus/usb \
     --name $IMAGE \
@@ -63,6 +65,4 @@ docker run \
     $IMAGE:$TAG \
     bash -c "/ros2_ws/scripts/launch_auto.bash"
 
-    # --net host \
-    # --ipc=host \
     # --gpus all \
