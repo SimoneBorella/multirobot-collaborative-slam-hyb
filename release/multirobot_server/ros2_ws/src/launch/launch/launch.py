@@ -99,13 +99,7 @@ def generate_launch_description():
         launch_arguments={
             'log_level': LaunchConfiguration('log_level'),
         }.items(),
-        condition=IfCondition(
-            PythonExpression(
-                [
-                    LaunchConfiguration('vicon'), " == True",
-                ]
-            )
-        )
+        condition=IfCondition(LaunchConfiguration('vicon'))
     )
     ld.add_action(vicon_launch_description)
 
@@ -117,13 +111,7 @@ def generate_launch_description():
         launch_arguments={
             'rviz': "False",
         }.items(),
-        condition=IfCondition(
-            PythonExpression(
-                [
-                    LaunchConfiguration('vicon'), " == True",
-                ]
-            )
-        )
+        condition=IfCondition(LaunchConfiguration('vicon'))
     )
     ld.add_action(vicon_tf_launch_description)
     
@@ -149,14 +137,9 @@ def generate_launch_description():
         package='rviz2',
         executable='rviz2',
         arguments=[
-            '-d', rviz_path,
-            '--ros-args', '--log-level', LaunchConfiguration('log_level')
-        ],
-        condition=IfCondition(
-            PythonExpression([
-                "'", LaunchConfiguration('rviz'), "' == 'True'"
-            ])
-        )
+            '-d', rviz_path
+        ]
+        # condition=IfCondition(LaunchConfiguration('rviz'))
     )
 
     ld.add_action(rviz_node)

@@ -6,7 +6,7 @@ export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 
-robots=("robot_12" "robot_13" "robot_14")
+robots=("robot_0" "robot_1" "robot_2")
 
 # Loop through each robot
 for robot in "${robots[@]}"; do

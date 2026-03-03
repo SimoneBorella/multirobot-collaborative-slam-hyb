@@ -1,4 +1,4 @@
-FROM osrf/ros:jazzy-desktop
+FROM osrf/ros:humble-desktop
 
 WORKDIR /
 
@@ -18,10 +18,10 @@ RUN apt -y update \
 
 
 # Cyclone DDS
-RUN apt install -y ros-jazzy-rmw-cyclonedds-cpp
+RUN apt install -y ros-humble-rmw-cyclonedds-cpp
 
-RUN apt install -y ros-jazzy-nav2-bringup \
-    && apt install -y ros-jazzy-navigation2
+RUN apt install -y ros-humble-nav2-bringup \
+    && apt install -y ros-humble-navigation2
 
 # Gtsam
 COPY dep/gtsam /dep/gtsam
@@ -104,12 +104,12 @@ RUN echo "# Avoid graphic issues using DRI2 instead of DRI3 with Intel Iris" >> 
 RUN echo "# Setup domain identifier to avoid wrong communications" >> /root/.bashrc \
     && echo "export ROS_DOMAIN_ID=19" >> /root/.bashrc
 
-# RUN echo "# Setup ROS2 middleware implementation" >> /root/.bashrc \
-#     && echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> /root/.bashrc
+RUN echo "# Setup ROS2 middleware implementation" >> /root/.bashrc \
+    && echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> /root/.bashrc
 #     && echo "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp" >> /root/.bashrc
 
-RUN echo "# Source ROS2 Jazzy environment" >> /root/.bashrc \
-    && echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc
+RUN echo "# Source ROS2 humble environment" >> /root/.bashrc \
+    && echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc
 
 RUN echo "# Change dir to ros2_ws when container is started" >> /root/.bashrc \
     && echo "cd /ros2_ws/" >> /root/.bashrc

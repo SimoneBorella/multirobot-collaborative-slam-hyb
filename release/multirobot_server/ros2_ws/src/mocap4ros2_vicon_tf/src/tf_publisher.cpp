@@ -19,10 +19,10 @@ class TfPublisher : public rclcpp::Node {
 public:
     TfPublisher() : Node("tf_publisher")
     {
-        this->declare_parameter<std::string>("all_frame", "all");
+        this->declare_parameter<std::string>("world_frame", "world");
         this->declare_parameter<bool>("verbose", false);
 
-        all_frame = this->get_parameter("all_frame").as_string();
+        world_frame = this->get_parameter("world_frame").as_string();
         verbose = this->get_parameter("verbose").as_bool();
         
         // Create subscriptions
@@ -53,7 +53,7 @@ private:
 
             geometry_msgs::msg::TransformStamped tf_msg;
             tf_msg.header.stamp = msg->header.stamp;
-            tf_msg.header.frame_id = all_frame;
+            tf_msg.header.frame_id = world_frame;
             tf_msg.child_frame_id = rb_name + "/ground_truth";
 
             tf_msg.transform.translation.x = rb.pose.position.x;
@@ -91,7 +91,7 @@ private:
         }
     }
 
-    std::string all_frame;
+    std::string world_frame;
     bool verbose;
     std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster;
     std::shared_ptr<tf2_ros::StaticTransformBroadcaster> tf_static_broadcaster;
