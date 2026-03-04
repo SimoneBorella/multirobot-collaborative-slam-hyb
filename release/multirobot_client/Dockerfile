@@ -164,5 +164,8 @@ RUN echo "# Source ROS2 humble environment" >> /root/.bashrc \
 
 RUN echo "# Change dir to ros2_ws when container is started" >> /root/.bashrc \
     && echo "cd /ros2_ws/" >> /root/.bashrc
-    
+
+
+ENV ROBOT_NAME="robot_0"
+
 WORKDIR /ros2_ws

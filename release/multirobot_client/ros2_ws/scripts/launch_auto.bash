@@ -10,7 +10,7 @@ export CAMERA_MODEL=oakd
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 
-namespace=robot_0
+namespace=$ROBOT_NAME
 launch_nav2=False
 log_level=error
 
