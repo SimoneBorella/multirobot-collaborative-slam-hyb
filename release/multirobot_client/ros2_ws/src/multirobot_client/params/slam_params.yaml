@@ -6,21 +6,32 @@ backend:
     init_accelerometer_bias: [0.0, 0.0, 0.0]
     init_gyroscope_bias: [0.0, 0.0, 0.0]
 
+
+    # Odom provided by Turtlebot3 (Encoders + IMU)
     sigma_odom_position_noise: 0.05
     sigma_odom_orientation_noise: 0.01
-
-    sigma_loop_closure_position_noise: 0.05
-    sigma_loop_closure_orientation_noise: 0.01
-
-    # sigma_accelerometer_noise_density: 1e-3    # PSD_accelerometer (m/s^2)/sqrt(s)
-    # sigma_gyroscope_noise_density: 1e-4        # PSD_gyroscope (rad/s)/sqrt(s) 
 
     sigma_accelerometer_noise_density: 6e-1    # PSD_accelerometer (m/s^2)/sqrt(s)
     sigma_gyroscope_noise_density: 6e-1        # PSD_gyroscope (rad/s)/sqrt(s)
 
+    # Encoders + IMU separately
+    # sigma_odom_position_noise: 0.15
+    # sigma_odom_orientation_noise: 0.1
+
+    # Values for LSM6DS3 on TurtleBot3
+    # sigma_accelerometer_noise_density: 0.08   # (m/s^2)/sqrt(s) - ~80-100 ug/sqrt(Hz)
+    # sigma_gyroscope_noise_density: 0.0015     # (rad/s)/sqrt(s) - ~0.008-0.01 deg/s/sqrt(Hz)    
+
+
+
+
+
+    sigma_loop_closure_position_noise: 0.05
+    sigma_loop_closure_orientation_noise: 0.01
+
     sigma_keypoint_noise: 0.03
 
-    data_association_distance: 0.3
+    data_association_distance: 0.03
 
     keyframe_distance: 0.5
     keyframe_angular_distance: 0.785

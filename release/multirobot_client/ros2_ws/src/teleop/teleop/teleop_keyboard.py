@@ -67,10 +67,10 @@ def main(args=None):
                 break
 
             if key == "w":
-                linear += 0.1
+                linear += 0.05
                 node.publish_twist(linear, angular)
             elif key == "x":
-                linear -= 0.1
+                linear -= 0.05
                 node.publish_twist(linear, angular)
             elif key == "a":
                 angular += 0.1

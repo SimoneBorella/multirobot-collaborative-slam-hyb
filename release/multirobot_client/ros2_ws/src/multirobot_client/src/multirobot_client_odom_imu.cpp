@@ -43,7 +43,7 @@ class MultirobotClient : public rclcpp::Node
 {
 public:
     MultirobotClient()
-        : Node("multirobot_client"), last_odom_ts_(0.0), imu_first_(true)
+        : Node("multirobot_client"), imu_first_(true)
     {
         ns_ = this->get_namespace();
         if (!ns_.empty() && ns_[0] == '/')
@@ -81,9 +81,9 @@ public:
         imu_subscription_ = this->create_subscription<sensor_msgs::msg::Imu>(
             imu_topic, 10, std::bind(&MultirobotClient::imu_callback, this, std::placeholders::_1));
 
-        // std::string odom_topic = "/" + ns_ + "/odom";
-        // odom_subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
-        //     odom_topic, 10, std::bind(&MultirobotClient::odom_callback, this, std::placeholders::_1));
+        std::string odom_topic = "/" + ns_ + "/odom";
+        odom_subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
+            odom_topic, 10, std::bind(&MultirobotClient::odom_callback, this, std::placeholders::_1));
 
         std::string keypoints_topic = "/" + ns_ + "/keypoints";
         keypoints_subscription_.subscribe(this, keypoints_topic, rclcpp::SensorDataQoS().get_rmw_qos_profile());
@@ -560,7 +560,7 @@ private:
         keypoints_data.timestamp = msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
 
         const rclcpp::Time keypoints_time = msg->header.stamp;
-        
+
         geometry_msgs::msg::TransformStamped base_to_keypoints =
             tf_buffer_->lookupTransform(
                 base_frame_,
@@ -637,46 +637,6 @@ private:
 
     void timer_callback()
     {
-        // Odom measurement
-        geometry_msgs::msg::TransformStamped t;
-
-        try {
-            // Cerchiamo la trasformazione più recente disponibile
-            t = tf_buffer_->lookupTransform(odom_frame_, base_frame_, tf2::TimePointZero);
-        } catch (const tf2::TransformException & ex) {
-            return;
-        }
-
-        double current_ts = t.header.stamp.sec + t.header.stamp.nanosec * 1e-9;
-
-        if (current_ts <= last_odom_ts_) {
-            return;
-        }
-
-        OdomData odom_data;
-        odom_data.timestamp = current_ts;
-        
-        odom_data.position = Eigen::Vector3d(
-            t.transform.translation.x,
-            t.transform.translation.y,
-            t.transform.translation.z);
-
-        odom_data.orientation = Eigen::Quaterniond(
-            t.transform.rotation.w,
-            t.transform.rotation.x,
-            t.transform.rotation.y,
-            t.transform.rotation.z);
-
-        slam_.add_odom(odom_data);
-        
-        last_odom_ts_ = current_ts;
-
-
-        
-
-
-
-
         const State &state = slam_.get_state();
         publish_map_to_odom(state);
         publish_state(state);
@@ -727,8 +687,6 @@ private:
     SLAM slam_;
     Mapping mapping_;
 
-    double last_odom_ts_;
-
     rclcpp::TimerBase::SharedPtr timer_;
 
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
@@ -740,7 +698,7 @@ private:
     Eigen::Quaterniond imu_initial_orientation_;
 
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_subscription_;
-    // rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscription_;
+    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscription_;
     message_filters::Subscriber<interfaces::msg::KeyPointArray> keypoints_subscription_;
     std::shared_ptr<tf2_ros::MessageFilter<interfaces::msg::KeyPointArray>> keypoints_filter_;
     message_filters::Subscriber<sensor_msgs::msg::LaserScan> scan_subscription_;

@@ -5,8 +5,8 @@ rgbd_feature_extraction:
     fy: 1028.7
     cx: 623.7
     cy: 359.8
-    max_keypoints: 500
-    max_landmarks: 100
+    max_keypoints: 200
+    max_keypoints_3d: 40
     median_filter_depth: False
     min_range: 1.0
     max_range: 5.0

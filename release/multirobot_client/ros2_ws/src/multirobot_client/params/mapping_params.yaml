@@ -10,8 +10,9 @@ distance_belief_factor: 0.0
 # distance_belief_factor: 0.03
 log_odds_min: -100.0
 log_odds_max: 100.0
-noise_radius: 0.03
-noise_std_dev: 0.1
+# noise_radius: 0.03
+noise_radius: 0.07
+noise_std_dev: 0.01
 
 obstacle_threshold: 0.70
 free_threshold: 0.30

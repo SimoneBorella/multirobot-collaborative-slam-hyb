@@ -154,7 +154,7 @@ private:
             cv::medianBlur(depth_image, depth_image, 5);
 
         
-        // £D projection
+        // 3D projection
         for (size_t i = 0; i < keep; ++i)
         {
             int idx = indices[i];
@@ -201,8 +201,10 @@ private:
         rgb_landmark_publisher.publish(rgb_msg);
 
         // Marker publishing
+        std::string ns = this->get_namespace();
+
         visualization_msgs::msg::Marker marker;
-        marker.header.frame_id = camera_frame;
+        marker.header.frame_id = ns + "/" + camera_frame;
         marker.header.stamp = this->get_clock()->now();
         marker.ns = "keypoints_3d";
         marker.type = visualization_msgs::msg::Marker::POINTS;
