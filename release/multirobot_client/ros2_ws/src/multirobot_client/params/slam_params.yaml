@@ -26,14 +26,14 @@ backend:
 
 
 
-    sigma_loop_closure_position_noise: 0.05
+    sigma_loop_closure_position_noise: 0.02
     sigma_loop_closure_orientation_noise: 0.01
 
-    sigma_keypoint_noise: 0.03
+    sigma_keypoint_noise: 0.01
 
-    data_association_distance: 0.03
+    data_association_distance: 0.08
 
-    keyframe_distance: 0.5
+    keyframe_distance: 0.3
     keyframe_angular_distance: 0.785
 
     keyframe_update_position_threshold: 0.05
