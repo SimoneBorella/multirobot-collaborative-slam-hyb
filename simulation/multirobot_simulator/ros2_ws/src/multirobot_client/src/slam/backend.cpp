@@ -425,7 +425,7 @@ namespace multirobot_slam
 
 
     std::vector<std::pair<Symbol, double>> Backend::probabilistic_data_association(const Point3 &observed_point, const std::array<uint8_t, 32> &observed_descriptor, const Values &estimates, const Marginals &marginals, const Matrix6 robot_cov)
-    {
+        {
         std::vector<std::pair<Symbol, double>> results;
 
         if (landmark_symbols_.empty())
@@ -450,20 +450,20 @@ namespace multirobot_slam
                 continue;
 
             // Hamming Distance filter
-            int min_hamming_distance = 256;
+            // int min_hamming_distance = 256;
 
-            for(std::array<uint8_t, 32>& landmark_descriptor : landmark_descriptors_[l])
-            {
-                int current_hamming = 0;
-                for (int i = 0; i < 32; ++i)
-                    current_hamming += __builtin_popcount(observed_descriptor[i] ^ landmark_descriptor[i]);
+            // for(std::array<uint8_t, 32>& landmark_descriptor : landmark_descriptors_[l])
+            // {
+            //     int current_hamming = 0;
+            //     for (int i = 0; i < 32; ++i)
+            //         current_hamming += __builtin_popcount(observed_descriptor[i] ^ landmark_descriptor[i]);
                 
-                if(current_hamming < min_hamming_distance)
-                    min_hamming_distance = current_hamming;
-            }
+            //     if(current_hamming < min_hamming_distance)
+            //         min_hamming_distance = current_hamming;
+            // }
 
-            if (min_hamming_distance > max_hamming_threshold)
-                continue;
+            // if (min_hamming_distance > max_hamming_threshold)
+            //     continue;
 
             // Could throw exception if marginal is singular
             Matrix3 cov;
@@ -516,7 +516,7 @@ namespace multirobot_slam
             Matrix3 cov_inv = cov.inverse();
             double mahalanobis_dist = std::sqrt(delta.transpose() * cov_inv * delta);
 
-            double mahalanobis_dist_threshold = 3.0;
+            double mahalanobis_dist_threshold = 0.3;
             if (mahalanobis_dist > mahalanobis_dist_threshold)
                 continue;
 
@@ -542,6 +542,7 @@ namespace multirobot_slam
 
         return results;
     }
+
 
 
 

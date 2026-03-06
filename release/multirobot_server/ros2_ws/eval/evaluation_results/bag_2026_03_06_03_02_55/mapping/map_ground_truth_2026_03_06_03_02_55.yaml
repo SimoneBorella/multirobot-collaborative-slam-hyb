@@ -1,0 +1,7 @@
+image: map_ground_truth_2026_03_06_03_02_55.pgm
+mode: trinary
+resolution: 0.05000000074505806
+origin: [-4.482288837432861, -21.323434829711914, 0.0]
+occupied_thresh: 0.65
+free_thresh: 0.25
+negate: 0

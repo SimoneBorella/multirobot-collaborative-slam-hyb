@@ -12,7 +12,7 @@ from geometry_msgs.msg import Transform, Vector3, Quaternion
 import matplotlib.pyplot as plt
 import math
 
-
+from bag_parser import BagParser
 
 GREEN = "#29B266"
 ORANGE = "#E68021"
@@ -25,14 +25,21 @@ PRIMARY_CYAN = "#00FFFF"
 PRIMARY_MAGENTA = "#FF00FF"
 PRIMARY_YELLOW = "#FFFF00"
 
-PRIMARY_CYAN_DARK = "#009999"     # darker cyan
-PRIMARY_MAGENTA_DARK = "#990099"  # darker magenta
-PRIMARY_YELLOW_DARK = "#999900"   # darker yellow
+PRIMARY_CYAN_DARK = "#009999"
+PRIMARY_MAGENTA_DARK = "#990099"
+PRIMARY_YELLOW_DARK = "#999900"
 
 
 WHITE  = "#FFFFFF"
 GREY = "#CDCDCD"
 BLACK  = "#000000"
+
+
+# LOCALIZATION_FIRST_N_LIMIT = 23533 // MAX
+LOCALIZATION_FIRST_N_LIMIT = 23533
+
+# MAP_LAST_N_LIMIT = 44 // MAX
+MAP_LAST_N_LIMIT = 1
 
 
 def parse_args():
@@ -52,43 +59,6 @@ def parse_args():
     )
 
     return parser.parse_args()
-
-
-class BagFileParser:
-    def __init__(self, bag_file):
-        self.conn = sqlite3.connect(bag_file)
-        self.cursor = self.conn.cursor()
-
-        # Create a message type map
-        topics_data = self.cursor.execute(
-            "SELECT id, name, type FROM topics"
-        ).fetchall()
-        self.topic_type = {name_of: type_of for id_of, name_of, type_of in topics_data}
-        self.topic_id = {name_of: id_of for id_of, name_of, type_of in topics_data}
-        self.topic_msg_message = {
-            name_of: get_message(type_of) for id_of, name_of, type_of in topics_data
-        }
-
-    def __del__(self):
-        self.conn.close()
-
-    def get_messages(self, topic_name):
-        topic_id = self.topic_id[topic_name]
-        # Get from the db
-        rows = self.cursor.execute(
-            "SELECT timestamp, data FROM messages WHERE topic_id = {}".format(topic_id)
-        ).fetchall()
-        # Deserialise all and timestamp them
-        return [
-            {
-                "timestamp":timestamp,
-                "data": deserialize_message(data, self.topic_msg_message[topic_name])
-            }
-            for timestamp, data in rows
-        ]
-    
-
-
 
 
 def quaternion_to_yaw(q):
@@ -112,6 +82,13 @@ def transform_to_matrix(t: Transform):
     T[2, 3] = t.translation.z
     return T
 
+def pose_to_matrix(p):
+    T = quaternion_to_matrix(p.orientation)
+    T[0, 3] = p.position.x
+    T[1, 3] = p.position.y
+    T[2, 3] = p.position.z
+    return T
+
 def matrix_to_transform(T):
     trans = Vector3(x=T[0, 3], y=T[1, 3], z=T[2, 3])
     qw = np.sqrt(1 + T[0, 0] + T[1, 1] + T[2, 2]) / 2
@@ -120,9 +97,6 @@ def matrix_to_transform(T):
     qz = (T[1, 0] - T[0, 1]) / (4*qw)
     rot = Quaternion(x=qx, y=qy, z=qz, w=qw)
     return Transform(translation=trans, rotation=rot)
-
-
-
 
 
 def hex_to_rgb(hex_color: str):
@@ -138,7 +112,7 @@ def blend_rgb_images(rgb1, rgb2, alpha=0.5):
     return (rgb1.astype(np.float32) * alpha + rgb2.astype(np.float32) * (1 - alpha)).astype(np.uint8)
 
     
-def save_map_png(occupancy_grid, filename="map.png", flip=True):
+def save_map_png(occupancy_grid, filename="map.png", filter=True, flip=True):
     # Flip vertically to match ROS convention
 
     grid = occupancy_grid
@@ -146,12 +120,15 @@ def save_map_png(occupancy_grid, filename="map.png", flip=True):
     if flip:
         grid = np.flipud(occupancy_grid)
 
-    filtered_occupancy_grid = np.zeros_like(grid)
+    if filter:
+        filtered_occupancy_grid = np.zeros_like(grid)
 
-    filtered_occupancy_grid[grid > 65] = 100
-    filtered_occupancy_grid[grid < 65] = -1
-    filtered_occupancy_grid[grid < 25] = 0
-    filtered_occupancy_grid[grid == -1] = -1
+        filtered_occupancy_grid[grid >= 65] = 100
+        filtered_occupancy_grid[grid < 65] = -1
+        filtered_occupancy_grid[grid < 25] = 0
+        filtered_occupancy_grid[grid == -1] = -1
+        
+        grid = filtered_occupancy_grid
 
     # Create RGB image
     h, w = grid.shape
@@ -159,66 +136,109 @@ def save_map_png(occupancy_grid, filename="map.png", flip=True):
 
 
     # Assign colors
-    rgb_image[filtered_occupancy_grid == -1] = hex_to_rgb(GREY)
-    rgb_image[filtered_occupancy_grid == 0]  = hex_to_rgb(WHITE)
-    rgb_image[filtered_occupancy_grid == 100] = hex_to_rgb(BLACK)
+    rgb_image[grid == -1] = hex_to_rgb(GREY)
+    rgb_image[grid == 0]  = hex_to_rgb(WHITE)
+    rgb_image[grid == 100] = hex_to_rgb(BLACK)
 
     # If there are in-between values (0–100), scale as grayscale
-    mask = (filtered_occupancy_grid > 0) & (filtered_occupancy_grid < 100)
-    rgb_image[mask] = np.stack([255 - filtered_occupancy_grid[mask]*255//100]*3, axis=-1)
+    mask = (grid > 0) & (grid < 100)
+    rgb_image[mask] = np.stack([255 - grid[mask]*255//100]*3, axis=-1)
 
     # Save as png
     image = Image.fromarray(rgb_image, mode="RGB")
     image.save(filename, format="PNG")
     print(f"Saved PNG map to {filename}")
 
-def save_map_merged_png(robot_map_grids, colors, filenames, filename):
-    # Flip vertically to match ROS convention
-    occupancy_grids = [np.flipud(robot_map_grids[robot]) for robot in robot_map_grids]
 
-    # Create RGB image
-    h, w = occupancy_grids[0].shape
-    rgb_images = [np.zeros((h, w, 3), dtype=np.uint8) for _ in range(len(occupancy_grids))]
 
-    # Assign colors
-    for i, occupancy_grid in enumerate(occupancy_grids):
-        rgb_images[i][occupancy_grid == -1] = hex_to_rgb(GREY)
-        rgb_images[i][occupancy_grid == 0]  = blend_rgb(hex_to_rgb(colors[i]), hex_to_rgb(WHITE), alpha=0.5)
-        rgb_images[i][occupancy_grid == 100] = blend_rgb(hex_to_rgb(colors[i]), hex_to_rgb(BLACK), alpha=0.5)
+def align_and_merge_maps(robot_map_msgs, robot_world_to_map_transform, map_info, robots):
 
-        # If there are in-between values (0–100), scale as grayscale
+    res = map_info['resolution']
+    g_width = map_info['width']
+    g_height = map_info['height']
+    g_origin_x = map_info['origin'][0]
+    g_origin_y = map_info['origin'][1]
+
+    aligned_grids = {}
+
+    for robot in robots:
+
+        msg = robot_map_msgs[robot]['data']
+        l_width = msg.info.width
+        l_height = msg.info.height
+        
+        local_data = np.array(msg.data, dtype=np.int8).reshape((l_height, l_width))
+        
+        l_world_x = robot_world_to_map_transform[robot].translation.x + msg.info.origin.position.x
+        l_world_y = robot_world_to_map_transform[robot].translation.y + msg.info.origin.position.y
+        
+        off_x = int(round((l_world_x - g_origin_x) / res))
+        off_y = int(round((l_world_y - g_origin_y) / res))
+
+        full_grid = np.full((g_height, g_width), -1, dtype=np.int8)
+
+        x_start = max(0, off_x)
+        y_start = max(0, off_y)
+        x_end = min(g_width, off_x + l_width)
+        y_end = min(g_height, off_y + l_height)
+
+        lx_start = max(0, -off_x)
+        ly_start = max(0, -off_y)
+        lx_end = lx_start + (x_end - x_start)
+        ly_end = ly_start + (y_end - y_start)
+
+        full_grid[y_start:y_end, x_start:x_end] = local_data[ly_start:ly_end, lx_start:lx_end]
+        aligned_grids[robot] = full_grid
+
+    return aligned_grids
+
+
+def save_map_merged_png(occupancy_grids, robots, colors, filenames, filename):
+    # Nota il .items() e l'uso di dict comprehension
+    occupancy_grids_flipped = {robot: np.flipud(grid) for robot, grid in occupancy_grids.items()}
+
+    h, w = occupancy_grids_flipped[robots[0]].shape
+    rgb_images = {}
+
+    # Assign colors - usiamo enumerate per l'indice del colore
+    for i, (robot, occupancy_grid) in enumerate(occupancy_grids_flipped.items()):
+        rgb_images[robot] = np.zeros((h, w, 3), dtype=np.uint8)
+        rgb_images[robot][occupancy_grid == -1] = hex_to_rgb(GREY)
+        # Usiamo i % len(colors) per evitare out of bounds
+        rgb_images[robot][occupancy_grid == 0]  = blend_rgb(hex_to_rgb(colors[i % len(colors)]), hex_to_rgb(WHITE), alpha=0.5)
+        rgb_images[robot][occupancy_grid == 100] = blend_rgb(hex_to_rgb(colors[i % len(colors)]), hex_to_rgb(BLACK), alpha=0.5)
+
         mask = (occupancy_grid > 0) & (occupancy_grid < 100)
-        rgb_images[i][mask] = np.stack([255 - occupancy_grid[mask]*255//100]*3, axis=-1)
+        rgb_images[robot][mask] = np.stack([255 - occupancy_grid[mask]*255//100]*3, axis=-1)
 
-        # Save as png
-        image = Image.fromarray(rgb_images[i], mode="RGB")
-        image.save(filenames[i], format="PNG")
-        print(f"Saved PNG map to {filenames[i]}")
+        image = Image.fromarray(rgb_images[robot], mode="RGB")
+        image.save(filenames[robot], format="PNG")
+        print(f"Saved PNG map to {filenames[robot]}")
     
     # Blend all maps together
-    merged_rgb_image = rgb_images[0].copy()
-    for rgb_image in rgb_images[1:]:
+    merged_rgb_image = rgb_images[robots[0]].copy()
+    for robot, rgb_image in rgb_images.items():
+        if robot == robots[0]:
+            continue
         merged_rgb_image = blend_rgb_images(merged_rgb_image, rgb_image, alpha=0.5)
 
-    # Save as png
     image = Image.fromarray(merged_rgb_image, mode="RGB")
     image.save(filename, format="PNG")
     print(f"Saved PNG map to {filename}")
 
     return merged_rgb_image
 
-
-def save_error_map_png(map_grid, rtab_map_grid, filename="map.png"):
+def save_error_map_png(map_grid, map_gt_grid, filename="map.png"):
     h, w = map_grid.shape
     rgb_image = np.zeros((h, w, 3), dtype=np.uint8)
 
     # Assign colors
-    not_eval_mask = (map_grid == -1) | (rtab_map_grid == -1)
+    not_eval_mask = (map_grid == -1) | (map_gt_grid == -1)
     rgb_image[not_eval_mask] = hex_to_rgb(GREY)
 
-    eval_mask = ((map_grid != -1) & (rtab_map_grid != -1))
-    right_mask = eval_mask & (map_grid == rtab_map_grid)
-    error_mask = eval_mask & (map_grid != rtab_map_grid)
+    eval_mask = ((map_grid != -1) & (map_gt_grid != -1))
+    right_mask = eval_mask & (map_grid == map_gt_grid)
+    error_mask = eval_mask & (map_grid != map_gt_grid)
 
     rgb_image[right_mask]  = hex_to_rgb(WHITE)
     rgb_image[error_mask] = hex_to_rgb(RED)
@@ -228,21 +248,18 @@ def save_error_map_png(map_grid, rtab_map_grid, filename="map.png"):
     image.save(filename, format="PNG")
     print(f"Saved PNG map to {filename}")
 
-
-
-
-def save_confusion_map_png(map_grid, rtab_map_grid, filename="confusion_map.png"):
+def save_confusion_map_png(map_grid, map_gt_grid, filename="confusion_map.png"):
     h, w = map_grid.shape
     rgb_image = np.zeros((h, w, 3), dtype=np.uint8)
 
     # Masks
-    not_eval_mask = (map_grid == -1) | (rtab_map_grid == -1)
-    eval_mask = (map_grid != -1) & (rtab_map_grid != -1)
+    not_eval_mask = (map_grid == -1) | (map_gt_grid == -1)
+    eval_mask = (map_grid != -1) & (map_gt_grid != -1)
 
-    tp_mask = eval_mask & (map_grid == 100) & (rtab_map_grid == 100)  # occupied-occupied
-    tn_mask = eval_mask & (map_grid == 0)   & (rtab_map_grid == 0)    # free-free
-    fp_mask = eval_mask & (map_grid == 100) & (rtab_map_grid == 0)    # predicted occupied, GT free
-    fn_mask = eval_mask & (map_grid == 0)   & (rtab_map_grid == 100)  # predicted free, GT occupied
+    tp_mask = eval_mask & (map_grid == 100) & (map_gt_grid == 100)  # occupied-occupied
+    tn_mask = eval_mask & (map_grid == 0)   & (map_gt_grid == 0)    # free-free
+    fp_mask = eval_mask & (map_grid == 100) & (map_gt_grid == 0)    # predicted occupied, GT free
+    fn_mask = eval_mask & (map_grid == 0)   & (map_gt_grid == 100)  # predicted free, GT occupied
 
     # Assign colors
     rgb_image[not_eval_mask] = hex_to_rgb(GREY)
@@ -256,20 +273,9 @@ def save_confusion_map_png(map_grid, rtab_map_grid, filename="confusion_map.png"
     image.save(filename, format="PNG")
     print(f"Saved confusion map to {filename}")
 
-
-
-
-
 def save_map_pgm(occupancy_grid, filename="map.pgm"):
     occupancy_grid = np.flipud(occupancy_grid)
-    filtered_occupancy_grid = np.zeros_like(occupancy_grid)
-
-    filtered_occupancy_grid[occupancy_grid > 65] = 100
-    filtered_occupancy_grid[occupancy_grid < 65] = -1
-    filtered_occupancy_grid[occupancy_grid < 25] = 0
-    filtered_occupancy_grid[occupancy_grid == -1] = -1
-
-    grayscale = np.where(filtered_occupancy_grid == -1, 205, 255 - (filtered_occupancy_grid * 2.55)).astype(np.uint8)
+    grayscale = np.where(occupancy_grid == -1, 205, 255 - (occupancy_grid * 2.55)).astype(np.uint8)
     image = Image.fromarray(grayscale, mode="L")
     image.save(filename, format="PPM")
     print(f"Saved PGM map to {filename}")
@@ -299,74 +305,78 @@ def save_map_yaml(resolution, origin, occupied_thresh, free_thresh, map_filename
 
 
 
-
-def map_grid_rtabmap_accuracy(map_occupancy_grid, rtabmap_map_occupancy_grid, map_meta, rtabmap_meta):
+def compute_map_accuracy_metrics(map_occupancy_grid, map_gt_grid, map_info, map_gt_info, mapping_path):
+    # 1. Pre-processamento (Flip e Trinarizzazione)
     map_raw = np.flipud(map_occupancy_grid)
-    map_grid = np.zeros_like(map_raw, dtype=np.int8)
-    map_grid[map_raw > 65] = 100
-    map_grid[map_raw < 65] = -1
-    map_grid[map_raw < 25] = 0
-    map_grid[map_raw == -1] = -1
+    map_grid_filtered = np.full_like(map_raw, -1, dtype=np.int8)
+    map_grid_filtered[map_raw >= 65] = 100
+    map_grid_filtered[(map_raw >= 0) & (map_raw < 25)] = 0
 
-    rt_raw = np.flipud(rtabmap_map_occupancy_grid)
-    rtab_grid = np.zeros_like(rt_raw, dtype=np.int8)
-    rtab_grid[rt_raw > 65] = 100
-    rtab_grid[rt_raw < 65] = -1
-    rtab_grid[rt_raw < 25] = 0
-    rtab_grid[rt_raw == -1] = -1
+    # 2. RISCAMPIONAMENTO (Upsampling alla risoluzione GT)
+    scale_factor = map_info["resolution"] / map_gt_info["resolution"]
+    new_width = int(round(map_grid_filtered.shape[1] * scale_factor))
+    new_height = int(round(map_grid_filtered.shape[0] * scale_factor))
+    
+    # Conversione sicura per Pillow (usiamo uint8 con offset per gestire il -1 se necessario, 
+    # ma qui usiamo direttamente l'array numpy che Image.fromarray gestisce meglio senza mode string)
+    temp_img = Image.fromarray(map_grid_filtered) 
+    temp_img = temp_img.resize((new_width, new_height), resample=Image.NEAREST)
+    map_grid_resampled = np.asarray(temp_img)
 
-    if not np.isclose(map_meta["resolution"], rtabmap_meta["resolution"]):
-        raise ValueError("Resolutions of the maps do not match. You must resample one map.")
-    res = map_meta["resolution"]
+    # 3. Allineamento Spaziale
+    res = map_gt_info["resolution"]
+    dx = int(round((map_gt_info["origin"][0] - map_info["origin"][0]) / res))
+    dy = int(round((map_gt_info["origin"][1] - map_info["origin"][1]) / res))
 
-    dx = int(round((rtabmap_meta["origin"][0] - map_meta["origin"][0]) / res))
-    dy = int(round((rtabmap_meta["origin"][1] - map_meta["origin"][1]) / res))
+    gt_raw = np.flipud(map_gt_grid)
+    gt_grid = np.full_like(gt_raw, -1, dtype=np.int8)
+    gt_grid[gt_raw >= 65] = 100
+    gt_grid[(gt_raw >= 0) & (gt_raw < 25)] = 0
 
-    y0 = max(0, dx)
-    x0 = max(0, map_grid.shape[0] - dy - rtab_grid.shape[0])
-    y1 = min(map_grid.shape[1], dx + rtab_grid.shape[1])
-    x1 = min(map_grid.shape[0], map_grid.shape[0] - dy)
+    # Creazione tela padded
+    padded_map_resampled = np.full_like(gt_grid, -1, dtype=np.int8)
 
-    rt_x0 = max(0, - (map_grid.shape[0] - dy - rtab_grid.shape[0]))
-    rt_y0 = max(0, -dx)
-    rt_x1 = rt_x0 + (x1 - x0)
-    rt_y1 = rt_y0 + (y1 - y0)
+    y_target_0, x_target_0 = max(0, -dy), max(0, -dx)
+    y_src_0, x_src_0 = max(0, dy), max(0, dx)
+    
+    h_overlap = min(map_grid_resampled.shape[0] - y_src_0, gt_grid.shape[0] - y_target_0)
+    w_overlap = min(map_grid_resampled.shape[1] - x_src_0, gt_grid.shape[1] - x_target_0)
 
-    padded_rtab = np.full_like(map_grid, -1, dtype=np.int8)
-    padded_rtab[x0:x1, y0:y1] = rtab_grid[rt_x0:rt_x1, rt_y0:rt_y1]
+    if h_overlap > 0 and w_overlap > 0:
+        padded_map_resampled[y_target_0 : y_target_0 + h_overlap, 
+                             x_target_0 : x_target_0 + w_overlap] = \
+            map_grid_resampled[y_src_0 : y_src_0 + h_overlap, 
+                               x_src_0 : x_src_0 + w_overlap]
 
-    save_map_png(padded_rtab, filename=f"{mapping_path}/padded_rtabmap_map.png", flip=False)
-    save_error_map_png(map_grid, padded_rtab, filename=f"{mapping_path}/error_map.png")
-    save_confusion_map_png(map_grid, padded_rtab, filename=f"{mapping_path}/confusion_map.png")
+    # Salvataggio Immagini Errori
+    save_map_png(padded_map_resampled, f"{mapping_path}/resampled_map_on_gt.png", filter=False, flip=False)
+    save_confusion_map_png(padded_map_resampled, gt_grid, f"{mapping_path}/confusion_map.png")
+    save_error_map_png(padded_map_resampled, gt_grid, f"{mapping_path}/error_map.png")
 
-    valid_mask = (map_grid != -1) & (padded_rtab != -1)
+    # Metriche
+    valid_mask = (padded_map_resampled != -1) & (gt_grid != -1)
     total = int(np.count_nonzero(valid_mask))
-    if total == 0:
-        return 0.0, 0, 0, 0, 0, 0, 0
+    if total == 0: return 0.0, 0, 0, 0, 0, 0, 0
 
-    correct = int(np.count_nonzero((map_grid == padded_rtab) & valid_mask))
-    accuracy = correct / total
-
-    map_occ = (map_grid == 100)
-    rt_occ  = (padded_rtab == 100)
-
-    tp = int(np.count_nonzero(map_occ & rt_occ & valid_mask))
-    tn = int(np.count_nonzero((map_grid == 0) & (padded_rtab == 0) & valid_mask))
-    fp = int(np.count_nonzero((map_grid == 100) & (padded_rtab == 0) & valid_mask))
-    fn = int(np.count_nonzero((map_grid == 0) & (padded_rtab == 100) & valid_mask))
-
-    return accuracy, total, correct, tp, tn, fp, fn
+    correct = int(np.count_nonzero((padded_map_resampled == gt_grid) & valid_mask))
+    tp = int(np.count_nonzero((padded_map_resampled == 100) & (gt_grid == 100) & valid_mask))
+    tn = int(np.count_nonzero((padded_map_resampled == 0) & (gt_grid == 0) & valid_mask))
+    fp = int(np.count_nonzero((padded_map_resampled == 100) & (gt_grid == 0) & valid_mask))
+    fn = int(np.count_nonzero((padded_map_resampled == 0) & (gt_grid == 100) & valid_mask))
 
 
+    free_cells_map = np.count_nonzero(padded_map_resampled == 0)
+    
+    free_cells_gt = np.count_nonzero(gt_grid == 0)
+    
+    explored = np.count_nonzero((padded_map_resampled == 0) & (gt_grid == 0))
 
+    if explored > 0:
+        free_space_exploration_ratio = (explored / free_cells_gt) * 100
+    else:
+        free_space_exploration_ratio = 0.0
 
-
-
-
-
-
-
-
+    return correct / total, total, correct, tp, tn, fp, fn, free_space_exploration_ratio
 
 
 
@@ -384,21 +394,21 @@ def map_grid_rtabmap_accuracy(map_occupancy_grid, rtabmap_map_occupancy_grid, ma
 if __name__ == "__main__":
     args = parse_args()
 
-    bag_parser = BagFileParser(args.bag)
-    if args.rtabmap_bag != "-":
-        rtabmap_bag_parser = BagFileParser(args.rtabmap_bag)
+    bag_parser = BagParser(args.bag)
 
+    if args.rtabmap_bag != "-":
+        rtabmap_bag_parser = BagParser(args.rtabmap_bag)
+
+    
+    # Initialize results folder and report file
     source_file_path = os.path.dirname(os.path.abspath(__file__))
-    results_path = f"{source_file_path}/bag_evaluation_data/{args.bag.split('/')[-2]}"
+    results_path = f"{source_file_path}/evaluation_results/{args.bag.split('/')[-2]}"
     mapping_path = f"{results_path}/mapping"
     localization_path = f"{results_path}/localization"
 
-    if not os.path.exists(results_path):
-        os.makedirs(results_path)
-    if not os.path.exists(localization_path):
-        os.makedirs(localization_path)
-    if not os.path.exists(mapping_path):
-        os.makedirs(mapping_path)
+    os.makedirs(results_path, exist_ok=True)
+    os.makedirs(mapping_path, exist_ok=True)
+    os.makedirs(localization_path, exist_ok=True)
 
     f = open(os.path.join(results_path, "report.md"), "w")
 
@@ -406,7 +416,6 @@ if __name__ == "__main__":
 
     bag_id = args.bag.split('/')[-2]
     f.write(f"**Bag ID:** {bag_id}\n\n")
-
 
     date_split = bag_id.split('_')[1:]
     current_date = datetime.now().strftime("%Y-%m-%d")
@@ -417,14 +426,32 @@ if __name__ == "__main__":
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     # Retrieve tf messages
-    tf_msgs = bag_parser.get_messages('/tf')
+    tf_msgs = bag_parser.get_n_first_messages('/tf', n=LOCALIZATION_FIRST_N_LIMIT)
     static_tf_msgs = bag_parser.get_messages('/tf_static')
 
 
-    # Retrieve robots list
+    # Retrieve robots info
     robots = set()
-    tf_all_to_map = {}
+    robot_world_to_map_transform = {}
 
     for msg in static_tf_msgs:
         for transform in msg['data'].transforms:
@@ -434,28 +461,24 @@ if __name__ == "__main__":
             if parent_frame == 'world' and '/map' in child_frame:
                 robot_name = child_frame.split('/')[0]
                 robots.add(robot_name)
-                tf_all_to_map[robot_name] = transform.transform
+                robot_world_to_map_transform[robot_name] = transform.transform
+
+
 
     robots = sorted(list(robots))
-
-    print(robots)
 
     f.write(f"**Robots:**\n")
     for robot in robots:
         f.write(f"`{robot}`\n")
     f.write(f"\n")
 
-
-
-
     # Retrieve transforms
 
-    tf_all_to_ground_truth = {robot: [] for robot in robots}
-
-    tf_all_to_map = {}
+    tf_map_to_base_link_ground_truth = {robot: [] for robot in robots}
+    tf_world_to_map = {}
     tf_map_to_odom = {robot: [] for robot in robots}
     tf_odom_to_base_footprint = {robot: [] for robot in robots}
-    tf_base_footprint_to_base_link = {}
+    tf_base_footprint_to_base_link = {robot: [] for robot in robots}
         
     for msg in tf_msgs:
         for transform in msg['data'].transforms:
@@ -472,85 +495,116 @@ if __name__ == "__main__":
                 if robot_name in robots:
                     tf_odom_to_base_footprint[robot_name].append((msg['timestamp'], transform.transform))
 
-            if 'all' in parent_frame and '/ground_truth' in child_frame:
+            if '/map' in parent_frame and '/base_link_ground_truth' in child_frame:
                 robot_name = child_frame.split('/')[0]
                 if robot_name in robots:
                     # CORRECTION: IN CASE OF GROUND TRUTH CONFUSION
                     # if robot_name == "robot_14" and transform.transform.translation.y > 1:
                     #     print(robot, transform.transform.translation.y)
                     #     continue
-                    tf_all_to_ground_truth[robot_name].append((msg['timestamp'], transform.transform))
+                    tf_map_to_base_link_ground_truth[robot_name].append((msg['timestamp'], transform.transform))
 
     for msg in static_tf_msgs:
         for transform in msg['data'].transforms:
             parent_frame = transform.header.frame_id
             child_frame  = transform.child_frame_id
 
-            if 'all' in parent_frame and '/map' in child_frame:
+            if 'world' in parent_frame and '/map' in child_frame:
                 robot_name = child_frame.split('/')[0]
                 if robot_name in robots:
-                    tf_all_to_map[robot_name] = transform.transform
+                    tf_world_to_map[robot_name] = transform.transform
 
             if '/base_footprint' in parent_frame and '/base_link' in child_frame:
                 robot_name = parent_frame.split('/')[0]
                 if robot_name in robots:
                     tf_base_footprint_to_base_link[robot_name] = transform.transform
 
-    
 
     # Concatenate tf to get map to base_link
-    tf_all_to_base_link = {robot: [] for robot in robots}
+    tf_world_to_base_link_ground_truth = {robot: [] for robot in robots}
+    tf_world_to_base_link = {robot: [] for robot in robots}
     tf_map_to_base_link = {robot: [] for robot in robots}
 
     time_tolerance = 5e7  # 50 ms
 
+
     for robot in robots:
-        map_transform = tf_all_to_map[robot]
-        odom_transforms = tf_map_to_odom[robot]
-        basefoot_data  = tf_odom_to_base_footprint[robot]
-        static_base_tf = transform_to_matrix(tf_base_footprint_to_base_link[robot])
+        world_to_map = tf_world_to_map[robot]
+        map_to_base_link_ground_truth = tf_map_to_base_link_ground_truth[robot]
+        map_to_odom = tf_map_to_odom[robot]
+        odom_to_base_footprint = tf_odom_to_base_footprint[robot]
+        base_footprint_to_base_link = tf_base_footprint_to_base_link[robot]
+    
+        T_world_map = transform_to_matrix(world_to_map)
+
+        for ts, map_to_base_link_ground_truth in map_to_base_link_ground_truth:
+            T_map_base_link_ground_truth = transform_to_matrix(map_to_base_link_ground_truth)
+            T_world_base_link_ground_truth = T_world_map @ T_map_base_link_ground_truth
+            tf_world_to_base_link_ground_truth[robot].append((ts, matrix_to_transform(T_world_base_link_ground_truth)))
+
 
         i = 0
-        n = len(odom_transforms)
+        n = len(map_to_odom)
+        
+        latest_T_map_odom = None
 
-        for ts, odom_to_base in basefoot_data:
-            while i < n and odom_transforms[i][0] <= ts:
+        for ts, odom_to_base_footprint in odom_to_base_footprint:
+            while i < n and map_to_odom[i][0] <= ts:
+                latest_T_map_odom = transform_to_matrix(map_to_odom[i][1])
                 i += 1
 
-            if i == 0:
+            if latest_T_map_odom is None:
                 continue
+                
+            T_odom_base_footprint = transform_to_matrix(odom_to_base_footprint)
+            T_base_footprint_base_link = transform_to_matrix(base_footprint_to_base_link)
 
-            best_ts, best_tf = odom_transforms[i - 1]
+            T_odom_base = T_odom_base_footprint @ T_base_footprint_base_link
+            T_map_base = latest_T_map_odom @ T_odom_base
+            T_world_base = T_world_map @ T_map_base
 
-            if ts - best_ts > time_tolerance:
-                continue
-            
-            T_all_map = transform_to_matrix(map_transform)
-            T_map_odom = transform_to_matrix(best_tf)
-            T_odom_basefoot = transform_to_matrix(odom_to_base)
+            tf_map_to_base_link[robot].append((ts, matrix_to_transform(T_map_base)))
+            tf_world_to_base_link[robot].append((ts, matrix_to_transform(T_world_base)))
 
-            T_map_baselink = T_map_odom @ T_odom_basefoot @ static_base_tf
-            T_all_baselink = T_all_map @ T_map_baselink
-
-            tf_map_to_base_link[robot].append((ts, matrix_to_transform(T_map_baselink)))
-            tf_all_to_base_link[robot].append((ts, matrix_to_transform(T_all_baselink)))
     
     # CORRECTION: DELETE LAST PART OF THE EXPERIMENT
     # for robot in robots:
-    #     tf_all_to_base_link[robot] = tf_all_to_base_link[robot][:-400]
+    #     tf_world_to_base_link[robot] = tf_world_to_base_link[robot][:-400]
     #     tf_map_to_base_link[robot] = tf_map_to_base_link[robot][:-400]
 
-    robot_initial_position = {robot: np.array([tf_all_to_base_link[robot][0][1].translation.x, tf_all_to_base_link[robot][0][1].translation.y, tf_all_to_base_link[robot][0][1].translation.z]) for robot in robots }
-    robot_final_position = {robot: np.array([tf_all_to_base_link[robot][-1][1].translation.x, tf_all_to_base_link[robot][-1][1].translation.y, tf_all_to_base_link[robot][-1][1].translation.z]) for robot in robots }
+    robot_initial_position = {robot: np.array([tf_world_to_base_link[robot][0][1].translation.x, tf_world_to_base_link[robot][0][1].translation.y, tf_world_to_base_link[robot][0][1].translation.z]) for robot in robots }
+    robot_final_position = {robot: np.array([tf_world_to_base_link[robot][-1][1].translation.x, tf_world_to_base_link[robot][-1][1].translation.y, tf_world_to_base_link[robot][-1][1].translation.z]) for robot in robots }
     
     
-
-
-
     # Retrieve messages
     cmd_vel_msgs = {robot: bag_parser.get_messages(f'/{robot}/cmd_vel') for robot in robots}
-    map_msgs = bag_parser.get_messages(f'/map')
-    robot_map_msgs = {robot: bag_parser.get_messages(f'/{robot}/map') for robot in robots}
+
+    if args.rtabmap_bag != "-":
+        map_gt_msg = rtabmap_bag_parser.get_n_last_message(f'/grid_prob_map')
+
+    last_map_msg = bag_parser.get_n_last_message(f'/map', n=MAP_LAST_N_LIMIT)
+    robot_map_msgs = {robot: bag_parser.get_n_last_message(f'/{robot}/map', n=MAP_LAST_N_LIMIT) for robot in robots}
+
+    # robot_keyframes_data = {robot: [] for robot in robots}
+    # for robot in robots:
+    #     kf_msg = bag_parser.get_n_last_message(f'/{robot}/keyframes_marker', n=MAP_LAST_N_LIMIT)
+    #     if kf_msg and kf_msg['data']:
+    #         T_world_map = transform_to_matrix(robot_world_to_map_transform[robot])
+
+    #         for marker in kf_msg['data'].markers:
+    #             T_map_kf = pose_to_matrix(marker.pose)
+                
+    #             T_world_kf = T_world_map @ T_map_kf
+                
+    #             qw = np.sqrt(max(0, 1 + T_world_kf[0, 0] + T_world_kf[1, 1] + T_world_kf[2, 2])) / 2
+    #             qx = (T_world_kf[2, 1] - T_world_kf[1, 2]) / (4*qw) if qw != 0 else 0
+    #             qy = (T_world_kf[0, 2] - T_world_kf[2, 0]) / (4*qw) if qw != 0 else 0
+    #             qz = (T_world_kf[1, 0] - T_world_kf[0, 1]) / (4*qw) if qw != 0 else 0
+                
+    #             class TempQ: w, x, y, z = qw, qx, qy, qz
+    #             yaw_world = quaternion_to_yaw(TempQ)
+                
+    #             robot_keyframes_data[robot].append((T_world_kf[0, 3], T_world_kf[1, 3], yaw_world))
 
 
 
@@ -588,8 +642,6 @@ if __name__ == "__main__":
     for robot in robots:
         msgs = cmd_vel_msgs[robot]
 
-        print(msgs[0])
-
         # Start and last timestamp common to all robots
         if start_timestamp is None or msgs[0]["timestamp"] < start_timestamp:
             start_timestamp = msgs[0]["timestamp"]
@@ -603,10 +655,7 @@ if __name__ == "__main__":
 
         distance_from_init = np.linalg.norm(robot_initial_position[robot] - robot_final_position[robot])
 
-        success[robot] = (abs(last.linear.x) < linear_x_threshold and abs(last.angular.z) < angular_z_threshold) \
-            and distance_from_init < distance_from_init_threshold
-
-
+        success[robot] = (abs(last.linear.x) < linear_x_threshold and abs(last.angular.z) < angular_z_threshold) and distance_from_init < distance_from_init_threshold
 
         # Find last stop timestamp
         end_timestamp[robot] = msgs[-1]["timestamp"]
@@ -619,8 +668,6 @@ if __name__ == "__main__":
 
 
     f.write("## Timing evaluation:\n\n")
-
-    print(last_timestamp, start_timestamp)
     f.write(f"**Bag record time:** {(last_timestamp - start_timestamp) * 1e-6:.0f} ms\n\n")
 
     f.write("| Robot ID | Success | Last cmd (linear_x, angular_z) | Execution time |\n")
@@ -664,12 +711,26 @@ if __name__ == "__main__":
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
     # Localization evaluation
 
-    robot_vicon_status = {}
+    robot_ground_truth_status = {}
 
     for robot in robots:
-        robot_vicon_status[robot] = (len(tf_all_to_ground_truth[robot])!=0)
+        robot_ground_truth_status[robot] = (len(tf_world_to_base_link_ground_truth[robot])!=0)
+
 
     distance_errors = {robot: [] for robot in robots}
     x_errors = {robot: [] for robot in robots}
@@ -680,11 +741,11 @@ if __name__ == "__main__":
     time_tolerance = 5e7
 
     for robot in robots:
-        if not robot_vicon_status[robot]:
+        if not robot_ground_truth_status[robot]:
             continue
 
-        tf_robot = tf_all_to_base_link[robot]
-        tf_robot_ground_truth = tf_all_to_ground_truth[robot]
+        tf_robot = tf_world_to_base_link[robot]
+        tf_robot_ground_truth = tf_world_to_base_link_ground_truth[robot]
 
         i = 0
         n = len(tf_robot_ground_truth)
@@ -714,16 +775,16 @@ if __name__ == "__main__":
             yaw_error = abs((quaternion_to_yaw(transform.rotation) - quaternion_to_yaw(ground_truth_transform.rotation) + math.pi) % (2 * math.pi) - math.pi )
 
             # CORRECTION: LIMIT ERRORS PLOT
-            if distance_error < 0.30 and yaw_error < 0.25:
-                distance_errors[robot].append((ts, distance_error))
-                x_errors[robot].append((ts, x_error))
-                y_errors[robot].append((ts, y_error))
-                yaw_errors[robot].append((ts, yaw_error))
+            # if distance_error < 0.30 and yaw_error < 0.25:
+            #     distance_errors[robot].append((ts, distance_error))
+            #     x_errors[robot].append((ts, x_error))
+            #     y_errors[robot].append((ts, y_error))
+            #     yaw_errors[robot].append((ts, yaw_error))
 
-            # distance_errors[robot].append((ts, distance_error))
-            # x_errors[robot].append((ts, x_error))
-            # y_errors[robot].append((ts, y_error))
-            # yaw_errors[robot].append((ts, yaw_error))
+            distance_errors[robot].append((ts, distance_error))
+            x_errors[robot].append((ts, x_error))
+            y_errors[robot].append((ts, y_error))
+            yaw_errors[robot].append((ts, yaw_error))
 
 
     distance_mae = {}
@@ -734,7 +795,7 @@ if __name__ == "__main__":
     yaw_std = {}
 
     for robot in robots:
-        if not robot_vicon_status[robot]:
+        if not robot_ground_truth_status[robot]:
             continue
 
         distance_mae[robot] = np.array([e[1] for e in distance_errors[robot] if e[1]!=-1]).mean()
@@ -756,20 +817,28 @@ if __name__ == "__main__":
         yaw_std[robot] = yaw_vals.std()
 
 
+    distance_traveled = {robot: 0.0 for robot in robots}
+    for robot in robots:
+        points = [np.array([item[1].translation.x, item[1].translation.y]) 
+                  for item in tf_world_to_base_link[robot]]
+        if len(points) > 1:
+            for p1, p2 in zip(points[:-1], points[1:]):
+                distance_traveled[robot] += np.linalg.norm(p2 - p1)
+
 
     f.write("## Localization evaluation:\n\n")
 
-    f.write("| Robot ID | Success | Vicon ground truth | Final distance error | Distance MAE | Distance RMSE | Distance STD | Final yaw error | Yaw MAE | Yaw RMSE | Yaw STD |\n")
-    f.write("|----------|---------|--------------------|----------------------|--------------|---------------|--------------|-----------------|---------|----------|---------|\n")
+    f.write("| Robot ID | Success | Ground truth | Traveled distance | Final distance error | Distance MAE | Distance RMSE | Distance STD | Final yaw error | Yaw MAE | Yaw RMSE | Yaw STD |\n")
+    f.write("|----------|---------|--------------|-------------------|----------------------|--------------|---------------|--------------|-----------------|---------|----------|---------|\n")
 
     for robot in robots:
         success_status = "Yes" if success[robot] else "No"
-        vicon_status = "Yes" if robot_vicon_status[robot] else "No"
+        ground_truth_status = "Yes" if robot_ground_truth_status[robot] else "No"
 
-        if success[robot] and robot_vicon_status[robot]:
-            f.write(f"| `{robot}` | {success_status} | {vicon_status} | {distance_errors[robot][-1][1]:.2f} m | {distance_mae[robot]:.2f} m | {distance_rmse[robot]:.2f} m | {distance_std[robot]:.2f} m | {yaw_errors[robot][-1][1]:.2f} rad | {yaw_mae[robot]:.2f} rad | {yaw_rmse[robot]:.2f} rad | {yaw_std[robot]:.2f} rad |\n")
+        if robot_ground_truth_status[robot]:
+            f.write(f"| `{robot}` | {success_status} | {ground_truth_status} | {distance_traveled[robot]:.2f} m | {distance_errors[robot][-1][1]:.2f} m | {distance_mae[robot]:.2f} m | {distance_rmse[robot]:.2f} m | {distance_std[robot]:.2f} m | {yaw_errors[robot][-1][1]:.2f} rad | {yaw_mae[robot]:.2f} rad | {yaw_rmse[robot]:.2f} rad | {yaw_std[robot]:.2f} rad |\n")
         else:
-            f.write(f"| `{robot}` | {success_status} | {vicon_status} | - | - | - | - | - | - |\n")
+            f.write(f"| `{robot}` | {success_status} | {ground_truth_status} | - | - | - | - | - | - | - |\n")
 
     f.write("\n")
 
@@ -778,11 +847,7 @@ if __name__ == "__main__":
 
 
 
-
-
     # Plot localization trajectories
-
-
 
     def split_continuous_segments(points, threshold=0.05):
 
@@ -820,8 +885,8 @@ if __name__ == "__main__":
     colors = [PRIMARY_CYAN_DARK, PRIMARY_MAGENTA_DARK, PRIMARY_YELLOW_DARK]
     for i, robot in enumerate(robots):
         plt.plot(
-            [item[1].translation.x for item in tf_all_to_base_link[robot]],
-            [item[1].translation.y for item in tf_all_to_base_link[robot]],
+            [item[1].translation.x for item in tf_world_to_base_link[robot]],
+            [item[1].translation.y for item in tf_world_to_base_link[robot]],
             linestyle="-",
             linewidth=2,
             color = colors[i],
@@ -829,12 +894,12 @@ if __name__ == "__main__":
             label=f"Measured trajectory - {robot}"
         )
 
-        if not robot_vicon_status[robot]: 
+        if not robot_ground_truth_status[robot]: 
             continue
         
         # plt.plot(
-        #     [item[1].translation.x for item in tf_all_to_ground_truth[robot]],
-        #     [item[1].translation.y for item in tf_all_to_ground_truth[robot]],
+        #     [item[1].translation.x for item in tf_world_to_base_link_ground_truth[robot]],
+        #     [item[1].translation.y for item in tf_world_to_base_link_ground_truth[robot]],
         #     linestyle="--",
         #     linewidth=2,
         #     color = colors[i],
@@ -843,7 +908,7 @@ if __name__ == "__main__":
         # )
 
         gt_points = [(item[1].translation.x, item[1].translation.y) 
-                 for item in tf_all_to_ground_truth[robot]]
+                 for item in tf_world_to_base_link_ground_truth[robot]]
     
         segments = split_continuous_segments(gt_points, threshold=0.05)
 
@@ -896,6 +961,25 @@ if __name__ == "__main__":
 
             first = False
 
+
+        # if robot_keyframes_data[robot]:
+        #     kf_x = [k[0] for k in robot_keyframes_data[robot]]
+        #     kf_y = [k[1] for k in robot_keyframes_data[robot]]
+        #     kf_yaw = [k[2] for k in robot_keyframes_data[robot]]
+            
+        #     u = np.cos(kf_yaw)
+        #     v = np.sin(kf_yaw)
+            
+        #     label_kf = f"Keyframes - {robot}" if i == 0 else ""
+        #     plt.quiver(kf_x, kf_y, u, v, color=colors[i], 
+        #         scale=80,          # Più alto è, più la freccia è corta
+        #         width=0.002,       # Più basso è, più la freccia è sottile
+        #         headwidth=3,       # Rimpicciolisce la punta
+        #         headlength=4,      # Accorcia la punta
+        #         headaxislength=3,  # Rende la punta meno "panciuta"
+        #         pivot='mid',       # Centra la freccia sul punto esatto
+        #         alpha=0.8, 
+        #         label=label_kf)
             
 
     
@@ -934,7 +1018,7 @@ if __name__ == "__main__":
     colors = [PRIMARY_CYAN_DARK, PRIMARY_MAGENTA_DARK, PRIMARY_YELLOW_DARK]
 
     for i, robot in enumerate(robots):
-        if not robot_vicon_status[robot]:
+        if not robot_ground_truth_status[robot]:
             continue
 
         ax = axes[i]
@@ -1005,7 +1089,7 @@ if __name__ == "__main__":
         axes = [axes]
 
     for i, robot in enumerate(robots):
-        if not robot_vicon_status[robot]: 
+        if not robot_ground_truth_status[robot]: 
             continue
 
         ax = axes[i]
@@ -1121,18 +1205,27 @@ if __name__ == "__main__":
 
 
 
-    # Mapping evaluation
-    unknown_value = -1
 
-    # CORRECTION: DELETE LAST PART OF THE EXPERIMENT
-    # last_map_msg = map_msgs[-5]
-    last_map_msg = map_msgs[-1]
+
+
+
+
+
+
+    # Mapping
+    unknown_value = -1
 
     resolution = last_map_msg['data'].info.resolution
     width = last_map_msg['data'].info.width
     height = last_map_msg['data'].info.height
     origin = (last_map_msg['data'].info.origin.position.x, last_map_msg['data'].info.origin.position.y, last_map_msg['data'].info.origin.position.z)
-    
+
+    resolution_gt = map_gt_msg['data'].info.resolution
+    width_gt = map_gt_msg['data'].info.width
+    height_gt = map_gt_msg['data'].info.height
+    origin_gt = (map_gt_msg['data'].info.origin.position.x, map_gt_msg['data'].info.origin.position.y, map_gt_msg['data'].info.origin.position.z)
+
+
     map_grid = np.array(last_map_msg['data'].data, dtype=np.int8).reshape(((height, width)))
     map_grid[map_grid==-1] = unknown_value
 
@@ -1150,65 +1243,59 @@ if __name__ == "__main__":
         map_filename=f"{map_name}.pgm"
     )
 
-    
-    robot_map_grids = {}
-    for robot in robots:
-        # CORRECTION: DELETE LAST PART OF THE EXPERIMENT
-        # map_msg = robot_map_msgs[robot][-5]
-        map_msg = robot_map_msgs[robot][-1]
 
-        robot_map_grid = np.array(map_msg['data'].data, dtype=np.int8).reshape(((height, width)))
-        robot_map_grid[robot_map_grid==-1] = unknown_value
+    map_gt_grid = np.array(map_gt_msg['data'].data, dtype=np.int8).reshape(((height_gt, width_gt)))
+    map_gt_grid[map_gt_grid==-1] = unknown_value
 
-        robot_map_grids[robot] = robot_map_grid
+    save_map_png(map_gt_grid, filename=f"{mapping_path}/map_ground_truth.png")
+
+    map_ground_truth_name = args.bag.split("/")[-2].replace("bag", "map_ground_truth")
+    save_map_pgm(map_gt_grid, filename=f"{mapping_path}/{map_ground_truth_name}.pgm")
+    save_map_yaml(
+        resolution=resolution_gt,
+        origin=origin_gt,
+        occupied_thresh=0.65,
+        free_thresh=0.25,
+        filename=f"{mapping_path}/{map_ground_truth_name}.yaml",
+        map_filename=f"{map_ground_truth_name}.pgm"
+    )
+
+    map_info = {
+        "resolution": resolution,
+        "width": width,
+        "height": height, 
+        "origin": origin 
+    }
+
+
+    map_gt_info = {
+        "resolution": resolution_gt,
+        "width": width_gt,
+        "height": height_gt, 
+        "origin": origin_gt 
+    }
+
+
+    map_accuracy, map_total, map_correct, map_tp, map_tn, map_fp, map_fn, free_space_exploration_ratio = compute_map_accuracy_metrics(map_grid, map_gt_grid, map_info, map_gt_info, mapping_path)
+
+
+    map_tpr = map_tp / (map_tp + map_fn)
+    map_tnr = map_tn / (map_tn + map_fp)
+    map_fpr = map_fp / (map_fp + map_tn)
+    map_fnr = map_fn / (map_fn + map_tp)
+
+
+    # Maps alignment
+    robot_map_grids = align_and_merge_maps(robot_map_msgs, robot_world_to_map_transform, map_info, robots)
+
+
+
 
     colors = [PRIMARY_CYAN, PRIMARY_MAGENTA, PRIMARY_YELLOW]
-    map_merged_name = args.bag.split("/")[-2].replace("bag", "map_merged")
-    filenames = [f"{mapping_path}/map_{robot}.png" for robot in robots]
+    filenames = {robot: f"{mapping_path}/map_{robot}.png" for robot in robots}
     filename = f"{mapping_path}/map_merged.png"
 
-    merged_rgb_image = save_map_merged_png(robot_map_grids, colors, filenames, filename)
-
-
-
-
-
-
-
-
-    # Plot merged map with localization trajectories
-
-    # plt.figure(figsize=(12, 12))
-
-    # plt.imshow(
-    #     np.flipud(merged_rgb_image),
-    #     cmap="gray", 
-    #     origin="lower",
-    #     extent=[
-    #         origin[0], origin[0] + width * resolution,
-    #         origin[1], origin[1] + height * resolution
-    #     ]
-    # )
-
-    # plt.title("Robot Trajectories over Grid Map", fontsize=14)
-    # plt.xlabel("X [m]")
-    # plt.ylabel("Y [m]")
-
-    # # Plot trajectories
-    # colors = [PRIMARY_CYAN_DARK, PRIMARY_MAGENTA_DARK, PRIMARY_YELLOW_DARK]
-    # for i, robot in enumerate(robots):
-    #     xs = [item[1].translation.x for item in tf_all_to_base_link[robot]]
-    #     ys = [item[1].translation.y for item in tf_all_to_base_link[robot]]
-
-    #     plt.plot(xs, ys, color=colors[i], linewidth=0.5, label=f"Trajectory - {robot}")
-
-    # plt.legend()
-    # plt.grid(True, linestyle="--", alpha=0.5)
-    # plt.axis("equal")
-
-    # # Save the overlay
-    # plt.savefig(f"{localization_path}/localization_on_map.png")
-    # plt.savefig(f"{localization_path}/localization_on_map.pdf")
+    merged_rgb_image = save_map_merged_png(robot_map_grids, robots, colors, filenames, filename)
 
 
 
@@ -1226,10 +1313,29 @@ if __name__ == "__main__":
 
     colors = [PRIMARY_CYAN_DARK, PRIMARY_MAGENTA_DARK, PRIMARY_YELLOW_DARK]
     for i, robot in enumerate(robots):
-        xs = [item[1].translation.x for item in tf_all_to_base_link[robot]]
-        ys = [item[1].translation.y for item in tf_all_to_base_link[robot]]
+        xs = [item[1].translation.x for item in tf_world_to_base_link[robot]]
+        ys = [item[1].translation.y for item in tf_world_to_base_link[robot]]
 
         plt.plot(xs, ys, color=colors[i], linewidth=0.8, label=f"Trajectory - {robot}")
+
+        # if robot_keyframes_data[robot]:
+        #     kf_x = [k[0] for k in robot_keyframes_data[robot]]
+        #     kf_y = [k[1] for k in robot_keyframes_data[robot]]
+        #     kf_yaw = [k[2] for k in robot_keyframes_data[robot]]
+            
+        #     u = np.cos(kf_yaw)
+        #     v = np.sin(kf_yaw)
+            
+        #     label_kf = f"Keyframes - {robot}" if i == 0 else ""
+        #     plt.quiver(kf_x, kf_y, u, v, color=colors[i], 
+        #         scale=80,          # Più alto è, più la freccia è corta
+        #         width=0.002,       # Più basso è, più la freccia è sottile
+        #         headwidth=3,       # Rimpicciolisce la punta
+        #         headlength=4,      # Accorcia la punta
+        #         headaxislength=3,  # Rende la punta meno "panciuta"
+        #         pivot='mid',       # Centra la freccia sul punto esatto
+        #         alpha=0.8, 
+        #         label=label_kf)
 
     plt.axis("off")
     plt.gca().set_xticks([])
@@ -1248,106 +1354,6 @@ if __name__ == "__main__":
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # Mapping accuracy with respect to rtabmap
-
-    if args.rtabmap_bag != "-":
-        rtabmap_map_msgs = rtabmap_bag_parser.get_messages(f'/grid_prob_map')
-
-        unknown_value = -1
-
-        last_rtabmap_map_msg = rtabmap_map_msgs[-1]
-
-        rtabmap_resolution = last_rtabmap_map_msg['data'].info.resolution
-        rtabmap_width = last_rtabmap_map_msg['data'].info.width
-        rtabmap_height = last_rtabmap_map_msg['data'].info.height
-        rtabmap_origin = (last_rtabmap_map_msg['data'].info.origin.position.x, last_rtabmap_map_msg['data'].info.origin.position.y, last_rtabmap_map_msg['data'].info.origin.position.z)
-        
-        rtabmap_map_grid = np.array(last_rtabmap_map_msg['data'].data, dtype=np.int8).reshape(((rtabmap_height, rtabmap_width)))
-        rtabmap_map_grid[rtabmap_map_grid==-1] = unknown_value
-
-        save_map_png(rtabmap_map_grid, filename=f"{mapping_path}/rtabmap_map.png")
-
-
-        rtabmap_map_name = args.bag.split("/")[-2].replace("bag", "rtabmap_map")
-        save_map_pgm(rtabmap_map_grid, filename=f"{mapping_path}/{rtabmap_map_name}.pgm")
-        save_map_yaml(
-            resolution=rtabmap_resolution,
-            origin=rtabmap_origin,
-            occupied_thresh=0.65,
-            free_thresh=0.25,
-            filename=f"{mapping_path}/{rtabmap_map_name}.yaml",
-            map_filename=f"{rtabmap_map_name}.pgm"
-        )
-
-
-
-        map_meta = {
-            "resolution": resolution,
-            "width": width,
-            "height": height, 
-            "origin": origin 
-        }
-
-
-        rtabmap_meta = {
-            "resolution": rtabmap_resolution,
-            "width": rtabmap_width,
-            "height": rtabmap_height, 
-            "origin": rtabmap_origin 
-        }
-
-
-        map_accuracy, map_total, map_correct, map_tp, map_tn, map_fp, map_fn = map_grid_rtabmap_accuracy(map_grid, rtabmap_map_grid, map_meta, rtabmap_meta)
-
-
-        map_tpr = map_tp / (map_tp + map_fn)
-        map_tnr = map_tn / (map_tn + map_fp)
-        map_fpr = map_fp / (map_fp + map_tn)
-        map_fnr = map_fn / (map_fn + map_tp)
-
-
-
-
-
-
-
-
-
     f.write(f"## Mapping evaluation:\n\n")
 
     f.write(f"**Map resolution:** {resolution:.2f} m/pixel\n\n")
@@ -1356,6 +1362,9 @@ if __name__ == "__main__":
 
     explored_area = np.sum(map_grid != unknown_value) * resolution**2
     f.write(f"**Explored area:** {explored_area:.2f} m²\n\n")
+
+    f.write(f"**Explored area ratio:** {free_space_exploration_ratio:.2f}%\n\n")
+
 
 
     f.write("| Robot ID | Exploration area | Exploration percentage |\n")
@@ -1384,44 +1393,41 @@ if __name__ == "__main__":
 
 
 
-    if args.rtabmap_bag != "-":
-        f.write(f"**Mapping accuracy** (wrt rtabmap): {map_accuracy:.4f} ({map_correct}/{map_total} compared cells)\n")
+    f.write(f"**Mapping accuracy**: {map_accuracy:.4f} ({map_correct}/{map_total} compared cells)\n")
 
-        f.write("| Quantity | Value |\n")
-        f.write("|--------|-------|\n")
-        f.write(f"| True Positives (TP)  | {map_tp} |\n")
-        f.write(f"| True Negatives (TN)  | {map_tn} |\n")
-        f.write(f"| False Positives (FP) | {map_fp} |\n")
-        f.write(f"| False Negatives (FN) | {map_fn} |\n")
+    f.write("| Quantity | Value |\n")
+    f.write("|--------|-------|\n")
+    f.write(f"| True Positives (TP)  | {map_tp} |\n")
+    f.write(f"| True Negatives (TN)  | {map_tn} |\n")
+    f.write(f"| False Positives (FP) | {map_fp} |\n")
+    f.write(f"| False Negatives (FN) | {map_fn} |\n")
 
-        f.write("\n")
+    f.write("\n")
 
-        f.write("| Metric | Value |\n")
-        f.write("|--------|-------|\n")
-        f.write(f"| True Positive Rate (TPR)  | {map_tpr} |\n")
-        f.write(f"| True Negative Rate (TNR)  | {map_tnr} |\n")
-        f.write(f"| False Positive Rate (FPR) | {map_fpr} |\n")
-        f.write(f"| False Negative Rate (FNR) | {map_fnr} |\n")
+    f.write("| Metric | Value |\n")
+    f.write("|--------|-------|\n")
+    f.write(f"| True Positive Rate (TPR)  | {map_tpr} |\n")
+    f.write(f"| True Negative Rate (TNR)  | {map_tnr} |\n")
+    f.write(f"| False Positive Rate (FPR) | {map_fpr} |\n")
+    f.write(f"| False Negative Rate (FNR) | {map_fnr} |\n")
 
 
     f.write(f"### Mapping results:\n\n")
 
-    if args.rtabmap_bag != "-":
-        f.write(f"**Map rtabmap:**\n\n")
-        f.write(f"![Map](mapping/padded_rtabmap_map.png)\n\n")
+    f.write(f"**Map ground truth:**\n\n")
+    f.write(f"![Map](mapping/map_ground_truth.png)\n\n")
 
 
     f.write(f"**Map result:**\n\n")
-    f.write(f"![Map](mapping/map.png)\n\n")
+    f.write(f"![Map](mapping/resampled_map_on_gt.png)\n\n")
 
-    if args.rtabmap_bag != "-":
-        f.write(f"**Map error:**\n\n")
-        f.write(f"![Map](mapping/error_map.png)\n\n")
+    f.write(f"**Map error:**\n\n")
+    f.write(f"![Map](mapping/error_map.png)\n\n")
 
 
-        f.write(f"**Map confusion:**\n\n")
-        f.write(f"![Map](mapping/confusion_map.png)\n\n")
-        f.write(f"Grey = not_evaluated, Green = TP, White = TN, Blue = FP, RED = FN\n\n")
+    f.write(f"**Map confusion:**\n\n")
+    f.write(f"![Map](mapping/confusion_map.png)\n\n")
+    f.write(f"Grey = not_evaluated, Green = TP, White = TN, Blue = FP, RED = FN\n\n")
 
     for robot in robots:
         f.write(f"**Map {robot}:**\n\n")
