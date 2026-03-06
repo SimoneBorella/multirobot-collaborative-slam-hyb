@@ -51,11 +51,13 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: true
-        all:
+        robot_0/ground_truth:
           Value: true
-        robot_12/ground_truth:
+        robot_1/ground_truth:
           Value: true
-        robot_13/ground_truth:
+        robot_2/ground_truth:
+          Value: true
+        world:
           Value: true
       Marker Scale: 1
       Name: TF
@@ -63,17 +65,19 @@ Visualization Manager:
       Show Axes: true
       Show Names: true
       Tree:
-        all:
-          robot_12/ground_truth:
+        world:
+          robot_0/ground_truth:
             {}
-          robot_13/ground_truth:
+          robot_1/ground_truth:
+            {}
+          robot_2/ground_truth:
             {}
       Update Interval: 0
       Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
-    Fixed Frame: all
+    Fixed Frame: world
     Frame Rate: 30
   Name: root
   Tools:

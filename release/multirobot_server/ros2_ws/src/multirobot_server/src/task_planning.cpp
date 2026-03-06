@@ -175,16 +175,28 @@ namespace multirobot_slam
 
         std::vector<Frontier, Eigen::aligned_allocator<Frontier>> merged_frontiers;
 
-        if(params_.information_gain_mode)
-        {
-            merged_frontiers.reserve(frontiers.size() + refinement_frontiers.size());
-            merged_frontiers.insert(merged_frontiers.end(), frontiers.begin(), frontiers.end());
-            merged_frontiers.insert(merged_frontiers.end(), refinement_frontiers.begin(), refinement_frontiers.end());
-        }
-        else
-        {
-            merged_frontiers = frontiers;
-        }
+        // if(params_.information_gain_mode)
+        // {
+        //     merged_frontiers.reserve(frontiers.size() + refinement_frontiers.size());
+        //     merged_frontiers.insert(merged_frontiers.end(), frontiers.begin(), frontiers.end());
+        //     merged_frontiers.insert(merged_frontiers.end(), refinement_frontiers.begin(), refinement_frontiers.end());
+        // }
+        // else
+        // {
+        //     merged_frontiers = frontiers;
+        // }
+
+
+        // Refinement frontier included
+        // merged_frontiers.reserve(frontiers.size() + refinement_frontiers.size());
+        // merged_frontiers.insert(merged_frontiers.end(), frontiers.begin(), frontiers.end());
+        // merged_frontiers.insert(merged_frontiers.end(), refinement_frontiers.begin(), refinement_frontiers.end());
+        
+        // Refinement frontiers not included
+        merged_frontiers = frontiers;
+
+
+
 
         // Store initial poses
         for (const auto& [robot, pose] : robot_poses)

@@ -785,7 +785,7 @@ namespace multirobot_slam
                 if (robot_is_near) {
                     refinement_frontier_persistence_counters_[i]++;
 
-                    if (refinement_frontier_persistence_counters_[i] >= 20) 
+                    if (refinement_frontier_persistence_counters_[i] >= 5)
                     {
                         unobservable_zones_.push_back(f.centroid);
                         

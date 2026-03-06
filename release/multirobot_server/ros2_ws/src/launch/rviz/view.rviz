@@ -6,7 +6,7 @@ Panels:
       Expanded:
         - /Global Options1
         - /robot_01/Keyframes1/Namespaces1
-      Splitter Ratio: 0.6705202460289001
+      Splitter Ratio: 0.8246628046035767
     Tree Height: 1478
   - Class: rviz_common/Selection
     Name: Selection
@@ -60,6 +60,8 @@ Visualization Manager:
           Value: false
         robot_0/caster_back_link:
           Value: false
+        robot_0/ground_truth:
+          Value: true
         robot_0/imu_link:
           Value: false
         robot_0/map:
@@ -84,6 +86,10 @@ Visualization Manager:
           Value: false
         robot_0/odom:
           Value: false
+        robot_0/wheel_left_link:
+          Value: false
+        robot_0/wheel_right_link:
+          Value: false
         robot_1/base_footprint:
           Value: false
         robot_1/base_link:
@@ -92,6 +98,8 @@ Visualization Manager:
           Value: false
         robot_1/caster_back_link:
           Value: false
+        robot_1/ground_truth:
+          Value: true
         robot_1/imu_link:
           Value: false
         robot_1/map:
@@ -116,6 +124,10 @@ Visualization Manager:
           Value: false
         robot_1/odom:
           Value: false
+        robot_1/wheel_left_link:
+          Value: false
+        robot_1/wheel_right_link:
+          Value: false
         robot_2/base_footprint:
           Value: false
         robot_2/base_link:
@@ -124,6 +136,8 @@ Visualization Manager:
           Value: false
         robot_2/caster_back_link:
           Value: false
+        robot_2/ground_truth:
+          Value: true
         robot_2/imu_link:
           Value: false
         robot_2/map:
@@ -148,13 +162,109 @@ Visualization Manager:
           Value: false
         robot_2/odom:
           Value: false
+        robot_2/wheel_left_link:
+          Value: false
+        robot_2/wheel_right_link:
+          Value: false
+        world:
+          Value: true
       Marker Scale: 3
       Name: TF
       Show Arrows: true
       Show Axes: true
       Show Names: true
       Tree:
-        {}
+        world:
+          robot_0/ground_truth:
+            {}
+          robot_0/map:
+            robot_0/odom:
+              robot_0/base_footprint:
+                robot_0/base_link:
+                  robot_0/base_scan:
+                    {}
+                  robot_0/caster_back_link:
+                    {}
+                  robot_0/imu_link:
+                    {}
+                  robot_0/oak:
+                    robot_0/oak_imu_frame:
+                      {}
+                    robot_0/oak_left_camera_frame:
+                      robot_0/oak_left_camera_optical_frame:
+                        {}
+                    robot_0/oak_model_origin:
+                      {}
+                    robot_0/oak_rgb_camera_frame:
+                      robot_0/oak_rgb_camera_optical_frame:
+                        {}
+                    robot_0/oak_right_camera_frame:
+                      robot_0/oak_right_camera_optical_frame:
+                        {}
+                  robot_0/wheel_left_link:
+                    {}
+                  robot_0/wheel_right_link:
+                    {}
+          robot_1/ground_truth:
+            {}
+          robot_1/map:
+            robot_1/odom:
+              robot_1/base_footprint:
+                robot_1/base_link:
+                  robot_1/base_scan:
+                    {}
+                  robot_1/caster_back_link:
+                    {}
+                  robot_1/imu_link:
+                    {}
+                  robot_1/oak:
+                    robot_1/oak_imu_frame:
+                      {}
+                    robot_1/oak_left_camera_frame:
+                      robot_1/oak_left_camera_optical_frame:
+                        {}
+                    robot_1/oak_model_origin:
+                      {}
+                    robot_1/oak_rgb_camera_frame:
+                      robot_1/oak_rgb_camera_optical_frame:
+                        {}
+                    robot_1/oak_right_camera_frame:
+                      robot_1/oak_right_camera_optical_frame:
+                        {}
+                  robot_1/wheel_left_link:
+                    {}
+                  robot_1/wheel_right_link:
+                    {}
+          robot_2/ground_truth:
+            {}
+          robot_2/map:
+            robot_2/odom:
+              robot_2/base_footprint:
+                robot_2/base_link:
+                  robot_2/base_scan:
+                    {}
+                  robot_2/caster_back_link:
+                    {}
+                  robot_2/imu_link:
+                    {}
+                  robot_2/oak:
+                    robot_2/oak_imu_frame:
+                      {}
+                    robot_2/oak_left_camera_frame:
+                      robot_2/oak_left_camera_optical_frame:
+                        {}
+                    robot_2/oak_model_origin:
+                      {}
+                    robot_2/oak_rgb_camera_frame:
+                      robot_2/oak_rgb_camera_optical_frame:
+                        {}
+                    robot_2/oak_right_camera_frame:
+                      robot_2/oak_right_camera_optical_frame:
+                        {}
+                  robot_2/wheel_left_link:
+                    {}
+                  robot_2/wheel_right_link:
+                    {}
       Update Interval: 0
       Value: true
     - Alpha: 0.699999988079071
@@ -224,7 +334,7 @@ Visualization Manager:
       Enabled: true
       Name: Frontiers
       Namespaces:
-        {}
+        frontiers: true
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -237,7 +347,7 @@ Visualization Manager:
       Enabled: true
       Name: Refinement frontiers
       Namespaces:
-        {}
+        refinement_frontiers: true
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -330,18 +440,18 @@ Visualization Manager:
             Value: /robot_0/footprint
           Value: false
         - Class: rviz_default_plugins/Marker
-          Enabled: false
+          Enabled: true
           Name: Keypoints
           Namespaces:
-            {}
+            keypoints_3d: true
           Topic:
             Depth: 5
             Durability Policy: Volatile
             Filter size: 10
             History Policy: Keep Last
             Reliability Policy: Reliable
-            Value: /robot_0/keypoints/plot
-          Value: false
+            Value: /robot_0/keypoints_marker
+          Value: true
         - Class: rviz_default_plugins/MarkerArray
           Enabled: false
           Name: Keyframes
@@ -992,7 +1102,7 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 208.38343811035156
+      Scale: 133.9686737060547
       Target Frame: <Fixed Frame>
       Value: TopDownOrtho (rviz_default_plugins)
       X: 0

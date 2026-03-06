@@ -1,0 +1,25 @@
+digraph G {
+"world" -> "robot_0/ground_truth"[label=" Broadcaster: default_authority\nAverage rate: 75.387\nBuffer length: 5.041\nMost recent transform: 1772631545.665649\nOldest transform: 1772631540.625002\n"];
+"world" -> "robot_0/map"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"robot_0/map" -> "robot_0/odom"[label=" Broadcaster: default_authority\nAverage rate: 6.275\nBuffer length: 5.1\nMost recent transform: 1772631545.552001\nOldest transform: 1772631540.452016\n"];
+"robot_0/odom" -> "robot_0/base_footprint"[label=" Broadcaster: default_authority\nAverage rate: 20.202\nBuffer length: 4.95\nMost recent transform: 1772631545.652\nOldest transform: 1772631540.702024\n"];
+"robot_0/base_footprint" -> "robot_0/base_link"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"robot_0/base_link" -> "robot_0/caster_back_link"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"robot_0/base_link" -> "robot_0/imu_link"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"robot_0/base_link" -> "robot_0/base_scan"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"robot_0/base_link" -> "robot_0/oak"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"robot_0/oak" -> "robot_0/oak_imu_frame"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"robot_0/oak" -> "robot_0/oak_left_camera_frame"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"robot_0/oak_left_camera_frame" -> "robot_0/oak_left_camera_optical_frame"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"robot_0/oak" -> "robot_0/oak_model_origin"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"robot_0/oak" -> "robot_0/oak_rgb_camera_frame"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"robot_0/oak_rgb_camera_frame" -> "robot_0/oak_rgb_camera_optical_frame"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"robot_0/oak" -> "robot_0/oak_right_camera_frame"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"robot_0/oak_right_camera_frame" -> "robot_0/oak_right_camera_optical_frame"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"robot_0/base_link" -> "robot_0/wheel_left_link"[label=" Broadcaster: default_authority\nAverage rate: 12.653\nBuffer length: 4.9\nMost recent transform: 1772631545.652\nOldest transform: 1772631540.752052\n"];
+"robot_0/base_link" -> "robot_0/wheel_right_link"[label=" Broadcaster: default_authority\nAverage rate: 12.653\nBuffer length: 4.9\nMost recent transform: 1772631545.652\nOldest transform: 1772631540.752052\n"];
+edge [style=invis];
+ subgraph cluster_legend { style=bold; color=black; label ="view_frames Result";
+"Recorded at time: 1772631545.7019475"[ shape=plaintext ] ;
+}->"world";
+}

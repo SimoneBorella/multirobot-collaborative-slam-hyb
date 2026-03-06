@@ -58,6 +58,7 @@ public:
 
         robots_ = this->get_parameter("robots").as_string_array();
         initial_poses_ = this->get_parameter("initial_poses").as_double_array();
+        robot_poses_received_ = false;
 
         double timer_rate = 1.0;
         timer_ = this->create_wall_timer(
@@ -187,6 +188,9 @@ public:
 
     void map_log_odds_update_callback(const interfaces::msg::MapLogOddsUpdate::SharedPtr msg, const std::string &robot)
     {
+        if(!robot_poses_received_)
+            return;
+
         MapLogOddsUpdate map_log_odds_update;
         map_log_odds_update.resolution = msg->resolution;
         map_log_odds_update.width = msg->width;
@@ -215,6 +219,9 @@ public:
 
     void frontier_map_update_callback(const interfaces::msg::FrontierMapUpdate::SharedPtr msg, const std::string &robot)
     {
+        if(!robot_poses_received_)
+            return;
+            
         FrontierMapUpdate frontier_map_update;
 
         frontier_map_update.resolution = msg->resolution;
@@ -623,7 +630,13 @@ public:
             {
                 robot_poses[robot] = pose;
             }
+            else
+            {
+                return;
+            }
         }
+
+        robot_poses_received_ = true;
 
         mapping_merge_.update_robot_poses(robot_poses);
 
@@ -680,6 +693,7 @@ public:
 
     std::vector<std::string> robots_;
     std::vector<double> initial_poses_;
+    bool robot_poses_received_;
 
     MappingMerge mapping_merge_;
     TaskPlanning task_planning_;
