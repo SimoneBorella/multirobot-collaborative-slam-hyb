@@ -462,9 +462,8 @@ namespace multirobot_slam
                 }
                 if (range > posed_scan.range_max)
                 {
-                    continue;
-                    // range = posed_scan.range_max;
-                    // hit_point = false;
+                    range = posed_scan.range_max;
+                    hit_point = false;
                 }
                 
                 // Local laser point
